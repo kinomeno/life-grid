@@ -58,6 +58,8 @@ export default function SimulationView({
     setTopSpecies(computeTopSpecies(w));
   }, []);
 
+  const lastLoggedTurnRef = useRef(-1);
+
   useEffect(() => {
     if (worldRef.current !== null) return;
     const s = randomSeed();
@@ -66,6 +68,8 @@ export default function SimulationView({
     setSeed(s);
     refreshDerived(w);
     setVersion((v) => v + 1);
+    logColorDistribution(w, "初期化");
+    lastLoggedTurnRef.current = 0;
   }, [width, height, initialLifeCount, refreshDerived]);
 
   const setSpeed = useCallback((s: Speed) => {
@@ -105,6 +109,10 @@ export default function SimulationView({
           stepsSinceTpsUpdate += actualSteps;
           setVersion((v) => v + 1);
           refreshDerived(world);
+          if (world.turn - lastLoggedTurnRef.current >= 500) {
+            logColorDistribution(world, `ターン ${world.turn}`);
+            lastLoggedTurnRef.current = world.turn;
+          }
         }
       } else {
         acc = 0;
@@ -134,6 +142,8 @@ export default function SimulationView({
       setSeed(newSeed);
       setVersion((v) => v + 1);
       refreshDerived(w);
+      logColorDistribution(w, "リセット");
+      lastLoggedTurnRef.current = 0;
     },
     [width, height, initialLifeCount, refreshDerived]
   );
@@ -152,9 +162,19 @@ export default function SimulationView({
 
   return (
     <div className="sim-root">
-      <div className="tps-display">
-        <span className="tps-label">turn/s</span>
-        <span className="tps-value">{currentTps.toFixed(1)}</span>
+      <div className="top-status">
+        <div className="status-item">
+          <span className="status-label">シード</span>
+          <span className="status-value">{seed ?? "—"}</span>
+        </div>
+        <div className="status-item">
+          <span className="status-label">マップ</span>
+          <span className="status-value">{width} × {height}</span>
+        </div>
+        <div className="status-item">
+          <span className="status-label">turn/s</span>
+          <span className="status-value">{currentTps.toFixed(1)}</span>
+        </div>
       </div>
       <aside className="sim-cell sim-left">
         <section className="panel">
@@ -248,18 +268,6 @@ export default function SimulationView({
             ))}
           </div>
           <div className="ctrl-spacer" />
-          <div className="world-info">
-            <span className="world-info-item">
-              <span className="world-info-label">シード</span>
-              <span className="world-info-value">{seed ?? "—"}</span>
-            </span>
-            <span className="world-info-item">
-              <span className="world-info-label">マップ</span>
-              <span className="world-info-value">
-                {width} × {height}
-              </span>
-            </span>
-          </div>
           <div className="ctrl-group">
             <button
               className="btn"
@@ -322,4 +330,33 @@ function computeTopSpecies(world: World, max = 10): SpeciesEntry[] {
   }
   entries.sort((a, b) => b.count - a.count);
   return entries.slice(0, max);
+}
+
+function logColorDistribution(world: World, label: string): void {
+  const dist: Record<string, number> = {
+    R: 0, G: 0, B: 0, Y: 0, C: 0, M: 0, W: 0, K: 0,
+  };
+  let totalR = 0;
+  let totalG = 0;
+  let totalB = 0;
+  let count = 0;
+  for (const life of world.lives) {
+    if (!life.alive) continue;
+    const lbl = speciesLabel(life.speciesId);
+    const dominant = lbl.split("-")[0];
+    if (dominant in dist) dist[dominant]++;
+    totalR += life.genes.r;
+    totalG += life.genes.g;
+    totalB += life.genes.b;
+    count++;
+  }
+  const avgR = count > 0 ? Math.round(totalR / count) : 0;
+  const avgG = count > 0 ? Math.round(totalG / count) : 0;
+  const avgB = count > 0 ? Math.round(totalB / count) : 0;
+  const distStr = Object.entries(dist)
+    .map(([k, v]) => `${k}:${v}`)
+    .join(" ");
+  console.log(
+    `[${label}] 生物数=${count} 平均RGB=(${avgR},${avgG},${avgB}) 色分布: ${distStr}`
+  );
 }

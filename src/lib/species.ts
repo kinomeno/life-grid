@@ -19,18 +19,18 @@ export function speciesLabel(speciesId: string): string {
   const min = Math.min(r, g, b);
   if (max - min < 40) {
     dominant = max > 180 ? "W" : "K";
-  } else if (r === max && g > b + 30) {
-    dominant = "Y";
-  } else if (g === max && b > r + 30) {
-    dominant = "C";
-  } else if (r === max && b > g + 30) {
-    dominant = "M";
   } else if (r === max) {
-    dominant = "R";
+    if (g - b > 30) dominant = "Y";
+    else if (b - g > 30) dominant = "M";
+    else dominant = "R";
   } else if (g === max) {
-    dominant = "G";
+    if (r - b > 30) dominant = "Y";
+    else if (b - r > 30) dominant = "C";
+    else dominant = "G";
   } else {
-    dominant = "B";
+    if (g - r > 30) dominant = "C";
+    else if (r - g > 30) dominant = "M";
+    else dominant = "B";
   }
 
   const code = rb * 36 + gb * 6 + bb;

@@ -2,7 +2,7 @@ export const ENERGY_MAX = 100;
 export const ENERGY_INITIAL_MEAN = 35;
 export const ENERGY_INITIAL_VARIANCE = 25;
 export const ENERGY_REGEN_PER_TURN = 0.12;
-export const ENERGY_DIFFUSION = 0.04;
+export const ENERGY_DIFFUSION = 0.02;
 
 export const ENERGY_WAVE_AMPLITUDE = 30;
 export const ENERGY_WAVE_PERIOD_TURNS = 400;
@@ -27,7 +27,7 @@ export const GENE_LIFESPAN_MAX = 600;
 
 export const INITIAL_ENERGY_RATIO = 0.4;
 
-export const COST_BASE = 0.4;
+export const COST_BASE = 0.25;
 export const COST_VISION = 0.15;
 export const COST_SPEED_PER_STEP = 0.25;
 export const COST_STRENGTH = 0.08;
