@@ -244,3 +244,28 @@
   background: var(--text);
   border-color: var(--text);
 }
+
+:global(.world-info) {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 0 8px;
+}
+
+:global(.world-info-item) {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+}
+
+:global(.world-info-label) {
+  color: var(--text-soft);
+  letter-spacing: 0.04em;
+}
+
+:global(.world-info-value) {
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}

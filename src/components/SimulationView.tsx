@@ -82,7 +82,7 @@ export default function SimulationView({
       const s = speedRef.current;
       const world = worldRef.current;
       if (s > 0 && world) {
-        const tps = s === 1 ? 12 : s === 10 ? 60 : 240;
+        const tps = s === 1 ? 4 : s === 10 ? 30 : 150;
         acc += (dt / 1000) * tps;
         let steps = Math.floor(acc);
         acc -= steps;
@@ -199,14 +199,6 @@ export default function SimulationView({
             マップ上の生命をクリックすると詳細を表示します（次バージョンで実装予定）
           </p>
         </section>
-
-        <section className="panel">
-          <h2 className="panel-title">ワールド</h2>
-          <dl className="info-list">
-            <InfoRow label="シード" value={seed ?? "—"} mono />
-            <InfoRow label="マップ" value={`${width} × ${height}`} />
-          </dl>
-        </section>
       </aside>
 
       <footer className="sim-cell sim-bottom">
@@ -234,6 +226,18 @@ export default function SimulationView({
             ))}
           </div>
           <div className="ctrl-spacer" />
+          <div className="world-info">
+            <span className="world-info-item">
+              <span className="world-info-label">シード</span>
+              <span className="world-info-value">{seed ?? "—"}</span>
+            </span>
+            <span className="world-info-item">
+              <span className="world-info-label">マップ</span>
+              <span className="world-info-value">
+                {width} × {height}
+              </span>
+            </span>
+          </div>
           <div className="ctrl-group">
             <button
               className="btn"
