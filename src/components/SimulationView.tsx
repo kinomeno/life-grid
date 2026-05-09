@@ -5,6 +5,7 @@ import SimulationCanvas from "./SimulationCanvas";
 import { computeStats, type WorldStats } from "@/lib/stats";
 import { randomSeed } from "@/lib/random";
 import { createWorld, stepWorld } from "@/lib/world";
+import { speciesLabel } from "@/lib/species";
 import type { World } from "@/lib/types";
 
 type Props = {
@@ -14,6 +15,15 @@ type Props = {
 };
 
 type Speed = 0 | 1 | 10 | 100;
+
+type SpeciesEntry = {
+  id: string;
+  label: string;
+  count: number;
+  r: number;
+  g: number;
+  b: number;
+};
 
 export default function SimulationView({
   width,
@@ -38,8 +48,14 @@ export default function SimulationView({
     averageIntelligence: 0,
     averageSpeed: 0,
   });
+  const [topSpecies, setTopSpecies] = useState<SpeciesEntry[]>([]);
   const [speed, setSpeedState] = useState<Speed>(0);
   const speedRef = useRef<Speed>(0);
+
+  const refreshDerived = useCallback((w: World) => {
+    setStats(computeStats(w));
+    setTopSpecies(computeTopSpecies(w));
+  }, []);
 
   useEffect(() => {
     if (worldRef.current !== null) return;
@@ -47,9 +63,9 @@ export default function SimulationView({
     const w = createWorld({ width, height, initialLifeCount, seed: s });
     worldRef.current = w;
     setSeed(s);
-    setStats(computeStats(w));
+    refreshDerived(w);
     setVersion((v) => v + 1);
-  }, [width, height, initialLifeCount]);
+  }, [width, height, initialLifeCount, refreshDerived]);
 
   const setSpeed = useCallback((s: Speed) => {
     speedRef.current = s;
@@ -77,7 +93,7 @@ export default function SimulationView({
             if (world.lives.length === 0) break;
           }
           setVersion((v) => v + 1);
-          setStats(computeStats(world));
+          refreshDerived(world);
         }
       } else {
         acc = 0;
@@ -86,7 +102,7 @@ export default function SimulationView({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [refreshDerived]);
 
   const reset = useCallback(
     (newSeed: number) => {
@@ -99,9 +115,9 @@ export default function SimulationView({
       worldRef.current = w;
       setSeed(newSeed);
       setVersion((v) => v + 1);
-      setStats(computeStats(w));
+      refreshDerived(w);
     },
-    [width, height, initialLifeCount]
+    [width, height, initialLifeCount, refreshDerived]
   );
 
   const stepOnce = useCallback(() => {
@@ -110,51 +126,60 @@ export default function SimulationView({
     if (world) {
       stepWorld(world);
       setVersion((v) => v + 1);
-      setStats(computeStats(world));
+      refreshDerived(world);
     }
-  }, [setSpeed]);
+  }, [setSpeed, refreshDerived]);
 
   const world = worldRef.current;
 
   return (
     <div className="sim-root">
-      <aside className="sim-side sim-side-left">
+      <aside className="sim-cell sim-left">
         <section className="panel">
           <h2 className="panel-title">全体情報</h2>
           <dl className="info-list">
-            <div className="info-row">
-              <dt>TURN</dt>
-              <dd>{stats.turn.toLocaleString()}</dd>
-            </div>
-            <div className="info-row">
-              <dt>LIFE COUNT</dt>
-              <dd>{stats.lifeCount.toLocaleString()}</dd>
-            </div>
-            <div className="info-row">
-              <dt>SPECIES COUNT</dt>
-              <dd>{stats.speciesCount}</dd>
-            </div>
-            <div className="info-row">
-              <dt>AVG ENERGY</dt>
-              <dd>{stats.averageEnergy.toFixed(1)}</dd>
-            </div>
-            <div className="info-row">
-              <dt>AVG INTELLIGENCE</dt>
-              <dd>{stats.averageIntelligence.toFixed(2)}</dd>
-            </div>
-            <div className="info-row">
-              <dt>AVG SPEED</dt>
-              <dd>{stats.averageSpeed.toFixed(2)}</dd>
-            </div>
-            <div className="info-row">
-              <dt>WORLD SEED</dt>
-              <dd className="mono">{seed ?? "—"}</dd>
-            </div>
+            <InfoRow label="ターン" value={stats.turn.toLocaleString()} />
+            <InfoRow label="時代" value="—" />
+            <InfoRow label="総生物数" value={stats.lifeCount.toLocaleString()} />
+            <InfoRow label="系統数" value={String(stats.speciesCount)} />
+            <InfoRow
+              label="平均エネルギー"
+              value={stats.averageEnergy.toFixed(1)}
+            />
+            <InfoRow
+              label="平均知能"
+              value={stats.averageIntelligence.toFixed(2)}
+            />
+            <InfoRow
+              label="平均移動速度"
+              value={stats.averageSpeed.toFixed(2)}
+            />
           </dl>
+        </section>
+
+        <section className="panel">
+          <h2 className="panel-title">系統（上位）</h2>
+          <ul className="species-list">
+            {topSpecies.length === 0 && (
+              <li className="species-empty">—</li>
+            )}
+            {topSpecies.map((s) => (
+              <li key={s.id} className="species-item">
+                <span
+                  className="species-dot"
+                  style={{
+                    backgroundColor: `rgb(${s.r}, ${s.g}, ${s.b})`,
+                  }}
+                />
+                <span className="species-label">{s.label}</span>
+                <span className="species-count">{s.count}</span>
+              </li>
+            ))}
+          </ul>
         </section>
       </aside>
 
-      <main className="sim-main">
+      <main className="sim-cell sim-center">
         <div className="canvas-wrap">
           {world && (
             <SimulationCanvas
@@ -166,10 +191,27 @@ export default function SimulationView({
         </div>
       </main>
 
-      <aside className="sim-side sim-side-right">
+      <aside className="sim-cell sim-right">
         <section className="panel">
-          <h2 className="panel-title">システム</h2>
-          <div className="ctrl-row">
+          <h2 className="panel-title">選択した生命</h2>
+          <p className="empty-hint">未選択</p>
+          <p className="empty-sub">
+            マップ上の生命をクリックすると詳細を表示します（次バージョンで実装予定）
+          </p>
+        </section>
+
+        <section className="panel">
+          <h2 className="panel-title">ワールド</h2>
+          <dl className="info-list">
+            <InfoRow label="シード" value={seed ?? "—"} mono />
+            <InfoRow label="マップ" value={`${width} × ${height}`} />
+          </dl>
+        </section>
+      </aside>
+
+      <footer className="sim-cell sim-bottom">
+        <div className="ctrl-bar">
+          <div className="ctrl-group">
             <button
               className={`btn ${speed === 0 ? "btn-primary" : ""}`}
               onClick={() => setSpeed(speed === 0 ? 1 : 0)}
@@ -180,7 +222,7 @@ export default function SimulationView({
               ターン進む
             </button>
           </div>
-          <div className="ctrl-row">
+          <div className="ctrl-group">
             {([1, 10, 100] as const).map((s) => (
               <button
                 key={s}
@@ -191,7 +233,8 @@ export default function SimulationView({
               </button>
             ))}
           </div>
-          <div className="ctrl-row">
+          <div className="ctrl-spacer" />
+          <div className="ctrl-group">
             <button
               className="btn"
               onClick={() => seed !== null && reset(seed)}
@@ -202,8 +245,55 @@ export default function SimulationView({
               NEW SEED
             </button>
           </div>
-        </section>
-      </aside>
+        </div>
+      </footer>
     </div>
   );
+}
+
+function InfoRow({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string | number;
+  mono?: boolean;
+}) {
+  return (
+    <div className="info-row">
+      <dt>{label}</dt>
+      <dd className={mono ? "mono" : undefined}>{value}</dd>
+    </div>
+  );
+}
+
+function computeTopSpecies(world: World, max = 10): SpeciesEntry[] {
+  const map = new Map<string, { count: number; r: number; g: number; b: number }>();
+  for (const life of world.lives) {
+    const cur = map.get(life.speciesId);
+    if (cur) {
+      cur.count++;
+    } else {
+      map.set(life.speciesId, {
+        count: 1,
+        r: life.genes.r,
+        g: life.genes.g,
+        b: life.genes.b,
+      });
+    }
+  }
+  const entries: SpeciesEntry[] = [];
+  for (const [id, v] of map) {
+    entries.push({
+      id,
+      label: speciesLabel(id),
+      count: v.count,
+      r: v.r,
+      g: v.g,
+      b: v.b,
+    });
+  }
+  entries.sort((a, b) => b.count - a.count);
+  return entries.slice(0, max);
 }
