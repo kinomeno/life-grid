@@ -263,6 +263,13 @@ function actLife(world: World, life: Life): void {
     energy[idx] = Math.min(ENERGY_MAX, energy[idx] + g.size * 0.3);
     occupancy[idx] = -1;
   }
+
+  if (life.alive && shouldReproduce(life, world)) {
+    const emptyNeighbor = findEmptyNeighbor(world, life);
+    if (emptyNeighbor) {
+      reproduceLife(world, life, emptyNeighbor);
+    }
+  }
 }
 
 function findBestNeighborCell(
@@ -303,4 +310,58 @@ function cullDead(world: World): void {
   if (world.lives.some((l) => !l.alive)) {
     world.lives = world.lives.filter((l) => l.alive);
   }
+}
+
+function shouldReproduce(life: Life, world: World): boolean {
+  const minAge = life.genes.lifespan * MIN_REPRODUCTIVE_AGE_RATIO;
+  const reproThreshold = life.genes.size * REPRODUCTION_ENERGY_THRESHOLD_RATIO;
+  return life.age >= minAge && life.energy >= reproThreshold;
+}
+
+function findEmptyNeighbor(
+  world: World,
+  life: Life
+): { x: number; y: number } | null {
+  const { width, height, occupancy } = world;
+  const { x, y } = life;
+  const offsets = [
+    [-1, -1], [0, -1], [1, -1],
+    [-1, 0],           [1, 0],
+    [-1, 1],  [0, 1],  [1, 1],
+  ];
+  for (const [dx, dy] of offsets) {
+    const nx = x + dx;
+    const ny = y + dy;
+    if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+    const idx = ny * width + nx;
+    if (occupancy[idx] === -1) {
+      return { x: nx, y: ny };
+    }
+  }
+  return null;
+}
+
+function reproduceLife(
+  world: World,
+  parent: Life,
+  childPos: { x: number; y: number }
+): void {
+  const rng = mulberry32((world.turn * 73856093) ^ (parent.id * 19349663) >>> 0);
+  const childGenes = mutatGenes(parent.genes, parent.genes.mutationRate, rng);
+  const splitEnergy = parent.energy * 0.5;
+  parent.energy = splitEnergy;
+
+  const idx = childPos.y * world.width + childPos.x;
+  const childLife: Life = {
+    id: world.nextLifeId++,
+    x: childPos.x,
+    y: childPos.y,
+    energy: splitEnergy,
+    age: 0,
+    speciesId: speciesIdFromGenes(childGenes),
+    genes: childGenes,
+    alive: true,
+  };
+  world.lives.push(childLife);
+  world.occupancy[idx] = childLife.id;
 }
