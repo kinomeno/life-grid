@@ -101,6 +101,29 @@ function randomGenes(rng: RNG): Genes {
   };
 }
 
+export function mutatGenes(parentGenes: Genes, mutationRate: number, rng: RNG): Genes {
+  const genes = { ...parentGenes };
+  const mutate = (gene: number, min: number, max: number): number => {
+    if (rng() < mutationRate) {
+      const variation = (rng() - 0.5) * 2 * (max - min) * 0.3;
+      return clamp(gene + variation, min, max);
+    }
+    return gene;
+  };
+  genes.r = Math.round(mutate(genes.r, 0, 255));
+  genes.g = Math.round(mutate(genes.g, 0, 255));
+  genes.b = Math.round(mutate(genes.b, 0, 255));
+  genes.vision = Math.round(mutate(genes.vision, GENE_VISION_MIN, GENE_VISION_MAX));
+  genes.speed = Math.round(mutate(genes.speed, GENE_SPEED_MIN, GENE_SPEED_MAX));
+  genes.size = mutate(genes.size, GENE_SIZE_MIN, GENE_SIZE_MAX);
+  genes.strength = mutate(genes.strength, GENE_STRENGTH_MIN, GENE_STRENGTH_MAX);
+  genes.intelligence = Math.round(mutate(genes.intelligence, GENE_INTELLIGENCE_MIN, GENE_INTELLIGENCE_MAX));
+  genes.reproductionRate = mutate(genes.reproductionRate, GENE_REPRODUCTION_MIN, GENE_REPRODUCTION_MAX);
+  genes.mutationRate = mutate(genes.mutationRate, GENE_MUTATION_MIN, GENE_MUTATION_MAX);
+  genes.lifespan = mutate(genes.lifespan, GENE_LIFESPAN_MIN, GENE_LIFESPAN_MAX);
+  return genes;
+}
+
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
