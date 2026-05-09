@@ -234,6 +234,12 @@ function actLife(world: World, life: Life): void {
     energy[idx] = Math.min(ENERGY_MAX, energy[idx] + g.size * 0.3);
     occupancy[idx] = -1;
   }
+
+  if (life.age >= g.lifespan) {
+    life.alive = false;
+    energy[idx] = Math.min(ENERGY_MAX, energy[idx] + g.size * 0.3);
+    occupancy[idx] = -1;
+  }
 }
 
 function findBestNeighborCell(
