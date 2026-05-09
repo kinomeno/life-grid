@@ -235,6 +235,11 @@ function actLife(world: World, life: Life): void {
   }
 
   const idx = life.y * width + life.x;
+
+  if (life.alive) {
+    handleCombat(world, life);
+  }
+
   const available = energy[idx];
   const capacity = g.size - life.energy;
   const absorb = Math.max(0, Math.min(available * ABSORB_RATE, capacity));
@@ -312,6 +317,10 @@ function cullDead(world: World): void {
   }
 }
 
+function findLifeById(world: World, id: number): Life | null {
+  return world.lives.find((l) => l.id === id) || null;
+}
+
 function shouldReproduce(life: Life, world: World): boolean {
   const minAge = life.genes.lifespan * MIN_REPRODUCTIVE_AGE_RATIO;
   const reproThreshold = life.genes.size * REPRODUCTION_ENERGY_THRESHOLD_RATIO;
@@ -364,4 +373,39 @@ function reproduceLife(
   };
   world.lives.push(childLife);
   world.occupancy[idx] = childLife.id;
+}
+
+function handleCombat(world: World, life: Life): void {
+  const { width, occupancy, energy } = world;
+  const { x, y } = life;
+  const idx = y * width + x;
+  const neighbors = [
+    [-1, -1], [0, -1], [1, -1],
+    [-1, 0],           [1, 0],
+    [-1, 1],  [0, 1],  [1, 1],
+  ];
+
+  for (const [dx, dy] of neighbors) {
+    const nx = x + dx;
+    const ny = y + dy;
+    if (nx < 0 || nx >= width || ny < 0 || ny >= world.height) continue;
+    const nidx = ny * width + nx;
+    if (occupancy[nidx] === -1) continue;
+
+    const opponent = findLifeById(world, occupancy[nidx]);
+    if (!opponent || !opponent.alive) continue;
+
+    if (life.genes.strength > opponent.genes.strength) {
+      const lootEnergy = opponent.energy * COMBAT_ENERGY_LOSS_RATIO;
+      life.energy += lootEnergy;
+      opponent.alive = false;
+      opponent.energy = 0;
+      energy[nidx] = Math.min(
+        ENERGY_MAX,
+        energy[nidx] + opponent.genes.size * 0.3
+      );
+      occupancy[nidx] = -1;
+      break;
+    }
+  }
 }
