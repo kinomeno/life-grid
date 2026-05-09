@@ -1,5 +1,6 @@
 import {
   ABSORB_RATE,
+  COMBAT_ENERGY_LOSS_RATIO,
   COST_BASE,
   COST_INTELLIGENCE,
   COST_SIZE,
@@ -31,6 +32,8 @@ import {
   GENE_VISION_MAX,
   GENE_VISION_MIN,
   INITIAL_ENERGY_RATIO,
+  MIN_REPRODUCTIVE_AGE_RATIO,
+  REPRODUCTION_ENERGY_THRESHOLD_RATIO,
 } from "./constants";
 import { mulberry32, randomInt, randomRange, type RNG } from "./random";
 import { speciesIdFromGenes } from "./species";
