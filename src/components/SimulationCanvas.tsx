@@ -55,7 +55,8 @@ function drawEnergyField(
   for (let i = 0; i < energy.length; i++) {
     const v = energy[i] / ENERGY_MAX;
     const t = Math.min(1, Math.max(0, v));
-    const shade = Math.round(250 - t * 90);
+    const quantized = Math.floor(t * 5) / 5;
+    const shade = Math.round(250 - quantized * 90);
     const o = i * 4;
     data[o] = shade;
     data[o + 1] = shade;

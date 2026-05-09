@@ -1,7 +1,7 @@
 export const ENERGY_MAX = 100;
 export const ENERGY_INITIAL_MEAN = 35;
 export const ENERGY_INITIAL_VARIANCE = 25;
-export const ENERGY_REGEN_PER_TURN = 0.35;
+export const ENERGY_REGEN_PER_TURN = 0.12;
 export const ENERGY_DIFFUSION = 0.04;
 
 export const ENERGY_WAVE_AMPLITUDE = 30;
