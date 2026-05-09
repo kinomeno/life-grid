@@ -34,7 +34,7 @@ export const COST_STRENGTH = 0.08;
 export const COST_INTELLIGENCE = 0.18;
 export const COST_SIZE = 0.005;
 
-export const ABSORB_RATE = 0.25;
+export const ABSORB_RATE = 0.10;
 
 export const SPECIES_RGB_BIN = 48;
 

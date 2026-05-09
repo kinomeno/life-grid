@@ -245,6 +245,34 @@
   border-color: var(--text);
 }
 
+:global(.tps-display) {
+  position: fixed;
+  top: 12px;
+  right: 20px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  padding: 4px 10px;
+  font-size: 12px;
+  z-index: 10;
+}
+
+:global(.tps-label) {
+  color: var(--text-soft);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+:global(.tps-value) {
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  min-width: 38px;
+  text-align: right;
+}
+
 :global(.world-info) {
   display: flex;
   gap: 14px;

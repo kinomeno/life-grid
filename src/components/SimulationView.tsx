@@ -51,6 +51,7 @@ export default function SimulationView({
   const [topSpecies, setTopSpecies] = useState<SpeciesEntry[]>([]);
   const [speed, setSpeedState] = useState<Speed>(0);
   const speedRef = useRef<Speed>(0);
+  const [currentTps, setCurrentTps] = useState(0);
 
   const refreshDerived = useCallback((w: World) => {
     setStats(computeStats(w));
@@ -76,27 +77,44 @@ export default function SimulationView({
     let raf = 0;
     let last = performance.now();
     let acc = 0;
+    let stepsSinceTpsUpdate = 0;
+    let tpsWindowStart = performance.now();
+    const FRAME_BUDGET_MS = 25;
     const tick = (now: number) => {
       const dt = now - last;
       last = now;
       const s = speedRef.current;
       const world = worldRef.current;
       if (s > 0 && world) {
-        const tps = s === 1 ? 4 : s === 10 ? 30 : 150;
-        acc += (dt / 1000) * tps;
-        let steps = Math.floor(acc);
-        acc -= steps;
-        if (steps > 0) {
-          if (steps > 600) steps = 600;
-          for (let i = 0; i < steps; i++) {
+        const targetTps = s === 1 ? 4 : s === 10 ? 30 : 150;
+        acc += (dt / 1000) * targetTps;
+        const requestedSteps = Math.floor(acc);
+        acc -= requestedSteps;
+        if (requestedSteps > 0) {
+          const frameStart = performance.now();
+          let actualSteps = 0;
+          for (let i = 0; i < requestedSteps; i++) {
             stepWorld(world);
+            actualSteps++;
             if (world.lives.length === 0) break;
+            if (performance.now() - frameStart > FRAME_BUDGET_MS) {
+              acc = 0;
+              break;
+            }
           }
+          stepsSinceTpsUpdate += actualSteps;
           setVersion((v) => v + 1);
           refreshDerived(world);
         }
       } else {
         acc = 0;
+      }
+      const elapsed = now - tpsWindowStart;
+      if (elapsed >= 250) {
+        const measuredTps = stepsSinceTpsUpdate / (elapsed / 1000);
+        setCurrentTps(measuredTps);
+        stepsSinceTpsUpdate = 0;
+        tpsWindowStart = now;
       }
       raf = requestAnimationFrame(tick);
     };
@@ -134,6 +152,10 @@ export default function SimulationView({
 
   return (
     <div className="sim-root">
+      <div className="tps-display">
+        <span className="tps-label">turn/s</span>
+        <span className="tps-value">{currentTps.toFixed(1)}</span>
+      </div>
       <aside className="sim-cell sim-left">
         <section className="panel">
           <h2 className="panel-title">全体情報</h2>
