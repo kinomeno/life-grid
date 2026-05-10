@@ -20,8 +20,8 @@ export const GENE_INTELLIGENCE_MIN = 0;
 export const GENE_INTELLIGENCE_MAX = 4;
 export const GENE_REPRODUCTION_MIN = 0.1;
 export const GENE_REPRODUCTION_MAX = 0.4;
-export const GENE_MUTATION_MIN = 0.005;
-export const GENE_MUTATION_MAX = 0.04;
+export const GENE_MUTATION_MIN = 0.02;
+export const GENE_MUTATION_MAX = 0.08;
 export const GENE_LIFESPAN_MIN = 200;
 export const GENE_LIFESPAN_MAX = 600;
 
