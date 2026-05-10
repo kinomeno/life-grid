@@ -51,6 +51,7 @@ export function createWorld(config: WorldConfig): World {
   }
 
   const terrainBias = createTerrainBias(width, height, rng);
+  const waveTimeScale = createWaveTimeScale(width, height, rng);
 
   const occupancy = new Int32Array(total).fill(-1);
   const lives: Life[] = [];
@@ -88,6 +89,7 @@ export function createWorld(config: WorldConfig): World {
     lives,
     nextLifeId: nextId,
     terrainBias,
+    waveTimeScale,
   };
 }
 
@@ -168,6 +170,24 @@ function createTerrainBias(
   return map;
 }
 
+function createWaveTimeScale(
+  width: number,
+  height: number,
+  rng: RNG
+): Float32Array {
+  const map = new Float32Array(width * height);
+  const phx = rng() * Math.PI * 2;
+  const phy = rng() * Math.PI * 2;
+  const f = 0.03 + rng() * 0.02;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const v = Math.sin(x * f + phx) * Math.cos(y * f + phy);
+      map[y * width + x] = 0.3 + (v + 1) * 0.5;
+    }
+  }
+  return map;
+}
+
 
 export function stepWorld(world: World): void {
   updateEnergy(world);
@@ -197,37 +217,32 @@ function shuffledIndices(n: number, seed: number): Int32Array {
 }
 
 function updateEnergy(world: World): void {
-  const { width, height, energy, turn, terrainBias } = world;
+  const { width, height, energy, turn, terrainBias, waveTimeScale } = world;
   const next = new Float32Array(energy.length);
 
-  const TWO_PI = Math.PI * 2;
-  const phase = (turn / 2000) * TWO_PI;
-  const phaseY = phase * 0.7;
-
-  // toroidal continuity: spatial frequency must complete an integer number of
-  // cycles across width/height so x=0 and x=width-1 (and y=0 and y=height-1)
-  // are phase-continuous.
-  const cyclesX = Math.max(1, Math.round((width * ENERGY_WAVE_SPATIAL_FREQ) / TWO_PI));
-  const cyclesY = Math.max(1, Math.round((height * ENERGY_WAVE_SPATIAL_FREQ) / TWO_PI));
-  const freqX = (TWO_PI * cyclesX) / width;
-  const freqY = (TWO_PI * cyclesY) / height;
+  const phaseBase = (turn / 2000) * Math.PI * 2;
   const waveAmp = ENERGY_WAVE_AMPLITUDE * 0.025;
 
-  // precompute per-row cos(y) and per-column sin(x) since phase is shared
-  // across the whole grid this turn — turns 2 trig calls per cell into 0.
-  const sinX = new Float32Array(width);
+  // Gaussian-like edge windowing: amplitude fades smoothly toward edges so
+  // wave is non-toroidal but doesn't show abrupt cuts at the boundaries.
+  // Falloff is gentle in the middle and steep near the edge (~10% margin).
+  const windowX = new Float32Array(width);
+  const cx = (width - 1) / 2;
   for (let x = 0; x < width; x++) {
-    sinX[x] = Math.sin(x * freqX + phase);
+    const dx = (x - cx) / cx;
+    windowX[x] = Math.exp(-dx * dx * 1.6);
   }
-  const cosY = new Float32Array(height);
+  const windowY = new Float32Array(height);
+  const cy = (height - 1) / 2;
   for (let y = 0; y < height; y++) {
-    cosY[y] = Math.cos(y * freqY - phaseY);
+    const dy = (y - cy) / cy;
+    windowY[y] = Math.exp(-dy * dy * 1.6);
   }
 
   for (let y = 0; y < height; y++) {
     const ym = (y - 1 + height) % height;
     const yp = (y + 1) % height;
-    const cy = cosY[y];
+    const wy = windowY[y];
     for (let x = 0; x < width; x++) {
       const idx = y * width + x;
       const xm = (x - 1 + width) % width;
@@ -242,7 +257,15 @@ function updateEnergy(world: World): void {
       const avgNeighbor = neighborSum * 0.25;
       const diffused = cur + (avgNeighbor - cur) * ENERGY_DIFFUSION;
 
-      const wave = sinX[x] * cy * waveAmp;
+      const tScale = waveTimeScale[idx];
+      const phase = phaseBase * tScale;
+
+      const wave =
+        Math.sin(x * ENERGY_WAVE_SPATIAL_FREQ + phase) *
+        Math.cos(y * ENERGY_WAVE_SPATIAL_FREQ - phase * 0.7) *
+        waveAmp *
+        windowX[x] *
+        wy;
 
       const bias = terrainBias[idx];
       const regen = ENERGY_REGEN_PER_TURN * (1 + bias * 0.6) + wave;
