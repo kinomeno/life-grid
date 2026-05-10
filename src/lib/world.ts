@@ -196,7 +196,9 @@ export function stepWorld(world: World): void {
     if (!life.alive) continue;
     actLife(world, life);
   }
-  cullDead(world);
+  if (world.turn % 15 === 0) {
+    cullDead(world);
+  }
   world.turn++;
 }
 

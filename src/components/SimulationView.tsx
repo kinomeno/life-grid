@@ -83,12 +83,15 @@ export default function SimulationView({
     let acc = 0;
     let stepsSinceTpsUpdate = 0;
     let tpsWindowStart = performance.now();
+    let lastRenderTime = 0;
     const FRAME_BUDGET_MS = 25;
+    const RENDER_INTERVAL_MS = 1000 / 30;
     const tick = (now: number) => {
       const dt = now - last;
       last = now;
       const s = speedRef.current;
       const world = worldRef.current;
+      let didStep = false;
       if (s > 0 && world) {
         const targetTps = s === 1 ? 4 : s === 10 ? 30 : 150;
         acc += (dt / 1000) * targetTps;
@@ -107,8 +110,7 @@ export default function SimulationView({
             }
           }
           stepsSinceTpsUpdate += actualSteps;
-          setVersion((v) => v + 1);
-          refreshDerived(world);
+          didStep = actualSteps > 0;
           if (world.turn - lastLoggedTurnRef.current >= 500) {
             logColorDistribution(world, `ターン ${world.turn}`);
             lastLoggedTurnRef.current = world.turn;
@@ -116,6 +118,11 @@ export default function SimulationView({
         }
       } else {
         acc = 0;
+      }
+      if (didStep && world && now - lastRenderTime >= RENDER_INTERVAL_MS) {
+        setVersion((v) => v + 1);
+        refreshDerived(world);
+        lastRenderTime = now;
       }
       const elapsed = now - tpsWindowStart;
       if (elapsed >= 250) {

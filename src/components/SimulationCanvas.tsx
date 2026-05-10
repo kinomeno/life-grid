@@ -83,16 +83,22 @@ function drawLives(
 ) {
   const inset = Math.max(0, Math.floor(cellSize * 0.15));
   const drawSize = Math.max(1, cellSize - inset * 2);
+  const radius = drawSize / 2;
+  const half = cellSize / 2;
+  const TWO_PI = Math.PI * 2;
 
   for (const life of world.lives) {
     if (!life.alive) continue;
     const { r, g, b } = life.genes;
     ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-    ctx.fillRect(
-      life.x * cellSize + inset,
-      life.y * cellSize + inset,
-      drawSize,
-      drawSize
+    ctx.beginPath();
+    ctx.arc(
+      life.x * cellSize + half,
+      life.y * cellSize + half,
+      radius,
+      0,
+      TWO_PI
     );
+    ctx.fill();
   }
 }
