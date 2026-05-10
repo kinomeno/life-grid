@@ -50,6 +50,8 @@ export function createWorld(config: WorldConfig): World {
     energy[i] = clamp(v, 0, ENERGY_MAX) * INITIAL_ENERGY_RATIO + 5;
   }
 
+  const terrainBias = createTerrainBias(width, height, rng);
+
   const occupancy = new Int32Array(total).fill(-1);
   const lives: Life[] = [];
 
@@ -85,6 +87,7 @@ export function createWorld(config: WorldConfig): World {
     occupancy,
     lives,
     nextLifeId: nextId,
+    terrainBias,
   };
 }
 
@@ -131,6 +134,33 @@ function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
 
+function createTerrainBias(
+  width: number,
+  height: number,
+  rng: RNG
+): Float32Array {
+  const map = new Float32Array(width * height);
+  const ph1x = rng() * Math.PI * 2;
+  const ph1y = rng() * Math.PI * 2;
+  const ph2x = rng() * Math.PI * 2;
+  const ph2y = rng() * Math.PI * 2;
+  const ph3x = rng() * Math.PI * 2;
+  const ph3y = rng() * Math.PI * 2;
+  const f1 = 0.04 + rng() * 0.02;
+  const f2 = 0.11 + rng() * 0.04;
+  const f3 = 0.23 + rng() * 0.06;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const v =
+        Math.sin(x * f1 + ph1x) * Math.cos(y * f1 + ph1y) * 0.55 +
+        Math.sin(x * f2 + ph2x) * Math.sin(y * f2 + ph2y) * 0.3 +
+        Math.cos(x * f3 + ph3x) * Math.sin(y * f3 + ph3y) * 0.15;
+      map[y * width + x] = v;
+    }
+  }
+  return map;
+}
+
 export function stepWorld(world: World): void {
   updateEnergy(world);
   const order = shuffledIndices(world.lives.length, world.turn);
@@ -157,7 +187,7 @@ function shuffledIndices(n: number, seed: number): Int32Array {
 }
 
 function updateEnergy(world: World): void {
-  const { width, height, energy, turn } = world;
+  const { width, height, energy, turn, terrainBias } = world;
   const wavePhase = (turn / ENERGY_WAVE_PERIOD_TURNS) * Math.PI * 2;
   const next = new Float32Array(energy.length);
 
@@ -187,13 +217,25 @@ function updateEnergy(world: World): void {
       const avgNeighbor = neighborCount > 0 ? neighborSum / neighborCount : cur;
       const diffused = cur + (avgNeighbor - cur) * ENERGY_DIFFUSION;
 
-      const wave =
+      const waveLarge =
         Math.sin(x * ENERGY_WAVE_SPATIAL_FREQ + wavePhase) *
-        Math.cos(y * ENERGY_WAVE_SPATIAL_FREQ - wavePhase * 0.7) *
-        ENERGY_WAVE_AMPLITUDE *
-        0.02;
+        Math.cos(y * ENERGY_WAVE_SPATIAL_FREQ - wavePhase * 0.7);
 
-      const regen = ENERGY_REGEN_PER_TURN + wave;
+      const waveMedium =
+        Math.sin(x * ENERGY_WAVE_SPATIAL_FREQ * 2.7 + wavePhase * 1.3) *
+        Math.sin(y * ENERGY_WAVE_SPATIAL_FREQ * 2.3 - wavePhase * 0.5);
+
+      const waveLocal =
+        Math.cos(x * ENERGY_WAVE_SPATIAL_FREQ * 5.3 - wavePhase * 2.1) *
+        Math.sin(y * ENERGY_WAVE_SPATIAL_FREQ * 4.7 + wavePhase * 1.6);
+
+      const wave =
+        (waveLarge + waveMedium * 0.55 + waveLocal * 0.3) *
+        ENERGY_WAVE_AMPLITUDE *
+        0.018;
+
+      const bias = terrainBias[idx];
+      const regen = ENERGY_REGEN_PER_TURN * (1 + bias * 0.6) + wave;
       let v = diffused + regen;
       if (v < 0) v = 0;
       if (v > ENERGY_MAX) v = ENERGY_MAX;

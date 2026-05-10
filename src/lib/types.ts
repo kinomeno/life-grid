@@ -32,6 +32,7 @@ export type World = {
   occupancy: Int32Array;
   lives: Life[];
   nextLifeId: number;
+  terrainBias: Float32Array;
 };
 
 export type WorldConfig = {
