@@ -217,9 +217,7 @@ function updateEnergy(world: World): void {
   const { width, height, energy, turn, terrainBias, waveTimeScale } = world;
   const next = new Float32Array(energy.length);
 
-  const phaseBaseLarge = (turn / 16000) * Math.PI * 2;
-  const phaseBaseMedium = (turn / 4000) * Math.PI * 2;
-  const phaseBaseLocal = (turn / 1000) * Math.PI * 2;
+  const phaseBase = (turn / 2000) * Math.PI * 2;
 
   for (let y = 0; y < height; y++) {
     const ym = (y - 1 + height) % height;
@@ -239,26 +237,13 @@ function updateEnergy(world: World): void {
       const diffused = cur + (avgNeighbor - cur) * ENERGY_DIFFUSION;
 
       const tScale = waveTimeScale[idx];
-      const phaseLarge = phaseBaseLarge * tScale;
-      const phaseMedium = phaseBaseMedium * tScale;
-      const phaseLocal = phaseBaseLocal * tScale;
-
-      const waveLarge =
-        Math.sin(x * ENERGY_WAVE_SPATIAL_FREQ + phaseLarge) *
-        Math.cos(y * ENERGY_WAVE_SPATIAL_FREQ - phaseLarge * 0.7);
-
-      const waveMedium =
-        Math.sin(x * ENERGY_WAVE_SPATIAL_FREQ * 2.7 + phaseMedium * 1.3) *
-        Math.sin(y * ENERGY_WAVE_SPATIAL_FREQ * 2.3 - phaseMedium * 0.5);
-
-      const waveLocal =
-        Math.cos(x * ENERGY_WAVE_SPATIAL_FREQ * 5.3 - phaseLocal * 2.1) *
-        Math.sin(y * ENERGY_WAVE_SPATIAL_FREQ * 4.7 + phaseLocal * 1.6);
+      const phase = phaseBase * tScale;
 
       const wave =
-        (waveLarge + waveMedium * 0.55 + waveLocal * 0.3) *
+        Math.sin(x * ENERGY_WAVE_SPATIAL_FREQ + phase) *
+        Math.cos(y * ENERGY_WAVE_SPATIAL_FREQ - phase * 0.7) *
         ENERGY_WAVE_AMPLITUDE *
-        0.018;
+        0.025;
 
       const bias = terrainBias[idx];
       const regen = ENERGY_REGEN_PER_TURN * (1 + bias * 0.6) + wave;
