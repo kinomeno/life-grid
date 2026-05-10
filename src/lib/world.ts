@@ -51,6 +51,7 @@ export function createWorld(config: WorldConfig): World {
   }
 
   const terrainBias = createTerrainBias(width, height, rng);
+  const waveTimeScale = createWaveTimeScale(width, height, rng);
 
   const occupancy = new Int32Array(total).fill(-1);
   const lives: Life[] = [];
@@ -88,6 +89,7 @@ export function createWorld(config: WorldConfig): World {
     lives,
     nextLifeId: nextId,
     terrainBias,
+    waveTimeScale,
   };
 }
 
@@ -134,6 +136,13 @@ function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
 
+function wrapDelta(d: number, size: number): number {
+  const half = size / 2;
+  if (d > half) return d - size;
+  if (d < -half) return d + size;
+  return d;
+}
+
 function createTerrainBias(
   width: number,
   height: number,
@@ -156,6 +165,24 @@ function createTerrainBias(
         Math.sin(x * f2 + ph2x) * Math.sin(y * f2 + ph2y) * 0.3 +
         Math.cos(x * f3 + ph3x) * Math.sin(y * f3 + ph3y) * 0.15;
       map[y * width + x] = v;
+    }
+  }
+  return map;
+}
+
+function createWaveTimeScale(
+  width: number,
+  height: number,
+  rng: RNG
+): Float32Array {
+  const map = new Float32Array(width * height);
+  const phx = rng() * Math.PI * 2;
+  const phy = rng() * Math.PI * 2;
+  const f = 0.03 + rng() * 0.02;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const v = Math.sin(x * f + phx) * Math.cos(y * f + phy);
+      map[y * width + x] = 0.3 + (v + 1) * 0.5;
     }
   }
   return map;
@@ -187,47 +214,46 @@ function shuffledIndices(n: number, seed: number): Int32Array {
 }
 
 function updateEnergy(world: World): void {
-  const { width, height, energy, turn, terrainBias } = world;
-  const wavePhase = (turn / ENERGY_WAVE_PERIOD_TURNS) * Math.PI * 2;
+  const { width, height, energy, turn, terrainBias, waveTimeScale } = world;
   const next = new Float32Array(energy.length);
 
+  const phaseBaseLarge = (turn / 16000) * Math.PI * 2;
+  const phaseBaseMedium = (turn / 4000) * Math.PI * 2;
+  const phaseBaseLocal = (turn / 1000) * Math.PI * 2;
+
   for (let y = 0; y < height; y++) {
+    const ym = (y - 1 + height) % height;
+    const yp = (y + 1) % height;
     for (let x = 0; x < width; x++) {
       const idx = y * width + x;
+      const xm = (x - 1 + width) % width;
+      const xp = (x + 1) % width;
       const cur = energy[idx];
 
-      let neighborSum = 0;
-      let neighborCount = 0;
-      if (x > 0) {
-        neighborSum += energy[idx - 1];
-        neighborCount++;
-      }
-      if (x < width - 1) {
-        neighborSum += energy[idx + 1];
-        neighborCount++;
-      }
-      if (y > 0) {
-        neighborSum += energy[idx - width];
-        neighborCount++;
-      }
-      if (y < height - 1) {
-        neighborSum += energy[idx + width];
-        neighborCount++;
-      }
-      const avgNeighbor = neighborCount > 0 ? neighborSum / neighborCount : cur;
+      const neighborSum =
+        energy[y * width + xm] +
+        energy[y * width + xp] +
+        energy[ym * width + x] +
+        energy[yp * width + x];
+      const avgNeighbor = neighborSum * 0.25;
       const diffused = cur + (avgNeighbor - cur) * ENERGY_DIFFUSION;
 
+      const tScale = waveTimeScale[idx];
+      const phaseLarge = phaseBaseLarge * tScale;
+      const phaseMedium = phaseBaseMedium * tScale;
+      const phaseLocal = phaseBaseLocal * tScale;
+
       const waveLarge =
-        Math.sin(x * ENERGY_WAVE_SPATIAL_FREQ + wavePhase) *
-        Math.cos(y * ENERGY_WAVE_SPATIAL_FREQ - wavePhase * 0.7);
+        Math.sin(x * ENERGY_WAVE_SPATIAL_FREQ + phaseLarge) *
+        Math.cos(y * ENERGY_WAVE_SPATIAL_FREQ - phaseLarge * 0.7);
 
       const waveMedium =
-        Math.sin(x * ENERGY_WAVE_SPATIAL_FREQ * 2.7 + wavePhase * 1.3) *
-        Math.sin(y * ENERGY_WAVE_SPATIAL_FREQ * 2.3 - wavePhase * 0.5);
+        Math.sin(x * ENERGY_WAVE_SPATIAL_FREQ * 2.7 + phaseMedium * 1.3) *
+        Math.sin(y * ENERGY_WAVE_SPATIAL_FREQ * 2.3 - phaseMedium * 0.5);
 
       const waveLocal =
-        Math.cos(x * ENERGY_WAVE_SPATIAL_FREQ * 5.3 - wavePhase * 2.1) *
-        Math.sin(y * ENERGY_WAVE_SPATIAL_FREQ * 4.7 + wavePhase * 1.6);
+        Math.cos(x * ENERGY_WAVE_SPATIAL_FREQ * 5.3 - phaseLocal * 2.1) *
+        Math.sin(y * ENERGY_WAVE_SPATIAL_FREQ * 4.7 + phaseLocal * 1.6);
 
       const wave =
         (waveLarge + waveMedium * 0.55 + waveLocal * 0.3) *
@@ -253,12 +279,14 @@ function actLife(world: World, life: Life): void {
   let steps = 0;
   while (steps < g.speed) {
     if (life.x === target.x && life.y === target.y) break;
-    const dx = Math.sign(target.x - life.x);
-    const dy = Math.sign(target.y - life.y);
+    const dxRaw = wrapDelta(target.x - life.x, width);
+    const dyRaw = wrapDelta(target.y - life.y, height);
+    const dx = Math.sign(dxRaw);
+    const dy = Math.sign(dyRaw);
     let nx = life.x;
     let ny = life.y;
     if (dx !== 0 && dy !== 0) {
-      if (Math.abs(target.x - life.x) >= Math.abs(target.y - life.y)) {
+      if (Math.abs(dxRaw) >= Math.abs(dyRaw)) {
         nx = life.x + dx;
       } else {
         ny = life.y + dy;
@@ -267,7 +295,8 @@ function actLife(world: World, life: Life): void {
       nx = life.x + dx;
       ny = life.y + dy;
     }
-    if (nx < 0 || nx >= width || ny < 0 || ny >= height) break;
+    nx = (nx + width) % width;
+    ny = (ny + height) % height;
     const newIdx = ny * width + nx;
     if (occupancy[newIdx] !== -1) break;
     const oldIdx = life.y * width + life.x;
@@ -337,11 +366,10 @@ function findBestNeighborCell(
 
   for (let dy = -depth; dy <= depth; dy++) {
     for (let dx = -depth; dx <= depth; dx++) {
-      const nx = life.x + dx;
-      const ny = life.y + dy;
-      if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
       const dist = Math.abs(dx) + Math.abs(dy);
       if (dist > depth) continue;
+      const nx = (life.x + dx + width) % width;
+      const ny = (life.y + dy + height) % height;
       const idx = ny * width + nx;
       if (occupancy[idx] !== -1 && (dx !== 0 || dy !== 0)) continue;
       const e = energy[idx];
@@ -384,9 +412,8 @@ function findEmptyNeighbor(
     [-1, 1],  [0, 1],  [1, 1],
   ];
   for (const [dx, dy] of offsets) {
-    const nx = x + dx;
-    const ny = y + dy;
-    if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+    const nx = (x + dx + width) % width;
+    const ny = (y + dy + height) % height;
     const idx = ny * width + nx;
     if (occupancy[idx] === -1) {
       return { x: nx, y: ny };
@@ -421,9 +448,8 @@ function reproduceLife(
 }
 
 function handleCombat(world: World, life: Life): void {
-  const { width, occupancy, energy } = world;
+  const { width, height, occupancy, energy } = world;
   const { x, y } = life;
-  const idx = y * width + x;
   const neighbors = [
     [-1, -1], [0, -1], [1, -1],
     [-1, 0],           [1, 0],
@@ -431,9 +457,8 @@ function handleCombat(world: World, life: Life): void {
   ];
 
   for (const [dx, dy] of neighbors) {
-    const nx = x + dx;
-    const ny = y + dy;
-    if (nx < 0 || nx >= width || ny < 0 || ny >= world.height) continue;
+    const nx = (x + dx + width) % width;
+    const ny = (y + dy + height) % height;
     const nidx = ny * width + nx;
     if (occupancy[nidx] === -1) continue;
 

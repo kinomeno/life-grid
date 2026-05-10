@@ -33,6 +33,7 @@ export type World = {
   lives: Life[];
   nextLifeId: number;
   terrainBias: Float32Array;
+  waveTimeScale: Float32Array;
 };
 
 export type WorldConfig = {
