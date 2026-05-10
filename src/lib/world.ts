@@ -52,6 +52,7 @@ export function createWorld(config: WorldConfig): World {
 
   const terrainBias = createTerrainBias(width, height, rng);
   const waveTimeScale = createWaveTimeScale(width, height, rng);
+  const wavePatternId = Math.floor(rng() * WAVE_PATTERN_COUNT);
 
   const occupancy = new Int32Array(total).fill(-1);
   const lives: Life[] = [];
@@ -90,8 +91,11 @@ export function createWorld(config: WorldConfig): World {
     nextLifeId: nextId,
     terrainBias,
     waveTimeScale,
+    wavePatternId,
   };
 }
+
+const WAVE_PATTERN_COUNT = 6;
 
 function randomGenes(rng: RNG): Genes {
   return {
@@ -176,13 +180,21 @@ function createWaveTimeScale(
   rng: RNG
 ): Float32Array {
   const map = new Float32Array(width * height);
-  const phx = rng() * Math.PI * 2;
-  const phy = rng() * Math.PI * 2;
-  const f = 0.03 + rng() * 0.02;
+  // Two-octave noise for more variation in time scale per cell.
+  const f1 = 0.03 + rng() * 0.02;
+  const phx1 = rng() * Math.PI * 2;
+  const phy1 = rng() * Math.PI * 2;
+  const f2 = 0.08 + rng() * 0.04;
+  const phx2 = rng() * Math.PI * 2;
+  const phy2 = rng() * Math.PI * 2;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const v = Math.sin(x * f + phx) * Math.cos(y * f + phy);
-      map[y * width + x] = 0.3 + (v + 1) * 0.5;
+      const v1 = Math.sin(x * f1 + phx1) * Math.cos(y * f1 + phy1);
+      const v2 = Math.sin(x * f2 + phx2) * Math.sin(y * f2 + phy2);
+      const v = v1 * 0.7 + v2 * 0.3; // -1..1
+      // map to range [0.2, 1.8] — wider than the previous [0.3, 1.3]
+      // so neighboring cells can have visibly different oscillation rates.
+      map[y * width + x] = 1.0 + v * 0.8;
     }
   }
   return map;
@@ -217,15 +229,15 @@ function shuffledIndices(n: number, seed: number): Int32Array {
 }
 
 function updateEnergy(world: World): void {
-  const { width, height, energy, turn, terrainBias, waveTimeScale } = world;
+  const { width, height, energy, turn, terrainBias, waveTimeScale, wavePatternId } = world;
   const next = new Float32Array(energy.length);
 
   const phaseBase = (turn / 2000) * Math.PI * 2;
   const waveAmp = ENERGY_WAVE_AMPLITUDE * 0.025;
+  const SF = ENERGY_WAVE_SPATIAL_FREQ;
 
   // Gaussian-like edge windowing: amplitude fades smoothly toward edges so
   // wave is non-toroidal but doesn't show abrupt cuts at the boundaries.
-  // Falloff is gentle in the middle and steep near the edge (~10% margin).
   const windowX = new Float32Array(width);
   const cx = (width - 1) / 2;
   for (let x = 0; x < width; x++) {
@@ -260,12 +272,48 @@ function updateEnergy(world: World): void {
       const tScale = waveTimeScale[idx];
       const phase = phaseBase * tScale;
 
-      const wave =
-        Math.sin(x * ENERGY_WAVE_SPATIAL_FREQ + phase) *
-        Math.cos(y * ENERGY_WAVE_SPATIAL_FREQ - phase * 0.7) *
-        waveAmp *
-        windowX[x] *
-        wy;
+      let waveBase: number;
+      switch (wavePatternId) {
+        case 0:
+          // classic separable
+          waveBase =
+            Math.sin(x * SF + phase) * Math.cos(y * SF - phase * 0.7);
+          break;
+        case 1:
+          // additive - stripe-like
+          waveBase =
+            (Math.sin(x * SF + phase) + Math.cos(y * SF - phase * 0.7)) * 0.5;
+          break;
+        case 2:
+          // diagonal traveling wave
+          waveBase =
+            Math.sin((x + y) * SF * 0.7 + phase) * 0.85;
+          break;
+        case 3:
+          // multi-layer interference
+          waveBase =
+            Math.sin(x * SF + phase) * Math.cos(y * SF - phase * 0.7) * 0.6 +
+            Math.sin(x * SF * 1.7 - phase * 0.5) *
+              Math.cos(y * SF * 1.3 + phase * 0.4) * 0.4;
+          break;
+        case 4:
+          // stretched anisotropic
+          waveBase =
+            Math.sin(x * SF * 1.4 + phase) *
+            Math.sin(y * SF * 0.6 - phase * 0.5);
+          break;
+        case 5:
+          // diagonal + counter-diagonal cross
+          waveBase =
+            Math.sin((x + y) * SF * 0.5 + phase) * 0.5 +
+            Math.cos((x - y) * SF * 0.5 - phase * 0.6) * 0.5;
+          break;
+        default:
+          waveBase =
+            Math.sin(x * SF + phase) * Math.cos(y * SF - phase * 0.7);
+      }
+
+      const wave = waveBase * waveAmp * windowX[x] * wy;
 
       const bias = terrainBias[idx];
       const regen = ENERGY_REGEN_PER_TURN * (1 + bias * 0.6) + wave;

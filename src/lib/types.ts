@@ -34,6 +34,7 @@ export type World = {
   nextLifeId: number;
   terrainBias: Float32Array;
   waveTimeScale: Float32Array;
+  wavePatternId: number;
 };
 
 export type WorldConfig = {
