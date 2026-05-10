@@ -38,6 +38,8 @@ export const ABSORB_RATE = 0.10;
 
 export const SPECIES_RGB_BIN = 48;
 
+export const ENERGY_DISPLAY_LEVELS = 8;
+
 export const REPRODUCTION_ENERGY_THRESHOLD_RATIO = 0.6;
 export const MIN_REPRODUCTIVE_AGE_RATIO = 0.2;
 export const MUTATION_STD_DEV = 0.15;

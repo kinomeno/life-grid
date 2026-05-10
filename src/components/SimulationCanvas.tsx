@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { ENERGY_MAX } from "@/lib/constants";
+import { ENERGY_DISPLAY_LEVELS, ENERGY_MAX } from "@/lib/constants";
 import type { World } from "@/lib/types";
 
 type Props = {
@@ -52,10 +52,11 @@ function drawEnergyField(
   const img = ctx.createImageData(imgW, imgH);
   const data = img.data;
 
+  const levels = ENERGY_DISPLAY_LEVELS;
   for (let i = 0; i < energy.length; i++) {
     const v = energy[i] / ENERGY_MAX;
     const t = Math.min(1, Math.max(0, v));
-    const quantized = Math.floor(t * 5) / 5;
+    const quantized = Math.floor(t * levels) / levels;
     const shade = Math.round(250 - quantized * 90);
     const o = i * 4;
     data[o] = shade;
