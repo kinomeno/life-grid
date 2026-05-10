@@ -280,3 +280,7 @@
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
+
+:global(.status-warn .status-value) {
+  color: #c0532e;
+}

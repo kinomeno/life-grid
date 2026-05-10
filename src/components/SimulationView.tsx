@@ -160,6 +160,10 @@ export default function SimulationView({
 
   const world = worldRef.current;
 
+  const targetTps = speed === 0 ? 0 : speed === 1 ? 4 : speed === 10 ? 30 : 150;
+  const isThrottled = speed > 0 && targetTps > 0 && currentTps < targetTps * 0.9;
+  const effectiveX = currentTps / 4;
+
   return (
     <div className="sim-root">
       <div className="top-status">
@@ -175,6 +179,14 @@ export default function SimulationView({
           <span className="status-label">turn/s</span>
           <span className="status-value">{currentTps.toFixed(1)}</span>
         </div>
+        {speed > 0 && (
+          <div className={`status-item ${isThrottled ? "status-warn" : ""}`}>
+            <span className="status-label">実倍率</span>
+            <span className="status-value">
+              {isThrottled && "⚠ "}x{effectiveX.toFixed(1)}
+            </span>
+          </div>
+        )}
       </div>
       <aside className="sim-cell sim-left">
         <section className="panel">
