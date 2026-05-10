@@ -46,6 +46,7 @@ export default function SimulationView({
     speciesCount: 0,
     averageEnergy: 0,
     averageIntelligence: 0,
+    maxIntelligence: 0,
     averageSpeed: 0,
   });
   const [topSpecies, setTopSpecies] = useState<SpeciesEntry[]>([]);
@@ -210,6 +211,10 @@ export default function SimulationView({
             <InfoRow
               label="平均知能"
               value={stats.averageIntelligence.toFixed(2)}
+            />
+            <InfoRow
+              label="最大知能"
+              value={stats.maxIntelligence.toFixed(2)}
             />
             <InfoRow
               label="平均移動速度"

@@ -51,7 +51,6 @@ export function createWorld(config: WorldConfig): World {
   }
 
   const terrainBias = createTerrainBias(width, height, rng);
-  const waveTimeScale = createWaveTimeScale(width, height, rng);
 
   const occupancy = new Int32Array(total).fill(-1);
   const lives: Life[] = [];
@@ -89,7 +88,6 @@ export function createWorld(config: WorldConfig): World {
     lives,
     nextLifeId: nextId,
     terrainBias,
-    waveTimeScale,
   };
 }
 
@@ -170,23 +168,6 @@ function createTerrainBias(
   return map;
 }
 
-function createWaveTimeScale(
-  width: number,
-  height: number,
-  rng: RNG
-): Float32Array {
-  const map = new Float32Array(width * height);
-  const phx = rng() * Math.PI * 2;
-  const phy = rng() * Math.PI * 2;
-  const f = 0.03 + rng() * 0.02;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const v = Math.sin(x * f + phx) * Math.cos(y * f + phy);
-      map[y * width + x] = 0.3 + (v + 1) * 0.5;
-    }
-  }
-  return map;
-}
 
 export function stepWorld(world: World): void {
   updateEnergy(world);
@@ -216,11 +197,12 @@ function shuffledIndices(n: number, seed: number): Int32Array {
 }
 
 function updateEnergy(world: World): void {
-  const { width, height, energy, turn, terrainBias, waveTimeScale } = world;
+  const { width, height, energy, turn, terrainBias } = world;
   const next = new Float32Array(energy.length);
 
   const TWO_PI = Math.PI * 2;
-  const phaseBase = (turn / 2000) * TWO_PI;
+  const phase = (turn / 2000) * TWO_PI;
+  const phaseY = phase * 0.7;
 
   // toroidal continuity: spatial frequency must complete an integer number of
   // cycles across width/height so x=0 and x=width-1 (and y=0 and y=height-1)
@@ -229,10 +211,23 @@ function updateEnergy(world: World): void {
   const cyclesY = Math.max(1, Math.round((height * ENERGY_WAVE_SPATIAL_FREQ) / TWO_PI));
   const freqX = (TWO_PI * cyclesX) / width;
   const freqY = (TWO_PI * cyclesY) / height;
+  const waveAmp = ENERGY_WAVE_AMPLITUDE * 0.025;
+
+  // precompute per-row cos(y) and per-column sin(x) since phase is shared
+  // across the whole grid this turn — turns 2 trig calls per cell into 0.
+  const sinX = new Float32Array(width);
+  for (let x = 0; x < width; x++) {
+    sinX[x] = Math.sin(x * freqX + phase);
+  }
+  const cosY = new Float32Array(height);
+  for (let y = 0; y < height; y++) {
+    cosY[y] = Math.cos(y * freqY - phaseY);
+  }
 
   for (let y = 0; y < height; y++) {
     const ym = (y - 1 + height) % height;
     const yp = (y + 1) % height;
+    const cy = cosY[y];
     for (let x = 0; x < width; x++) {
       const idx = y * width + x;
       const xm = (x - 1 + width) % width;
@@ -247,14 +242,7 @@ function updateEnergy(world: World): void {
       const avgNeighbor = neighborSum * 0.25;
       const diffused = cur + (avgNeighbor - cur) * ENERGY_DIFFUSION;
 
-      const tScale = waveTimeScale[idx];
-      const phase = phaseBase * tScale;
-
-      const wave =
-        Math.sin(x * freqX + phase) *
-        Math.cos(y * freqY - phase * 0.7) *
-        ENERGY_WAVE_AMPLITUDE *
-        0.025;
+      const wave = sinX[x] * cy * waveAmp;
 
       const bias = terrainBias[idx];
       const regen = ENERGY_REGEN_PER_TURN * (1 + bias * 0.6) + wave;
