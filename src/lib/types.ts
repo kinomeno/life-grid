@@ -23,6 +23,14 @@ export type Life = {
   alive: boolean;
 };
 
+export type SimulationParams = {
+  energyWaveAmplitude: number;
+  energyRegenPerTurn: number;
+  energyDiffusion: number;
+  absorbRate: number;
+  combatEnergyLossRatio: number;
+};
+
 export type World = {
   width: number;
   height: number;
@@ -35,6 +43,7 @@ export type World = {
   terrainBias: Float32Array;
   waveTimeScale: Float32Array;
   wavePatternId: number;
+  params: SimulationParams;
 };
 
 export type WorldConfig = {
@@ -42,4 +51,5 @@ export type WorldConfig = {
   height: number;
   initialLifeCount: number;
   seed: number;
+  params?: SimulationParams;
 };

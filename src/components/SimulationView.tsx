@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SimulationCanvas from "./SimulationCanvas";
 import { computeStats, type WorldStats } from "@/lib/stats";
 import { randomSeed } from "@/lib/random";
-import { createWorld, stepWorld } from "@/lib/world";
+import { createWorld, defaultSimulationParams, stepWorld } from "@/lib/world";
 import { speciesLabel } from "@/lib/species";
-import type { World } from "@/lib/types";
+import type { SimulationParams, World } from "@/lib/types";
 
 type Props = {
   width: number;
@@ -53,6 +53,7 @@ export default function SimulationView({
   const [speed, setSpeedState] = useState<Speed>(0);
   const speedRef = useRef<Speed>(0);
   const [currentTps, setCurrentTps] = useState(0);
+  const [params, setParams] = useState<SimulationParams>(() => defaultSimulationParams());
 
   const refreshDerived = useCallback((w: World) => {
     setStats(computeStats(w));
@@ -64,14 +65,23 @@ export default function SimulationView({
   useEffect(() => {
     if (worldRef.current !== null) return;
     const s = randomSeed();
-    const w = createWorld({ width, height, initialLifeCount, seed: s });
+    const w = createWorld({ width, height, initialLifeCount, seed: s, params });
     worldRef.current = w;
     setSeed(s);
     refreshDerived(w);
     setVersion((v) => v + 1);
     logColorDistribution(w, "初期化");
     lastLoggedTurnRef.current = 0;
+    // params is intentionally only read on mount; live updates are handled
+    // by the syncing effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [width, height, initialLifeCount, refreshDerived]);
+
+  // Push parameter changes into the live world without resetting it.
+  useEffect(() => {
+    const w = worldRef.current;
+    if (w) w.params = params;
+  }, [params]);
 
   const setSpeed = useCallback((s: Speed) => {
     speedRef.current = s;
@@ -145,6 +155,7 @@ export default function SimulationView({
         height,
         initialLifeCount,
         seed: newSeed,
+        params,
       });
       worldRef.current = w;
       setSeed(newSeed);
@@ -153,7 +164,7 @@ export default function SimulationView({
       logColorDistribution(w, "リセット");
       lastLoggedTurnRef.current = 0;
     },
-    [width, height, initialLifeCount, refreshDerived]
+    [width, height, initialLifeCount, refreshDerived, params]
   );
 
   const stepOnce = useCallback(() => {
@@ -265,6 +276,68 @@ export default function SimulationView({
             マップ上の生命をクリックすると詳細を表示します（次バージョンで実装予定）
           </p>
         </section>
+
+        <section className="panel">
+          <h2 className="panel-title">環境パラメータ</h2>
+          <div className="param-list">
+            <ParamSlider
+              label="波の振幅"
+              value={params.energyWaveAmplitude}
+              min={0}
+              max={60}
+              step={1}
+              onChange={(v) =>
+                setParams((p) => ({ ...p, energyWaveAmplitude: v }))
+              }
+            />
+            <ParamSlider
+              label="再生速度"
+              value={params.energyRegenPerTurn}
+              min={0}
+              max={0.5}
+              step={0.01}
+              onChange={(v) =>
+                setParams((p) => ({ ...p, energyRegenPerTurn: v }))
+              }
+            />
+            <ParamSlider
+              label="拡散率"
+              value={params.energyDiffusion}
+              min={0}
+              max={0.2}
+              step={0.005}
+              onChange={(v) =>
+                setParams((p) => ({ ...p, energyDiffusion: v }))
+              }
+            />
+            <ParamSlider
+              label="吸収率"
+              value={params.absorbRate}
+              min={0}
+              max={0.3}
+              step={0.005}
+              onChange={(v) =>
+                setParams((p) => ({ ...p, absorbRate: v }))
+              }
+            />
+            <ParamSlider
+              label="戦闘譲渡率"
+              value={params.combatEnergyLossRatio}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(v) =>
+                setParams((p) => ({ ...p, combatEnergyLossRatio: v }))
+              }
+            />
+            <button
+              className="btn param-reset"
+              onClick={() => setParams(defaultSimulationParams())}
+            >
+              既定値に戻す
+            </button>
+          </div>
+        </section>
       </aside>
 
       <footer className="sim-cell sim-bottom">
@@ -305,6 +378,41 @@ export default function SimulationView({
           </div>
         </div>
       </footer>
+    </div>
+  );
+}
+
+function ParamSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (value: number) => void;
+}) {
+  const decimals = step >= 1 ? 0 : step >= 0.1 ? 1 : step >= 0.01 ? 2 : 3;
+  return (
+    <div className="param-row">
+      <div className="param-head">
+        <span className="param-label">{label}</span>
+        <span className="param-value">{value.toFixed(decimals)}</span>
+      </div>
+      <input
+        type="range"
+        className="param-slider"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
     </div>
   );
 }

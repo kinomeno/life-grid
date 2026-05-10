@@ -37,10 +37,21 @@ import {
 } from "./constants";
 import { mulberry32, randomInt, randomRange, type RNG } from "./random";
 import { speciesIdFromGenes } from "./species";
-import type { Genes, Life, World, WorldConfig } from "./types";
+import type { Genes, Life, SimulationParams, World, WorldConfig } from "./types";
+
+export function defaultSimulationParams(): SimulationParams {
+  return {
+    energyWaveAmplitude: ENERGY_WAVE_AMPLITUDE,
+    energyRegenPerTurn: ENERGY_REGEN_PER_TURN,
+    energyDiffusion: ENERGY_DIFFUSION,
+    absorbRate: ABSORB_RATE,
+    combatEnergyLossRatio: COMBAT_ENERGY_LOSS_RATIO,
+  };
+}
 
 export function createWorld(config: WorldConfig): World {
   const { width, height, initialLifeCount, seed } = config;
+  const params = config.params ?? defaultSimulationParams();
   const rng = mulberry32(seed);
   const total = width * height;
 
@@ -92,6 +103,7 @@ export function createWorld(config: WorldConfig): World {
     terrainBias,
     waveTimeScale,
     wavePatternId,
+    params,
   };
 }
 
@@ -229,11 +241,11 @@ function shuffledIndices(n: number, seed: number): Int32Array {
 }
 
 function updateEnergy(world: World): void {
-  const { width, height, energy, turn, terrainBias, waveTimeScale, wavePatternId } = world;
+  const { width, height, energy, turn, terrainBias, waveTimeScale, wavePatternId, params } = world;
   const next = new Float32Array(energy.length);
 
   const phaseBase = (turn / 2000) * Math.PI * 2;
-  const waveAmp = ENERGY_WAVE_AMPLITUDE * 0.025;
+  const waveAmp = params.energyWaveAmplitude * 0.025;
   const SF = ENERGY_WAVE_SPATIAL_FREQ;
 
   for (let y = 0; y < height; y++) {
@@ -251,7 +263,7 @@ function updateEnergy(world: World): void {
         energy[ym * width + x] +
         energy[yp * width + x];
       const avgNeighbor = neighborSum * 0.25;
-      const diffused = cur + (avgNeighbor - cur) * ENERGY_DIFFUSION;
+      const diffused = cur + (avgNeighbor - cur) * params.energyDiffusion;
 
       const tScale = waveTimeScale[idx];
       const phase = phaseBase * tScale;
@@ -300,7 +312,7 @@ function updateEnergy(world: World): void {
       const wave = waveBase * waveAmp;
 
       const bias = terrainBias[idx];
-      const regen = ENERGY_REGEN_PER_TURN * (1 + bias * 0.6) + wave;
+      const regen = params.energyRegenPerTurn * (1 + bias * 0.6) + wave;
       let v = diffused + regen;
       if (v < 0) v = 0;
       if (v > ENERGY_MAX) v = ENERGY_MAX;
@@ -355,7 +367,7 @@ function actLife(world: World, life: Life): void {
 
   const available = energy[idx];
   const capacity = g.size - life.energy;
-  const absorb = Math.max(0, Math.min(available * ABSORB_RATE, capacity));
+  const absorb = Math.max(0, Math.min(available * world.params.absorbRate, capacity));
   energy[idx] = available - absorb;
   life.energy += absorb;
 
@@ -505,7 +517,7 @@ function handleCombat(world: World, life: Life): void {
     if (!opponent || !opponent.alive) continue;
 
     if (life.genes.strength > opponent.genes.strength) {
-      const lootEnergy = opponent.energy * COMBAT_ENERGY_LOSS_RATIO;
+      const lootEnergy = opponent.energy * world.params.combatEnergyLossRatio;
       life.energy += lootEnergy;
       opponent.alive = false;
       opponent.energy = 0;

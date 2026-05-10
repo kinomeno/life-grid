@@ -284,3 +284,47 @@
 :global(.status-warn .status-value) {
   color: #c0532e;
 }
+
+:global(.param-list) {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+:global(.param-row) {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+:global(.param-head) {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 11px;
+}
+
+:global(.param-label) {
+  color: var(--text-soft);
+  letter-spacing: 0.04em;
+}
+
+:global(.param-value) {
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+:global(.param-slider) {
+  width: 100%;
+  accent-color: var(--text-strong);
+  cursor: pointer;
+}
+
+:global(.param-reset) {
+  margin-top: 4px;
+  align-self: flex-end;
+  font-size: 10px;
+  padding: 4px 10px;
+  min-width: auto;
+}
