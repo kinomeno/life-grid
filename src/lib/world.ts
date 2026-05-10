@@ -236,25 +236,9 @@ function updateEnergy(world: World): void {
   const waveAmp = ENERGY_WAVE_AMPLITUDE * 0.025;
   const SF = ENERGY_WAVE_SPATIAL_FREQ;
 
-  // Gaussian-like edge windowing: amplitude fades smoothly toward edges so
-  // wave is non-toroidal but doesn't show abrupt cuts at the boundaries.
-  const windowX = new Float32Array(width);
-  const cx = (width - 1) / 2;
-  for (let x = 0; x < width; x++) {
-    const dx = (x - cx) / cx;
-    windowX[x] = Math.exp(-dx * dx * 1.6);
-  }
-  const windowY = new Float32Array(height);
-  const cy = (height - 1) / 2;
-  for (let y = 0; y < height; y++) {
-    const dy = (y - cy) / cy;
-    windowY[y] = Math.exp(-dy * dy * 1.6);
-  }
-
   for (let y = 0; y < height; y++) {
     const ym = (y - 1 + height) % height;
     const yp = (y + 1) % height;
-    const wy = windowY[y];
     for (let x = 0; x < width; x++) {
       const idx = y * width + x;
       const xm = (x - 1 + width) % width;
@@ -313,7 +297,7 @@ function updateEnergy(world: World): void {
             Math.sin(x * SF + phase) * Math.cos(y * SF - phase * 0.7);
       }
 
-      const wave = waveBase * waveAmp * windowX[x] * wy;
+      const wave = waveBase * waveAmp;
 
       const bias = terrainBias[idx];
       const regen = ENERGY_REGEN_PER_TURN * (1 + bias * 0.6) + wave;
