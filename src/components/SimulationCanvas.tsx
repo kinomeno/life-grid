@@ -65,6 +65,24 @@ function drawEnergyField(
     data[o + 3] = 255;
   }
 
+  // Visual-only toroidal seam: blend each edge pixel with its opposite
+  // edge so left<->right and top<->bottom look continuous. Pure display
+  // hack — does not affect simulation physics.
+  for (let y = 0; y < imgH; y++) {
+    const lo = (y * imgW + 0) * 4;
+    const ro = (y * imgW + (imgW - 1)) * 4;
+    const avg = (data[lo] + data[ro]) >> 1;
+    data[lo] = data[lo + 1] = data[lo + 2] = avg;
+    data[ro] = data[ro + 1] = data[ro + 2] = avg;
+  }
+  for (let x = 0; x < imgW; x++) {
+    const to = x * 4;
+    const bo = ((imgH - 1) * imgW + x) * 4;
+    const avg = (data[to] + data[bo]) >> 1;
+    data[to] = data[to + 1] = data[to + 2] = avg;
+    data[bo] = data[bo + 1] = data[bo + 2] = avg;
+  }
+
   const off = document.createElement("canvas");
   off.width = imgW;
   off.height = imgH;
