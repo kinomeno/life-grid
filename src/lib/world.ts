@@ -219,7 +219,16 @@ function updateEnergy(world: World): void {
   const { width, height, energy, turn, terrainBias, waveTimeScale } = world;
   const next = new Float32Array(energy.length);
 
-  const phaseBase = (turn / 2000) * Math.PI * 2;
+  const TWO_PI = Math.PI * 2;
+  const phaseBase = (turn / 2000) * TWO_PI;
+
+  // toroidal continuity: spatial frequency must complete an integer number of
+  // cycles across width/height so x=0 and x=width-1 (and y=0 and y=height-1)
+  // are phase-continuous.
+  const cyclesX = Math.max(1, Math.round((width * ENERGY_WAVE_SPATIAL_FREQ) / TWO_PI));
+  const cyclesY = Math.max(1, Math.round((height * ENERGY_WAVE_SPATIAL_FREQ) / TWO_PI));
+  const freqX = (TWO_PI * cyclesX) / width;
+  const freqY = (TWO_PI * cyclesY) / height;
 
   for (let y = 0; y < height; y++) {
     const ym = (y - 1 + height) % height;
@@ -242,8 +251,8 @@ function updateEnergy(world: World): void {
       const phase = phaseBase * tScale;
 
       const wave =
-        Math.sin(x * ENERGY_WAVE_SPATIAL_FREQ + phase) *
-        Math.cos(y * ENERGY_WAVE_SPATIAL_FREQ - phase * 0.7) *
+        Math.sin(x * freqX + phase) *
+        Math.cos(y * freqY - phase * 0.7) *
         ENERGY_WAVE_AMPLITUDE *
         0.025;
 
