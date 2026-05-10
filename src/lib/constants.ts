@@ -4,7 +4,7 @@ export const ENERGY_INITIAL_VARIANCE = 25;
 export const ENERGY_REGEN_PER_TURN = 0.12;
 export const ENERGY_DIFFUSION = 0.02;
 
-export const ENERGY_WAVE_AMPLITUDE = 15;
+export const ENERGY_WAVE_AMPLITUDE = 30;
 export const ENERGY_WAVE_PERIOD_TURNS = 400;
 export const ENERGY_WAVE_SPATIAL_FREQ = 0.04;
 
