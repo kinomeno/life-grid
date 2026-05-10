@@ -9,7 +9,7 @@ export default function Home() {
       <header className={styles.header}>
         <h1 className={styles.title}>LIFE GRID</h1>
         <span className={styles.subtitle}>
-          生命進化シミュレーター — ver 0.11
+          生命進化シミュレーター — ver 0.208
         </span>
       </header>
       <div className={styles.body}>
