@@ -2,16 +2,39 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SimulationCanvas from "./SimulationCanvas";
+import StatsGraphModal, {
+  DEFAULT_GRAPH_SERIES,
+  type GraphSeriesState,
+} from "./StatsGraphModal";
+import ActionLogModal from "./ActionLogModal";
+import RulesScreen from "./RulesScreen";
 import { computeStats, type WorldStats } from "@/lib/stats";
 import { randomSeed } from "@/lib/random";
-import { createWorld, defaultSimulationParams, stepWorld } from "@/lib/world";
+import {
+  createWorld,
+  currentEra,
+  defaultDisabledGenes,
+  defaultSimulationParams,
+  getBehaviorMode,
+  stepWorld,
+} from "@/lib/world";
+import type { DisabledGeneFlags, WorldEvent } from "@/lib/types";
 import { speciesLabel } from "@/lib/species";
-import type { SimulationParams, World } from "@/lib/types";
+import { encodeGeneId, truncateGeneId } from "@/lib/geneId";
+import { isUnlocked } from "@/lib/unlock";
+import ShareXButton from "./ShareXButton";
+import PasswordPrompt from "./PasswordPrompt";
+import KinomenoLink from "./KinomenoLink";
+import { useLocale } from "./LocaleProvider";
+import type { Genes, Life, SimulationParams, World } from "@/lib/types";
 
 type Props = {
   width: number;
   height: number;
   initialLifeCount: number;
+  initialSeed: number;
+  initialGenes?: Genes;
+  onBackToTitle?: () => void;
 };
 
 type Speed = 0 | 1 | 10 | 100;
@@ -29,7 +52,11 @@ export default function SimulationView({
   width,
   height,
   initialLifeCount,
+  initialSeed,
+  initialGenes,
+  onBackToTitle,
 }: Props) {
+  const { t, locale } = useLocale();
   const cellSize = useMemo(() => {
     const maxPx = 720;
     const fit = Math.floor(maxPx / Math.max(width, height));
@@ -38,6 +65,8 @@ export default function SimulationView({
 
   const [seed, setSeed] = useState<number | null>(null);
   const worldRef = useRef<World | null>(null);
+  // レンダーで参照するための同期 state（worldRef と同じオブジェクトを保持）
+  const [world, setWorldState] = useState<World | null>(null);
 
   const [version, setVersion] = useState(0);
   const [stats, setStats] = useState<WorldStats>({
@@ -53,31 +82,94 @@ export default function SimulationView({
   const [speed, setSpeedState] = useState<Speed>(0);
   const speedRef = useRef<Speed>(0);
   const [currentTps, setCurrentTps] = useState(0);
-  const [params, setParams] = useState<SimulationParams>(() => defaultSimulationParams());
+  const [params, setParams] = useState<SimulationParams>(() =>
+    defaultSimulationParams()
+  );
+  const [showSettings, setShowSettings] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [showLog, setShowLog] = useState(false);
+  const [showRules, setShowRules] = useState(false);
+  // 統計／ログ画面の「時間進行 ON/OFF」トグル（初期 OFF＝停止）
+  const [statsKeepRunning, setStatsKeepRunning] = useState(false);
+  const [logKeepRunning, setLogKeepRunning] = useState(false);
+  const [seedCopied, setSeedCopied] = useState(false);
+  const [seedInput, setSeedInput] = useState("");
+
+  const [selectedLifeId, setSelectedLifeId] = useState<number | null>(null);
+  const [trackedSpeciesId, setTrackedSpeciesId] = useState<string | null>(null);
+
+  // G1/G2: マップクリック時の特殊モード
+  type InteractionMode = "none" | "lightning" | "meteor" | "drought" | "bloom";
+  const [interactionMode, setInteractionMode] = useState<InteractionMode>("none");
+
+  // パネル折りたたみ状態。タイトル click で開閉。
+  // モバイル縦画面では既定で折りたたむ（観察モード）。
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    const isMobilePortrait =
+      window.innerWidth <= 520 && window.innerHeight > window.innerWidth;
+    return isMobilePortrait
+      ? new Set(["global", "species", "life"])
+      : new Set();
+  });
+  const toggleSection = useCallback((name: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }, []);
+  const isCollapsed = useCallback(
+    (name: string) => collapsedSections.has(name),
+    [collapsedSections]
+  );
+  const [graphSeries, setGraphSeries] = useState<GraphSeriesState>(
+    DEFAULT_GRAPH_SERIES
+  );
+  // ロック解除状態（x100 速度に必要）
+  const [unlocked, setUnlocked] = useState(false);
+  const [pwTarget, setPwTarget] = useState<{
+    label: string;
+    onUnlock: () => void;
+  } | null>(null);
+
+  useEffect(() => {
+    setUnlocked(isUnlocked());
+  }, []);
 
   const refreshDerived = useCallback((w: World) => {
     setStats(computeStats(w));
     setTopSpecies(computeTopSpecies(w));
   }, []);
 
-  const lastLoggedTurnRef = useRef(-1);
-
   useEffect(() => {
     if (worldRef.current !== null) return;
-    const s = randomSeed();
-    const w = createWorld({ width, height, initialLifeCount, seed: s, params });
+    const w = createWorld({
+      width,
+      height,
+      initialLifeCount,
+      seed: initialSeed,
+      params,
+      initialGenes,
+    });
     worldRef.current = w;
-    setSeed(s);
+    setWorldState(w);
+    setSeed(initialSeed);
     refreshDerived(w);
     setVersion((v) => v + 1);
-    logColorDistribution(w, "初期化");
-    lastLoggedTurnRef.current = 0;
-    // params is intentionally only read on mount; live updates are handled
-    // by the syncing effect below.
+    // 共有可能な URL に更新（履歴を汚さず replaceState）
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams();
+      sp.set("seed", String(initialSeed));
+      sp.set("w", String(width));
+      sp.set("n", String(initialLifeCount));
+      window.history.replaceState(null, "", `?${sp.toString()}`);
+    }
+    // params/initialGenes は初回のみ読み取り（リセット時のみ反映）。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [width, height, initialLifeCount, refreshDerived]);
+  }, [width, height, initialLifeCount, initialSeed, refreshDerived]);
 
-  // Push parameter changes into the live world without resetting it.
   useEffect(() => {
     const w = worldRef.current;
     if (w) w.params = params;
@@ -88,6 +180,32 @@ export default function SimulationView({
     setSpeedState(s);
   }, []);
 
+  // モーダル表示中は基本的にシミュレーション停止。
+  // 統計／ログ画面は「時間進行ON」が選ばれていれば停止しない。
+  const pausedRef = useRef(false);
+  useEffect(() => {
+    pausedRef.current =
+      (showLog && !logKeepRunning) ||
+      (showStats && !statsKeepRunning) ||
+      showSettings ||
+      showRules;
+  }, [
+    showLog,
+    logKeepRunning,
+    showStats,
+    statsKeepRunning,
+    showSettings,
+    showRules,
+  ]);
+
+  // モーダルを閉じるたびに時間進行トグルを OFF に戻す（次回開いた時の既定）
+  useEffect(() => {
+    if (!showStats) setStatsKeepRunning(false);
+  }, [showStats]);
+  useEffect(() => {
+    if (!showLog) setLogKeepRunning(false);
+  }, [showLog]);
+
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
@@ -96,15 +214,16 @@ export default function SimulationView({
     let tpsWindowStart = performance.now();
     let lastRenderTime = 0;
     const FRAME_BUDGET_MS = 25;
-    const RENDER_INTERVAL_MS = 1000 / 30;
+    // 描画フレームレート: 20 FPS（負荷削減のため。シミュレーション速度には影響しない）
+    const RENDER_INTERVAL_MS = 1000 / 20;
     const tick = (now: number) => {
       const dt = now - last;
       last = now;
       const s = speedRef.current;
       const world = worldRef.current;
       let didStep = false;
-      if (s > 0 && world) {
-        const targetTps = s === 1 ? 4 : s === 10 ? 30 : 150;
+      const targetTps = s === 1 ? 4 : s === 10 ? 30 : s === 100 ? 150 : 0;
+      if (s > 0 && world && !pausedRef.current) {
         acc += (dt / 1000) * targetTps;
         const requestedSteps = Math.floor(acc);
         acc -= requestedSteps;
@@ -122,17 +241,28 @@ export default function SimulationView({
           }
           stepsSinceTpsUpdate += actualSteps;
           didStep = actualSteps > 0;
-          if (world.turn - lastLoggedTurnRef.current >= 500) {
-            logColorDistribution(world, `ターン ${world.turn}`);
-            lastLoggedTurnRef.current = world.turn;
+          if (didStep) {
+            lastStepAtRef.current = now;
+            stepDurationMsRef.current = Math.max(20, 1000 / targetTps);
           }
         }
       } else {
         acc = 0;
       }
-      if (didStep && world && now - lastRenderTime >= RENDER_INTERVAL_MS) {
+      // 描画ループ：速度 > 0 のときは毎フレーム描画して補間を動かす。
+      // ×1（250ms/ターン）で 1 ターンあたり 5 描画フレーム入る計算。
+      const shouldRender = s > 0 && !pausedRef.current;
+      if (
+        (didStep || shouldRender) &&
+        world &&
+        now - lastRenderTime >= RENDER_INTERVAL_MS
+      ) {
+        // 補間フェーズ：直近ステップからの経過時間 / ステップ間隔
+        const sinceStep = now - lastStepAtRef.current;
+        const phase = Math.min(1, sinceStep / stepDurationMsRef.current);
+        setAnimPhase(phase);
         setVersion((v) => v + 1);
-        refreshDerived(world);
+        if (didStep) refreshDerived(world);
         lastRenderTime = now;
       }
       const elapsed = now - tpsWindowStart;
@@ -158,14 +288,146 @@ export default function SimulationView({
         params,
       });
       worldRef.current = w;
+      setWorldState(w);
       setSeed(newSeed);
       setVersion((v) => v + 1);
+      setSelectedLifeId(null);
+      setTrackedSpeciesId(null);
       refreshDerived(w);
-      logColorDistribution(w, "リセット");
-      lastLoggedTurnRef.current = 0;
     },
     [width, height, initialLifeCount, refreshDerived, params]
   );
+
+  // A5: 統計データを CSV としてダウンロード
+  const exportCsv = useCallback(() => {
+    const w = worldRef.current;
+    if (!w) return;
+    const headers = [
+      "turn",
+      "lifeCount",
+      "speciesCount",
+      "averageIntelligence",
+      "averageSpeed",
+      "averageStrength",
+      "averageLifespan",
+      "averageReproductionRate",
+      "averageSize",
+      "avgR",
+      "avgG",
+      "avgB",
+    ];
+    const lines = [headers.join(",")];
+    for (const s of w.history) {
+      lines.push(
+        [
+          s.turn,
+          s.lifeCount,
+          s.speciesCount,
+          s.averageIntelligence.toFixed(3),
+          s.averageSpeed.toFixed(3),
+          s.averageStrength.toFixed(3),
+          s.averageLifespan.toFixed(3),
+          s.averageReproductionRate.toFixed(4),
+          s.averageSize.toFixed(3),
+          s.avgR.toFixed(1),
+          s.avgG.toFixed(1),
+          s.avgB.toFixed(1),
+        ].join(",")
+      );
+    }
+    const blob = new Blob([lines.join("\n")], {
+      type: "text/csv;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const stamp =
+      seed !== null ? `lifegrid_seed${seed}_stats.csv` : "lifegrid_stats.csv";
+    link.href = url;
+    link.download = stamp;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [seed]);
+
+  // 現在表示中のマップ canvas を PNG として保存（ブランディング付き）
+  const exportPng = useCallback(() => {
+    const canvas = document.querySelector(
+      ".canvas-wrap canvas"
+    ) as HTMLCanvasElement | null;
+    if (!canvas) return;
+    try {
+      // 拡張キャンバスを作成（上ヘッダ＋下フッタ付き）
+      const dpr = window.devicePixelRatio || 1;
+      const mapW = canvas.width / dpr;
+      const mapH = canvas.height / dpr;
+      const padX = 16;
+      const headerH = 28;
+      const footerH = 40;
+      const totalW = Math.max(mapW + padX * 2, 360);
+      const totalH = mapH + headerH + footerH;
+
+      const out = document.createElement("canvas");
+      out.width = totalW * dpr;
+      out.height = totalH * dpr;
+      const octx = out.getContext("2d");
+      if (!octx) return;
+      octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // 背景
+      octx.fillStyle = "#fafafa";
+      octx.fillRect(0, 0, totalW, totalH);
+
+      // ヘッダ：タイトル
+      octx.fillStyle = "#1a1a1a";
+      octx.font = "600 13px sans-serif";
+      octx.textBaseline = "middle";
+      octx.textAlign = "left";
+      octx.fillText("LIFE GRID", padX, headerH / 2);
+      octx.font = "10px sans-serif";
+      octx.fillStyle = "#666";
+      octx.textAlign = "right";
+      octx.fillText("生命進化シミュレーター", totalW - padX, headerH / 2);
+
+      // マップ画像
+      octx.drawImage(canvas, padX, headerH, mapW, mapH);
+      // マップの周囲枠
+      octx.strokeStyle = "#cccccc";
+      octx.lineWidth = 1;
+      octx.strokeRect(padX - 0.5, headerH - 0.5, mapW + 1, mapH + 1);
+
+      // フッタ：シード・ターン・サイズ・著者
+      octx.fillStyle = "#444";
+      octx.font = "10px sans-serif";
+      octx.textBaseline = "top";
+      octx.textAlign = "left";
+      const stampY = headerH + mapH + 8;
+      octx.fillText(
+        `Seed ${seed ?? "-"}  /  Turn ${stats.turn.toLocaleString()}  /  ${width}×${height}`,
+        padX,
+        stampY
+      );
+      octx.textAlign = "right";
+      octx.fillStyle = "#888";
+      octx.fillText("by キノメノ", totalW - padX, stampY);
+      octx.fillStyle = "#aaa";
+      octx.fillText("https://note.com/kinomeno", totalW - padX, stampY + 14);
+
+      const url = out.toDataURL("image/png");
+      const link = document.createElement("a");
+      const stamp =
+        seed !== null
+          ? `lifegrid_seed${seed}_t${stats.turn}.png`
+          : "lifegrid.png";
+      link.href = url;
+      link.download = stamp;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch {
+      // origin-tainted canvas で失敗する可能性。ローカル描画では通常成功する。
+    }
+  }, [seed, stats.turn, width, height]);
 
   const stepOnce = useCallback(() => {
     setSpeed(0);
@@ -177,166 +439,789 @@ export default function SimulationView({
     }
   }, [setSpeed, refreshDerived]);
 
-  const world = worldRef.current;
+  const handleCellClick = useCallback(
+    (x: number, y: number) => {
+      const world = worldRef.current;
+      if (!world) return;
+
+      // G1 投入モード：エネルギー局所注入（半径 3 セル）
+      if (interactionMode === "lightning") {
+        const radius = 3;
+        for (let dy = -radius; dy <= radius; dy++) {
+          for (let dx = -radius; dx <= radius; dx++) {
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > radius) continue;
+            const nx = (x + dx + world.width) % world.width;
+            const ny = (y + dy + world.height) % world.height;
+            const idx = ny * world.width + nx;
+            const falloff = 1 - dist / radius;
+            world.energy[idx] = Math.min(
+              100,
+              world.energy[idx] + 60 * falloff
+            );
+          }
+        }
+        setVersion((v) => v + 1);
+        return;
+      }
+
+      // G2 天変地異召喚
+      if (
+        interactionMode === "meteor" ||
+        interactionMode === "drought" ||
+        interactionMode === "bloom"
+      ) {
+        const type = interactionMode;
+        const radius = Math.max(
+          3,
+          Math.floor(Math.min(world.width, world.height) * 0.18)
+        );
+        const duration = type === "meteor" ? 8 : type === "drought" ? 80 : 60;
+        world.activeCataclysm = {
+          type,
+          centerX: x,
+          centerY: y,
+          radius,
+          startTurn: world.turn,
+          durationTurns: duration,
+        };
+        // 次回の自動発生を遅らせる
+        world.nextCataclysmTurn = world.turn + 1500;
+        setVersion((v) => v + 1);
+        return;
+      }
+
+      // 通常モード：個体選択
+      const idx = y * world.width + x;
+      const id = world.occupancy[idx];
+      if (id === -1) {
+        setSelectedLifeId(null);
+        return;
+      }
+      setSelectedLifeId(id);
+    },
+    [interactionMode]
+  );
+
+  // V2: マウスホバーで個体ポップアップを更新
+  const handleCellHover = useCallback(
+    (x: number, y: number | null, px: number, py: number) => {
+      if (y === null) {
+        setHoverInfo(null);
+        return;
+      }
+      const world = worldRef.current;
+      if (!world) return;
+      const idx = y * world.width + x;
+      const id = world.occupancy[idx];
+      if (id === -1) {
+        setHoverInfo(null);
+        return;
+      }
+      const life = world.livesById.get(id);
+      if (!life || !life.alive) {
+        setHoverInfo(null);
+        return;
+      }
+      setHoverInfo({ life, px, py });
+    },
+    []
+  );
+
+  const handleSpeciesClick = useCallback((id: string) => {
+    setTrackedSpeciesId((prev) => (prev === id ? null : id));
+  }, []);
+
+  // `world` は state（同じオブジェクトのまま中身が変わる）。
+  // 表示の更新は version state の変化でトリガーされる。
+  const era = world ? currentEra(world) : null;
+  const selectedLife: Life | null = world
+    ? world.lives.find((l) => l.id === selectedLifeId && l.alive) || null
+    : null;
+
+  // ニュース：直近の最新イベント 1 件をフェードインで表示。
+  // 新しいイベントが届くたびに id が変わって CSS アニメが再起動する。
+  const lastEventCountRef = useRef(0);
+  const [latestNews, setLatestNews] = useState<{
+    id: string;
+    event: WorldEvent;
+  } | null>(null);
+  useEffect(() => {
+    if (!world) return;
+    const evs = world.events;
+    if (evs.length === lastEventCountRef.current) return;
+    const startIdx = Math.max(
+      0,
+      Math.min(lastEventCountRef.current, evs.length)
+    );
+    lastEventCountRef.current = evs.length;
+    if (evs.length === 0) return;
+    // 最新のイベントを表示
+    const ev = evs[evs.length - 1];
+    setLatestNews({
+      id: `${ev.turn}-${startIdx}-${ev.type}`,
+      event: ev,
+    });
+    // 全絶滅イベント検出時は自動的にシミュレーションを停止
+    if (ev.type === "totalExtinction" && speedRef.current !== 0) {
+      setSpeed(0);
+    }
+  }, [version, world, setSpeed]);
+
+  // ズーム倍率（A 案：CSS transform でスケール。0.5〜3.0 倍）
+  const [zoom, setZoom] = useState(1.0);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * ズーム時の中心点を計算する。
+   * 生命選択中なら生命位置（補間済）、未選択ならマップ中央。
+   * 戻り値はワールド座標（セル単位、小数許容）。
+   */
+  const getZoomFocus = useCallback(
+    (life: Life | null): { x: number; y: number } => {
+      if (life) {
+        return { x: life.x + 0.5, y: life.y + 0.5 };
+      }
+      return { x: width / 2, y: height / 2 };
+    },
+    [width, height]
+  );
+
+  /** ズーム後に focus 座標を viewport の中心に来るよう scroll を調整 */
+  const scrollToFocus = useCallback(
+    (focusX: number, focusY: number, newZoom: number) => {
+      const v = viewportRef.current;
+      if (!v) return;
+      const pxX = focusX * cellSize * newZoom;
+      const pxY = focusY * cellSize * newZoom;
+      v.scrollLeft = pxX - v.clientWidth / 2;
+      v.scrollTop = pxY - v.clientHeight / 2;
+    },
+    [cellSize]
+  );
+
+  // V2: ホバー中の個体情報をポップアップで表示
+  const [hoverInfo, setHoverInfo] = useState<{
+    life: Life;
+    px: number;
+    py: number;
+  } | null>(null);
+
+  // 左右カラムの最大高さ：sim-center の自然サイズに合わせる。
+  // これにより系統数の増減で sim-root 高さが変動しない（がたつき防止）。
+  const columnMaxHeight = useMemo(() => {
+    const canvasH = cellSize * height; // マップ高さ
+    const newsBlock = params.newsEnabled ? 26 + 8 : 0; // ニュース帯＋ gap
+    const padding = 12 * 2; // sim-center 上下 padding
+    const border = 2; // viewport 枠
+    return canvasH + newsBlock + padding + border;
+  }, [cellSize, height, params.newsEnabled]);
+  const ZOOM_MIN = 0.5;
+  const ZOOM_MAX = 3.0;
+  const ZOOM_STEP = 0.2;
+  // ズーム時はマップ中央（または選択生命中心）が viewport の中心に来るよう調整
+  const zoomIn = useCallback(() => {
+    setZoom((z) => {
+      const newZoom = Math.min(ZOOM_MAX, Math.round((z + ZOOM_STEP) * 100) / 100);
+      if (newZoom !== z) {
+        const w = worldRef.current;
+        const sel =
+          w && selectedLifeId !== null
+            ? w.lives.find((l) => l.id === selectedLifeId && l.alive) ?? null
+            : null;
+        const focus = getZoomFocus(sel);
+        // 次フレームで scroll 調整（DOM 更新後）
+        requestAnimationFrame(() =>
+          scrollToFocus(focus.x, focus.y, newZoom)
+        );
+      }
+      return newZoom;
+    });
+  }, [getZoomFocus, scrollToFocus, selectedLifeId]);
+  const zoomOut = useCallback(() => {
+    setZoom((z) => {
+      const newZoom = Math.max(ZOOM_MIN, Math.round((z - ZOOM_STEP) * 100) / 100);
+      if (newZoom !== z) {
+        const w = worldRef.current;
+        const sel =
+          w && selectedLifeId !== null
+            ? w.lives.find((l) => l.id === selectedLifeId && l.alive) ?? null
+            : null;
+        const focus = getZoomFocus(sel);
+        requestAnimationFrame(() =>
+          scrollToFocus(focus.x, focus.y, newZoom)
+        );
+      }
+      return newZoom;
+    });
+  }, [getZoomFocus, scrollToFocus, selectedLifeId]);
+
+  // スペースバーで再生／一時停止
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "Space") return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      // モーダル内のフォーカス時もスキップ
+      if ((e.target as HTMLElement | null)?.isContentEditable) return;
+      e.preventDefault();
+      const cur = speedRef.current;
+      setSpeed(cur === 0 ? 1 : 0);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [setSpeed]);
+
+  // 描画スムージング用：最後にステップが完了した時刻と、目標ターン間隔。
+  // 描画毎に animPhase = (now - lastStepAt) / stepDuration を計算してキャンバスへ渡す。
+  const lastStepAtRef = useRef(performance.now());
+  const stepDurationMsRef = useRef(250); // ×1 既定
+  const [animPhase, setAnimPhase] = useState(1);
+
+  // ズーム > 1 ＋ 生命選択中：選択生命を viewport の中心に追従させる
+  useEffect(() => {
+    if (zoom <= 1.001) return;
+    if (selectedLifeId === null) return;
+    const w = worldRef.current;
+    if (!w) return;
+    const sel = w.lives.find((l) => l.id === selectedLifeId && l.alive);
+    if (!sel) return;
+    const v = viewportRef.current;
+    if (!v) return;
+    // 補間位置（前ターン位置→現在位置）を使ってスムーズに追従
+    const dx = sel.x - sel.prevX;
+    const dy = sel.y - sel.prevY;
+    // トーラス境界跨ぎはスナップ（現在位置を直接使用）
+    const ix =
+      Math.abs(dx) > w.width / 2 ? sel.x : sel.prevX + dx * animPhase;
+    const iy =
+      Math.abs(dy) > w.height / 2 ? sel.y : sel.prevY + dy * animPhase;
+    const pxX = (ix + 0.5) * cellSize * zoom;
+    const pxY = (iy + 0.5) * cellSize * zoom;
+    v.scrollLeft = pxX - v.clientWidth / 2;
+    v.scrollTop = pxY - v.clientHeight / 2;
+  }, [zoom, selectedLifeId, animPhase, cellSize]);
 
   const targetTps = speed === 0 ? 0 : speed === 1 ? 4 : speed === 10 ? 30 : 150;
-  const isThrottled = speed > 0 && targetTps > 0 && currentTps < targetTps * 0.9;
+  const isThrottled =
+    speed > 0 && targetTps > 0 && currentTps < targetTps * 0.9;
   const effectiveX = currentTps / 4;
 
   return (
-    <div className="sim-root">
+    <>
+    <div
+      className="sim-root"
+      style={{
+        // 中央列幅をマップサイズ＋枠ぶん（padding+border）に固定。
+        // これでニュースの文字長に引きずられない。
+        gridTemplateColumns: `240px ${cellSize * width + 26}px 240px`,
+      }}
+    >
       <div className="top-status">
         <div className="status-item">
-          <span className="status-label">シード</span>
-          <span className="status-value">{seed ?? "—"}</span>
+          <span className="status-label">{t("status.seed")}</span>
+          <span className="status-value">{seed ?? t("common.dash")}</span>
         </div>
         <div className="status-item">
-          <span className="status-label">マップ</span>
-          <span className="status-value">{width} × {height}</span>
+          <span className="status-label">{t("status.map")}</span>
+          <span className="status-value">
+            {width} × {height}
+          </span>
         </div>
         <div className="status-item">
-          <span className="status-label">turn/s</span>
+          <span className="status-label">{t("status.tps")}</span>
           <span className="status-value">{currentTps.toFixed(1)}</span>
         </div>
         {speed > 0 && (
           <div className={`status-item ${isThrottled ? "status-warn" : ""}`}>
-            <span className="status-label">実倍率</span>
+            <span className="status-label">{t("status.effective_x")}</span>
             <span className="status-value">
               {isThrottled && "⚠ "}x{effectiveX.toFixed(1)}
             </span>
           </div>
         )}
       </div>
-      <aside className="sim-cell sim-left">
+      <aside
+        className="sim-cell sim-left"
+        style={{ maxHeight: `${columnMaxHeight}px` }}
+      >
         <section className="panel">
-          <h2 className="panel-title">全体情報</h2>
+          <button
+            type="button"
+            className="panel-title panel-title-btn"
+            onClick={() => toggleSection("global")}
+            aria-expanded={!isCollapsed("global")}
+          >
+            <span className="panel-chevron">
+              {isCollapsed("global") ? "▶" : "▼"}
+            </span>
+            <span>{t("panel.global_info")}</span>
+          </button>
+          {!isCollapsed("global") && (
           <dl className="info-list">
-            <InfoRow label="ターン" value={stats.turn.toLocaleString()} />
-            <InfoRow label="時代" value="—" />
-            <InfoRow label="総生物数" value={stats.lifeCount.toLocaleString()} />
-            <InfoRow label="系統数" value={String(stats.speciesCount)} />
+            <InfoRow label={t("info.turn")} value={stats.turn.toLocaleString()} />
             <InfoRow
-              label="平均エネルギー"
+              label={t("info.era")}
+              value={
+                era
+                  ? `${era.name} (${Math.floor(era.progress * 100)}%)`
+                  : t("common.dash")
+              }
+            />
+            <InfoRow
+              label={t("info.environment")}
+              value={
+                era
+                  ? t(`env.${era.environment.type}`)
+                  : t("common.dash")
+              }
+            />
+            <InfoRow
+              label={t("info.life_count_total")}
+              value={stats.lifeCount.toLocaleString()}
+            />
+            <InfoRow
+              label={t("info.species_count")}
+              value={String(stats.speciesCount)}
+            />
+            <InfoRow
+              label={t("info.avg_energy")}
               value={stats.averageEnergy.toFixed(1)}
             />
             <InfoRow
-              label="平均知能"
+              label={t("info.avg_intelligence")}
               value={stats.averageIntelligence.toFixed(2)}
             />
             <InfoRow
-              label="最大知能"
+              label={t("info.max_intelligence")}
               value={stats.maxIntelligence.toFixed(2)}
             />
             <InfoRow
-              label="平均移動速度"
+              label={t("info.avg_speed")}
               value={stats.averageSpeed.toFixed(2)}
             />
           </dl>
+          )}
         </section>
 
         <section className="panel">
-          <h2 className="panel-title">系統（上位）</h2>
-          <ul className="species-list">
-            {topSpecies.length === 0 && (
-              <li className="species-empty">—</li>
-            )}
-            {topSpecies.map((s) => (
-              <li key={s.id} className="species-item">
-                <span
-                  className="species-dot"
-                  style={{
-                    backgroundColor: `rgb(${s.r}, ${s.g}, ${s.b})`,
-                  }}
-                />
-                <span className="species-label">{s.label}</span>
-                <span className="species-count">{s.count}</span>
-              </li>
-            ))}
-          </ul>
+          <button
+            type="button"
+            className="panel-title panel-title-btn"
+            onClick={() => toggleSection("species")}
+            aria-expanded={!isCollapsed("species")}
+          >
+            <span className="panel-chevron">
+              {isCollapsed("species") ? "▶" : "▼"}
+            </span>
+            <span>{t("panel.species_top")}</span>
+          </button>
+          {!isCollapsed("species") && (
+            <>
+              <ul className="species-list">
+                {topSpecies.length === 0 && (
+                  <li className="species-empty">{t("common.dash")}</li>
+                )}
+                {topSpecies.map((s) => {
+                  const isTracked = trackedSpeciesId === s.id;
+                  return (
+                    <li
+                      key={s.id}
+                      className={`species-item species-clickable ${
+                        isTracked ? "species-tracked" : ""
+                      }`}
+                      onClick={() => handleSpeciesClick(s.id)}
+                      title={
+                        isTracked
+                          ? t("info.untrack_species")
+                          : t("info.tracking_hint")
+                      }
+                    >
+                      <span
+                        className="species-dot"
+                        style={{
+                          backgroundColor: `rgb(${s.r}, ${s.g}, ${s.b})`,
+                        }}
+                      />
+                      <span className="species-label">{s.label}</span>
+                      <span className="species-count">{s.count}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+              {trackedSpeciesId && (
+                <button
+                  className="btn param-reset"
+                  onClick={() => setTrackedSpeciesId(null)}
+                >
+                  {t("info.untrack_species")}
+                </button>
+              )}
+            </>
+          )}
         </section>
       </aside>
 
       <main className="sim-cell sim-center">
-        <div className="canvas-wrap">
-          {world && (
-            <SimulationCanvas
-              world={world}
-              cellSize={cellSize}
-              version={version}
-            />
-          )}
+        {/* 中央カラム最上部の単一ニュース帯（フェードイン演出）。
+            news 無効時は DOM ごと消して中央上部のグレー帯も非表示 */}
+        {params.newsEnabled && (
+        <div className="news-strip" aria-live="polite">
+          {latestNews &&
+            (() => {
+              const ev = latestNews.event;
+              const clickable =
+                ev.speciesId &&
+                (ev.type === "birth" ||
+                  ev.type === "extinction" ||
+                  ev.type === "topSpecies" ||
+                  ev.type === "longevity" ||
+                  ev.type === "survival" ||
+                  ev.type === "predatorRise" ||
+                  ev.type === "intelligentRise");
+              return (
+                <div
+                  key={latestNews.id}
+                  className={`news-item news-${ev.type} news-fadein ${
+                    clickable ? "news-clickable" : ""
+                  }`}
+                  onClick={() => {
+                    if (clickable && ev.speciesId) {
+                      handleSpeciesClick(ev.speciesId);
+                    }
+                  }}
+                  title={ev.message[locale]}
+                >
+                  {ev.rgb ? (
+                    <span
+                      className="news-dot"
+                      style={{
+                        backgroundColor: `rgb(${ev.rgb.r}, ${ev.rgb.g}, ${ev.rgb.b})`,
+                      }}
+                    />
+                  ) : (
+                    <span className="news-dot news-dot-empty" />
+                  )}
+                  <span className="news-msg">{ev.message[locale]}</span>
+                </div>
+              );
+            })()}
+        </div>
+        )}
+        <div
+          ref={viewportRef}
+          className="canvas-viewport"
+          style={{
+            width: `${cellSize * width}px`,
+            height: `${cellSize * height}px`,
+            // ズーム時のみスクロールバー出現。等倍はバー無し。
+            overflow: zoom > 1 ? "auto" : "hidden",
+          }}
+          onWheel={(e) => {
+            // Q1: マウスホイールでズーム（Ctrl/Shift 不要、viewport 上で直接）
+            e.preventDefault();
+            const delta = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
+            setZoom((z) => {
+              const newZoom = Math.max(
+                ZOOM_MIN,
+                Math.min(ZOOM_MAX, Math.round((z + delta) * 100) / 100)
+              );
+              if (newZoom !== z) {
+                const w = worldRef.current;
+                const sel =
+                  w && selectedLifeId !== null
+                    ? w.lives.find((l) => l.id === selectedLifeId && l.alive) ??
+                      null
+                    : null;
+                const focus = getZoomFocus(sel);
+                requestAnimationFrame(() =>
+                  scrollToFocus(focus.x, focus.y, newZoom)
+                );
+              }
+              return newZoom;
+            });
+          }}
+          onMouseDown={(e) => {
+            // Q2: 右クリックドラッグでパン（左クリックは個体選択用のため右を採用）
+            if (e.button !== 2) return;
+            const v = viewportRef.current;
+            if (!v) return;
+            e.preventDefault();
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const startScrollLeft = v.scrollLeft;
+            const startScrollTop = v.scrollTop;
+            const onMove = (ev: MouseEvent) => {
+              v.scrollLeft = startScrollLeft - (ev.clientX - startX);
+              v.scrollTop = startScrollTop - (ev.clientY - startY);
+            };
+            const onUp = () => {
+              window.removeEventListener("mousemove", onMove);
+              window.removeEventListener("mouseup", onUp);
+            };
+            window.addEventListener("mousemove", onMove);
+            window.addEventListener("mouseup", onUp);
+          }}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <div
+            className="canvas-wrap"
+            style={{
+              width: `${cellSize * width * zoom}px`,
+              height: `${cellSize * height * zoom}px`,
+            }}
+          >
+            {world && (
+              <div
+                style={{
+                  transform: `scale(${zoom})`,
+                  transformOrigin: "top left",
+                  width: `${cellSize * width}px`,
+                  height: `${cellSize * height}px`,
+                }}
+              >
+                <SimulationCanvas
+                  world={world}
+                  cellSize={cellSize}
+                  version={version}
+                  animPhase={animPhase}
+                  selectedLifeId={selectedLifeId}
+                  trackedSpeciesId={trackedSpeciesId}
+                  onCellClick={handleCellClick}
+                  onCellHover={handleCellHover}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+        {/* モバイル縦画面：マップ直下に主要操作（再生／ステップ／速度） */}
+        <div className="mobile-quick-controls">
+          <button
+            className={`btn ${speed === 0 ? "btn-primary" : ""}`}
+            onClick={() => setSpeed(speed === 0 ? 1 : 0)}
+          >
+            {speed === 0 ? t("ctrl.play") : t("ctrl.pause")}
+          </button>
+          <button className="btn" onClick={stepOnce}>
+            {t("ctrl.step")}
+          </button>
+          {([1, 100] as const).map((s) => {
+            const locked = s === 100 && !unlocked;
+            return (
+              <button
+                key={s}
+                data-speed={s}
+                className={`btn ${speed === s ? "btn-active" : ""} ${
+                  locked ? "btn-locked" : ""
+                }`}
+                onClick={() => {
+                  if (locked) {
+                    setPwTarget({
+                      label: t("password.feature.speed", { speed: s }),
+                      onUnlock: () => {
+                        setUnlocked(true);
+                        setSpeed(s);
+                        setPwTarget(null);
+                      },
+                    });
+                    return;
+                  }
+                  setSpeed(s);
+                }}
+                title={locked ? t("common.locked_hint") : undefined}
+              >
+                {locked && <span className="btn-lock-glyph">🔒</span>}
+                x{s}
+              </button>
+            );
+          })}
+        </div>
+        {/* マップ操作バー：モードボタン群 + ズーム */}
+        <div className="map-bar">
+          {/* G1: エネルギー投入 */}
+          <button
+            className={`mini-btn ${interactionMode === "lightning" ? "mini-btn-active" : ""}`}
+            onClick={() =>
+              setInteractionMode((m) =>
+                m === "lightning" ? "none" : "lightning"
+              )
+            }
+            title={t("ctrl.lightning")}
+            aria-label={t("ctrl.lightning")}
+          >
+            ⚡
+          </button>
+          {/* G2: 天変地異召喚（3 種選択） */}
+          <button
+            className={`mini-btn ${interactionMode === "meteor" ? "mini-btn-active" : ""}`}
+            onClick={() =>
+              setInteractionMode((m) => (m === "meteor" ? "none" : "meteor"))
+            }
+            title={t("ctrl.cataclysm_meteor")}
+            aria-label={t("ctrl.cataclysm_meteor")}
+          >
+            ☄
+          </button>
+          <button
+            className={`mini-btn ${interactionMode === "drought" ? "mini-btn-active" : ""}`}
+            onClick={() =>
+              setInteractionMode((m) => (m === "drought" ? "none" : "drought"))
+            }
+            title={t("ctrl.cataclysm_drought")}
+            aria-label={t("ctrl.cataclysm_drought")}
+          >
+            🌵
+          </button>
+          <button
+            className={`mini-btn ${interactionMode === "bloom" ? "mini-btn-active" : ""}`}
+            onClick={() =>
+              setInteractionMode((m) => (m === "bloom" ? "none" : "bloom"))
+            }
+            title={t("ctrl.cataclysm_bloom")}
+            aria-label={t("ctrl.cataclysm_bloom")}
+          >
+            🌸
+          </button>
+          <div className="map-bar-spacer" />
+          {/* ズーム */}
+          <div className="zoom-mini">
+            <button
+              className="zoom-mini-btn"
+              onClick={zoomOut}
+              disabled={zoom <= ZOOM_MIN + 0.001}
+              title={`${t("ctrl.zoom")} -`}
+              aria-label={`${t("ctrl.zoom")} -`}
+            >
+              −
+            </button>
+            <span className="zoom-mini-value">
+              {Math.round(zoom * 100)}%
+            </span>
+            <button
+              className="zoom-mini-btn"
+              onClick={zoomIn}
+              disabled={zoom >= ZOOM_MAX - 0.001}
+              title={`${t("ctrl.zoom")} +`}
+              aria-label={`${t("ctrl.zoom")} +`}
+            >
+              ＋
+            </button>
+          </div>
         </div>
       </main>
 
-      <aside className="sim-cell sim-right">
+      <aside
+        className="sim-cell sim-right"
+        style={{ maxHeight: `${columnMaxHeight}px` }}
+      >
         <section className="panel">
-          <h2 className="panel-title">選択した生命</h2>
-          <p className="empty-hint">未選択</p>
-          <p className="empty-sub">
-            マップ上の生命をクリックすると詳細を表示します（次バージョンで実装予定）
-          </p>
-        </section>
-
-        <section className="panel">
-          <h2 className="panel-title">環境パラメータ</h2>
-          <div className="param-list">
-            <ParamSlider
-              label="波の振幅"
-              value={params.energyWaveAmplitude}
-              min={0}
-              max={60}
-              step={1}
-              onChange={(v) =>
-                setParams((p) => ({ ...p, energyWaveAmplitude: v }))
-              }
-            />
-            <ParamSlider
-              label="再生速度"
-              value={params.energyRegenPerTurn}
-              min={0}
-              max={0.5}
-              step={0.01}
-              onChange={(v) =>
-                setParams((p) => ({ ...p, energyRegenPerTurn: v }))
-              }
-            />
-            <ParamSlider
-              label="拡散率"
-              value={params.energyDiffusion}
-              min={0}
-              max={0.2}
-              step={0.005}
-              onChange={(v) =>
-                setParams((p) => ({ ...p, energyDiffusion: v }))
-              }
-            />
-            <ParamSlider
-              label="吸収率"
-              value={params.absorbRate}
-              min={0}
-              max={0.3}
-              step={0.005}
-              onChange={(v) =>
-                setParams((p) => ({ ...p, absorbRate: v }))
-              }
-            />
-            <ParamSlider
-              label="戦闘譲渡率"
-              value={params.combatEnergyLossRatio}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(v) =>
-                setParams((p) => ({ ...p, combatEnergyLossRatio: v }))
-              }
-            />
-            <button
-              className="btn param-reset"
-              onClick={() => setParams(defaultSimulationParams())}
-            >
-              既定値に戻す
-            </button>
-          </div>
+          <button
+            type="button"
+            className="panel-title panel-title-btn"
+            onClick={() => toggleSection("life")}
+            aria-expanded={!isCollapsed("life")}
+          >
+            <span className="panel-chevron">
+              {isCollapsed("life") ? "▶" : "▼"}
+            </span>
+            <span>{t("panel.selected_life")}</span>
+          </button>
+          {!isCollapsed("life") && (
+            selectedLife ? (
+              <>
+                {/* ヘッダ：色＋ID＋選択解除（ID 右に配置） */}
+                <SelectedLifeBlock
+                  life={selectedLife}
+                  onDeselect={() => setSelectedLifeId(null)}
+                  deselectLabel={t("info.deselect")}
+                />
+                {/* 遺伝子 ID（コピー可） */}
+                <GeneIdRow life={selectedLife} />
+                {/* G3 保護トグル */}
+                <label className="protect-toggle">
+                  <input
+                    type="checkbox"
+                    checked={!!selectedLife.protected}
+                    onChange={(e) => {
+                      selectedLife.protected = e.target.checked;
+                      setVersion((v) => v + 1);
+                    }}
+                  />
+                  <span>{t("info.protect")}</span>
+                </label>
+                {/* 状態（2 カラム） */}
+                {world && (
+                  <div className="info-grid-2 info-compact">
+                    <InfoRow
+                      label={t("info.position")}
+                      value={`(${selectedLife.x}, ${selectedLife.y})`}
+                    />
+                    <InfoRow
+                      label={t("info.energy_owned")}
+                      value={selectedLife.energy.toFixed(1)}
+                    />
+                    <InfoRow
+                      label={t("info.age")}
+                      value={`${selectedLife.age} / ${selectedLife.genes.lifespan.toFixed(0)}`}
+                    />
+                    <InfoRow
+                      label={t("info.behavior_mode")}
+                      value={t(`mode.${getBehaviorMode(world, selectedLife)}`)}
+                    />
+                  </div>
+                )}
+                {/* 遺伝子パラメータ（2 カラム） */}
+                <h3 className="panel-subtitle">{t("panel.gene_params")}</h3>
+                <div className="info-grid-2 info-compact">
+                  <InfoRow
+                    label={t("info.species")}
+                    value={speciesLabel(selectedLife.speciesId)}
+                  />
+                  <InfoRow
+                    label={t("info.rgb")}
+                    value={`(${selectedLife.genes.r},${selectedLife.genes.g},${selectedLife.genes.b})`}
+                  />
+                  <InfoRow
+                    label={t("info.vision")}
+                    value={selectedLife.genes.vision}
+                  />
+                  <InfoRow
+                    label={t("info.move_speed")}
+                    value={selectedLife.genes.speed}
+                  />
+                  <InfoRow
+                    label={t("info.size")}
+                    value={selectedLife.genes.size.toFixed(0)}
+                  />
+                  <InfoRow
+                    label={t("info.strength")}
+                    value={selectedLife.genes.strength.toFixed(0)}
+                  />
+                  <InfoRow
+                    label={t("info.intelligence")}
+                    value={selectedLife.genes.intelligence}
+                  />
+                  <InfoRow
+                    label={t("info.reproduction_rate")}
+                    value={selectedLife.genes.reproductionRate.toFixed(2)}
+                  />
+                  <InfoRow
+                    label={t("info.mutation_rate")}
+                    value={selectedLife.genes.mutationRate.toFixed(3)}
+                  />
+                  <InfoRow
+                    label={t("info.lifespan")}
+                    value={selectedLife.genes.lifespan.toFixed(0)}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="empty-hint">{t("info.untracked")}</p>
+                <p className="empty-sub">{t("info.untracked_hint")}</p>
+              </>
+            )
+          )}
         </section>
       </aside>
 
@@ -347,37 +1232,567 @@ export default function SimulationView({
               className={`btn ${speed === 0 ? "btn-primary" : ""}`}
               onClick={() => setSpeed(speed === 0 ? 1 : 0)}
             >
-              {speed === 0 ? "▶ 再生" : "⏸ 一時停止"}
+              {speed === 0 ? t("ctrl.play") : t("ctrl.pause")}
             </button>
             <button className="btn" onClick={stepOnce}>
-              ターン進む
+              {t("ctrl.step")}
             </button>
           </div>
           <div className="ctrl-group">
-            {([1, 10, 100] as const).map((s) => (
-              <button
-                key={s}
-                className={`btn ${speed === s ? "btn-active" : ""}`}
-                onClick={() => setSpeed(s)}
-              >
-                x{s}
-              </button>
-            ))}
+            {([1, 10, 100] as const).map((s) => {
+              const locked = s === 100 && !unlocked;
+              return (
+                <button
+                  key={s}
+                  data-speed={s}
+                  className={`btn ${speed === s ? "btn-active" : ""} ${
+                    locked ? "btn-locked" : ""
+                  }`}
+                  onClick={() => {
+                    if (locked) {
+                      setPwTarget({
+                        label: t("password.feature.speed", { speed: s }),
+                        onUnlock: () => {
+                          setUnlocked(true);
+                          setSpeed(s);
+                          setPwTarget(null);
+                        },
+                      });
+                      return;
+                    }
+                    setSpeed(s);
+                  }}
+                  title={locked ? t("common.locked_hint") : undefined}
+                >
+                  {locked && <span className="btn-lock-glyph">🔒</span>}
+                  x{s}
+                </button>
+              );
+            })}
           </div>
           <div className="ctrl-spacer" />
           <div className="ctrl-group">
             <button
+              className="btn btn-ghost"
+              onClick={() => setShowRules(true)}
+              title={t("start.button.rules")}
+            >
+              ?
+            </button>
+            <button className="btn" onClick={() => setShowLog(true)}>
+              {t("ctrl.action_log")}
+            </button>
+            <button className="btn" onClick={() => setShowStats(true)}>
+              {t("ctrl.stats_graph")}
+            </button>
+            <button
+              className="btn"
+              onClick={exportPng}
+              title={t("ctrl.export_png_hint")}
+            >
+              {t("ctrl.export_png")}
+            </button>
+            <button className="btn" onClick={() => setShowSettings(true)}>
+              {t("ctrl.settings")}
+            </button>
+            <button
               className="btn"
               onClick={() => seed !== null && reset(seed)}
             >
-              RESET
+              {t("ctrl.reset")}
             </button>
             <button className="btn" onClick={() => reset(randomSeed())}>
-              NEW SEED
+              {t("ctrl.new_seed")}
             </button>
           </div>
         </div>
       </footer>
+
+      {showSettings && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setShowSettings(false)}
+        >
+          <div
+            className="modal-panel modal-wide"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-head">
+              <h2 className="modal-title">{t("settings.title")}</h2>
+              <button
+                className="btn modal-close"
+                onClick={() => setShowSettings(false)}
+              >
+                {t("common.close")}
+              </button>
+            </div>
+
+            <section className="modal-section">
+              <h3 className="modal-section-title">
+                {t("settings.summary_title")}
+              </h3>
+              <p className="settings-summary">
+                {describeEnvironment(params, locale as "ja" | "en")}
+              </p>
+            </section>
+
+            <section className="modal-section">
+              <div className="settings-grid">
+                <div>
+                  <h3 className="settings-col-title">
+                    {t("settings.col.world_rules")}
+                  </h3>
+                  <div className="param-list">
+                    <ParamSlider
+                      label={t("settings.param.total_energy")}
+                      value={params.totalEnergy}
+                      min={0.3}
+                      max={2.0}
+                      step={0.05}
+                      onChange={(v) =>
+                        setParams((p) => ({ ...p, totalEnergy: v }))
+                      }
+                    />
+                    <ParamSlider
+                      label={t("settings.param.mutation_rate")}
+                      value={params.mutationRateMultiplier}
+                      min={0.0}
+                      max={3.0}
+                      step={0.05}
+                      onChange={(v) =>
+                        setParams((p) => ({
+                          ...p,
+                          mutationRateMultiplier: v,
+                        }))
+                      }
+                    />
+                    <ParamSlider
+                      label={t("settings.param.wave_speed")}
+                      value={params.waveSpeed}
+                      min={0.0}
+                      max={3.0}
+                      step={0.05}
+                      onChange={(v) =>
+                        setParams((p) => ({ ...p, waveSpeed: v }))
+                      }
+                    />
+                    <ParamSlider
+                      label={t("settings.param.combat_advantage")}
+                      value={params.combatAdvantage}
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      onChange={(v) =>
+                        setParams((p) => ({ ...p, combatAdvantage: v }))
+                      }
+                    />
+                    <button
+                      className="btn param-reset"
+                      onClick={() => setParams(defaultSimulationParams())}
+                    >
+                      {t("common.reset_default")}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="settings-col-title">
+                    {t("settings.col.gene_toggle")}
+                  </h3>
+                  <p className="empty-sub">{t("settings.gene_toggle_hint")}</p>
+                  <GeneToggleGrid
+                    disabled={params.disabledGenes}
+                    onChange={(next) =>
+                      setParams((p) => ({ ...p, disabledGenes: next }))
+                    }
+                  />
+                  <div className="gene-toggle-actions">
+                    <button
+                      className="btn"
+                      onClick={() =>
+                        setParams((p) => ({
+                          ...p,
+                          disabledGenes: defaultDisabledGenes(),
+                        }))
+                      }
+                    >
+                      {t("settings.gene_all_on")}
+                    </button>
+                    <button
+                      className="btn"
+                      onClick={() =>
+                        setParams((p) => ({
+                          ...p,
+                          disabledGenes: allDisabledGenes(),
+                        }))
+                      }
+                    >
+                      {t("settings.gene_all_off")}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="modal-section">
+              <h3 className="modal-section-title">
+                {t("settings.section.display")}
+              </h3>
+              <label className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={params.newsEnabled}
+                  onChange={(e) =>
+                    setParams((p) => ({ ...p, newsEnabled: e.target.checked }))
+                  }
+                />
+                <span>{t("settings.toggle.news")}</span>
+              </label>
+            </section>
+
+            <section className="modal-section">
+              <h3 className="modal-section-title">
+                {t("settings.section.export")}
+              </h3>
+              <button
+                className="btn"
+                onClick={exportCsv}
+                title={t("settings.export_csv_hint")}
+              >
+                {t("settings.export_csv")}
+              </button>
+            </section>
+
+            <section className="modal-section">
+              <h3 className="modal-section-title">
+                {t("settings.section.seed")}
+              </h3>
+              <div className="seed-row">
+                <span className="seed-current">
+                  {seed ?? t("common.dash")}
+                </span>
+                <button
+                  className="btn"
+                  onClick={() => {
+                    if (seed === null) return;
+                    if (
+                      typeof navigator !== "undefined" &&
+                      navigator.clipboard
+                    ) {
+                      navigator.clipboard.writeText(String(seed)).then(
+                        () => {
+                          setSeedCopied(true);
+                          setTimeout(() => setSeedCopied(false), 1200);
+                        },
+                        () => {}
+                      );
+                    }
+                  }}
+                >
+                  {seedCopied ? t("common.copied") : t("common.copy")}
+                </button>
+              </div>
+              <div className="seed-row">
+                <input
+                  type="text"
+                  className="seed-input"
+                  placeholder={t("settings.seed_input_placeholder")}
+                  value={seedInput}
+                  onChange={(e) => setSeedInput(e.target.value)}
+                />
+                <button
+                  className="btn"
+                  onClick={() => {
+                    const n = Number(seedInput.trim());
+                    if (!Number.isFinite(n)) return;
+                    reset((n >>> 0) || randomSeed());
+                    setSeedInput("");
+                    setShowSettings(false);
+                  }}
+                >
+                  {t("common.load")}
+                </button>
+              </div>
+              <p className="empty-sub">{t("settings.seed_hint")}</p>
+            </section>
+          </div>
+        </div>
+      )}
+
+      {showStats && world && (
+        <StatsGraphModal
+          history={world.history}
+          lives={world.lives}
+          enabled={graphSeries}
+          onChange={setGraphSeries}
+          onClose={() => setShowStats(false)}
+          timeRunning={statsKeepRunning}
+          onToggleTime={() => setStatsKeepRunning((v) => !v)}
+        />
+      )}
+
+      {showLog && world && (
+        <ActionLogModal
+          events={world.events}
+          onClose={() => setShowLog(false)}
+          onSpeciesClick={(id) => {
+            setTrackedSpeciesId(id);
+            setShowLog(false);
+          }}
+          timeRunning={logKeepRunning}
+          onToggleTime={() => setLogKeepRunning((v) => !v)}
+        />
+      )}
+
+      {showRules && <RulesScreen onClose={() => setShowRules(false)} />}
+
+      <ShareXButton
+        text={
+          selectedLife
+            ? `LIFE GRID で最強の生き物できた！🧬 ${speciesLabel(selectedLife.speciesId)}`
+            : `LIFE GRID で世界を観察中 🌍 (T${stats.turn.toLocaleString()})`
+        }
+        className="x-share-fixed"
+      />
+    </div>
+    <KinomenoLink />
+    {pwTarget && (
+      <PasswordPrompt
+        featureLabel={pwTarget.label}
+        onUnlock={pwTarget.onUnlock}
+        onCancel={() => setPwTarget(null)}
+      />
+    )}
+    {/* V2: ホバーポップアップ（カーソル付近に個体情報） */}
+    {hoverInfo && (
+      <div
+        className="hover-pop"
+        style={{
+          left: `${hoverInfo.px + 14}px`,
+          top: `${hoverInfo.py + 14}px`,
+        }}
+      >
+        <div className="hover-pop-row">
+          <span
+            className="species-dot"
+            style={{
+              backgroundColor: `rgb(${hoverInfo.life.genes.r}, ${hoverInfo.life.genes.g}, ${hoverInfo.life.genes.b})`,
+            }}
+          />
+          <strong>ID {hoverInfo.life.id}</strong>
+          <span className="hover-pop-species">
+            {speciesLabel(hoverInfo.life.speciesId)}
+          </span>
+        </div>
+        <div className="hover-pop-row hover-pop-stats">
+          E {hoverInfo.life.energy.toFixed(0)} · Age {hoverInfo.life.age} · Str{" "}
+          {Math.round(hoverInfo.life.genes.strength)} · Int{" "}
+          {hoverInfo.life.genes.intelligence}
+        </div>
+      </div>
+    )}
+    </>
+  );
+}
+
+function GeneIdRow({ life }: { life: Life }) {
+  const { t } = useLocale();
+  const [copied, setCopied] = useState(false);
+  const id = encodeGeneId(life.genes);
+  const display = truncateGeneId(id, 17);
+  return (
+    <div className="gene-id-row">
+      <code className="gene-id" title={id}>
+        {display}
+      </code>
+      <button
+        className="btn gene-copy"
+        onClick={() => {
+          if (typeof navigator !== "undefined" && navigator.clipboard) {
+            navigator.clipboard.writeText(id).then(
+              () => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1200);
+              },
+              () => {}
+            );
+          }
+        }}
+      >
+        {copied ? "✓" : t("common.copy")}
+      </button>
+    </div>
+  );
+}
+
+function SelectedLifeBlock({
+  life,
+  onDeselect,
+  deselectLabel,
+}: {
+  life: Life;
+  onDeselect: () => void;
+  deselectLabel: string;
+}) {
+  return (
+    <div className="selected-head">
+      <span
+        className="species-dot"
+        style={{
+          backgroundColor: `rgb(${life.genes.r}, ${life.genes.g}, ${life.genes.b})`,
+        }}
+      />
+      <div className="selected-text">
+        <div className="selected-id-row">
+          <span className="selected-id">ID {life.id}</span>
+          <button className="btn selected-deselect" onClick={onDeselect}>
+            {deselectLabel}
+          </button>
+        </div>
+        <div className="selected-pos">
+          {speciesLabel(life.speciesId)} · ({life.x}, {life.y})
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 全項目を「無効化」した DisabledGeneFlags を返す。 */
+function allDisabledGenes(): DisabledGeneFlags {
+  return {
+    rgb: true,
+    vision: true,
+    speed: true,
+    size: true,
+    strength: true,
+    intelligence: true,
+    reproductionRate: true,
+    mutationRate: true,
+    lifespan: true,
+  };
+}
+
+const GENE_TOGGLE_ITEMS: { key: keyof DisabledGeneFlags; tKey: string }[] = [
+  { key: "rgb", tKey: "gene.rgb" },
+  { key: "vision", tKey: "gene.vision" },
+  { key: "speed", tKey: "gene.speed" },
+  { key: "size", tKey: "gene.size" },
+  { key: "strength", tKey: "gene.strength" },
+  { key: "intelligence", tKey: "gene.intelligence" },
+  { key: "reproductionRate", tKey: "gene.reproduction_rate" },
+  { key: "mutationRate", tKey: "gene.mutation_rate" },
+  { key: "lifespan", tKey: "gene.lifespan" },
+];
+
+/**
+ * 現在の環境設定を自然な日本語／英語文で説明する。
+ * 多様な判定（楽園・修羅場・混沌・凍結・嵐・etc）で「バランス」の出現を抑える。
+ */
+function describeEnvironment(
+  params: SimulationParams,
+  locale: "ja" | "en"
+): string {
+  const E = params.totalEnergy;
+  const M = params.mutationRateMultiplier;
+  const W = params.waveSpeed;
+  const C = params.combatAdvantage;
+
+  // === タイプ判定（早期 return で一意に決まるよう優先度順） ===
+  type Verdict = { ja: string; en: string };
+  let v: Verdict;
+  if (E >= 1.4 && C <= 0.35 && M <= 1.3) {
+    v = {
+      ja: "エネルギーが満ち溢れる楽園。捕食圧は低く、温和な生物が長く繁栄する。",
+      en: "An overflowing paradise. Predation pressure is low; gentle species thrive long.",
+    };
+  } else if (E < 0.7 && C >= 0.65) {
+    v = {
+      ja: "資源が乏しく、強者が弱者を喰らう修羅の世界。",
+      en: "Scarce resources, a brutal world where the strong devour the weak.",
+    };
+  } else if (M >= 1.6) {
+    v = {
+      ja: "突然変異が異常に活発で、毎瞬のように新種が生まれる混沌の時代。",
+      en: "Mutation runs wild — new species emerge constantly in an age of chaos.",
+    };
+  } else if (W <= 0.2) {
+    v = {
+      ja: "エネルギーの波が凍りつき、地形に最適化した種が支配する静止世界。",
+      en: "Energy waves are frozen; species adapted to terrain dominate a static world.",
+    };
+  } else if (W >= 2.0) {
+    v = {
+      ja: "嵐のように波が激しく、生物は絶えず移動を強いられる。",
+      en: "Storm-like waves force constant migration.",
+    };
+  } else if (E >= 1.3 && C <= 0.45) {
+    v = {
+      ja: "豊かな実りに恵まれた牧歌的世界。草食的な種が広がりやすい。",
+      en: "A pastoral world rich in harvest; herbivore-like species spread easily.",
+    };
+  } else if (C >= 0.7) {
+    v = {
+      ja: "捕食の利益が大きく、肉食戦略が圧倒的に有利。",
+      en: "Predation pays well; carnivorous strategies dominate.",
+    };
+  } else if (E < 0.8 && M <= 0.6) {
+    v = {
+      ja: "資源は乏しく、進化も停滞気味。生き残るのは効率的な少数のみ。",
+      en: "Scarce resources, stagnant evolution. Only the efficient few survive.",
+    };
+  } else if (M <= 0.4) {
+    v = {
+      ja: "突然変異がほぼ起きず、祖先の遺伝子がそのまま継承される保守的な世界。",
+      en: "Mutation is nearly absent; ancestral genes are inherited unchanged in a conservative world.",
+    };
+  } else if (E >= 1.2 && M >= 1.2 && W >= 1.2) {
+    v = {
+      ja: "豊穣・激変・多様化が同時進行する、ドラマチックな進化の舞台。",
+      en: "Abundance, turbulence, and diversification at once — a dramatic stage for evolution.",
+    };
+  } else if (W >= 1.5 && C <= 0.4) {
+    v = {
+      ja: "波は激しいが、戦闘は穏やか。回遊と適応が進化の鍵となる世界。",
+      en: "Turbulent waves with mild combat. Migration and adaptation drive evolution.",
+    };
+  } else {
+    v = {
+      ja: "極端ではない、進化の方向が読みにくい中庸の世界。",
+      en: "Not extreme — a moderate world where evolution's direction is hard to predict.",
+    };
+  }
+
+  return v[locale];
+}
+
+function GeneToggleGrid({
+  disabled,
+  onChange,
+}: {
+  disabled: DisabledGeneFlags;
+  onChange: (next: DisabledGeneFlags) => void;
+}) {
+  const { t } = useLocale();
+  return (
+    <div className="gene-toggle-list">
+      {GENE_TOGGLE_ITEMS.map((item) => {
+        const enabled = !disabled[item.key];
+        return (
+          <label
+            key={item.key}
+            className={`gene-toggle-item ${enabled ? "" : "disabled"}`}
+          >
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={() =>
+                onChange({ ...disabled, [item.key]: enabled })
+              }
+            />
+            {t(item.tKey)}
+          </label>
+        );
+      })}
     </div>
   );
 }
@@ -434,9 +1849,13 @@ function InfoRow({
   );
 }
 
-function computeTopSpecies(world: World, max = 10): SpeciesEntry[] {
-  const map = new Map<string, { count: number; r: number; g: number; b: number }>();
+function computeTopSpecies(world: World, max = 30): SpeciesEntry[] {
+  const map = new Map<
+    string,
+    { count: number; r: number; g: number; b: number }
+  >();
   for (const life of world.lives) {
+    if (!life.alive) continue;
     const cur = map.get(life.speciesId);
     if (cur) {
       cur.count++;
@@ -462,33 +1881,4 @@ function computeTopSpecies(world: World, max = 10): SpeciesEntry[] {
   }
   entries.sort((a, b) => b.count - a.count);
   return entries.slice(0, max);
-}
-
-function logColorDistribution(world: World, label: string): void {
-  const dist: Record<string, number> = {
-    R: 0, G: 0, B: 0, Y: 0, C: 0, M: 0, W: 0, K: 0,
-  };
-  let totalR = 0;
-  let totalG = 0;
-  let totalB = 0;
-  let count = 0;
-  for (const life of world.lives) {
-    if (!life.alive) continue;
-    const lbl = speciesLabel(life.speciesId);
-    const dominant = lbl.split("-")[0];
-    if (dominant in dist) dist[dominant]++;
-    totalR += life.genes.r;
-    totalG += life.genes.g;
-    totalB += life.genes.b;
-    count++;
-  }
-  const avgR = count > 0 ? Math.round(totalR / count) : 0;
-  const avgG = count > 0 ? Math.round(totalG / count) : 0;
-  const avgB = count > 0 ? Math.round(totalB / count) : 0;
-  const distStr = Object.entries(dist)
-    .map(([k, v]) => `${k}:${v}`)
-    .join(" ");
-  console.log(
-    `[${label}] 生物数=${count} 平均RGB=(${avgR},${avgG},${avgB}) 色分布: ${distStr}`
-  );
 }

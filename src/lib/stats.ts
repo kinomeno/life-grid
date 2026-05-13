@@ -1,4 +1,4 @@
-import type { World } from "./types";
+import type { StatsSample, World } from "./types";
 
 export type WorldStats = {
   turn: number;
@@ -49,5 +49,65 @@ export function computeStats(world: World): WorldStats {
     averageIntelligence: intSum / n,
     maxIntelligence: intMax === -Infinity ? 0 : intMax,
     averageSpeed: speedSum / n,
+  };
+}
+
+/** 統計グラフ用のサンプルを生成。 */
+export function makeStatsSample(world: World): StatsSample {
+  const lives = world.lives;
+  let aliveCount = 0;
+  let intSum = 0;
+  let speedSum = 0;
+  let strSum = 0;
+  let lifespanSum = 0;
+  let reproSum = 0;
+  let sizeSum = 0;
+  let rSum = 0;
+  let gSum = 0;
+  let bSum = 0;
+  const speciesSet = new Set<string>();
+  for (const l of lives) {
+    if (!l.alive) continue;
+    aliveCount++;
+    intSum += l.genes.intelligence;
+    speedSum += l.genes.speed;
+    strSum += l.genes.strength;
+    lifespanSum += l.genes.lifespan;
+    reproSum += l.genes.reproductionRate;
+    sizeSum += l.genes.size;
+    rSum += l.genes.r;
+    gSum += l.genes.g;
+    bSum += l.genes.b;
+    speciesSet.add(l.speciesId);
+  }
+  if (aliveCount === 0) {
+    return {
+      turn: world.turn,
+      lifeCount: 0,
+      speciesCount: 0,
+      averageIntelligence: 0,
+      averageSpeed: 0,
+      averageStrength: 0,
+      averageLifespan: 0,
+      averageReproductionRate: 0,
+      averageSize: 0,
+      avgR: 0,
+      avgG: 0,
+      avgB: 0,
+    };
+  }
+  return {
+    turn: world.turn,
+    lifeCount: aliveCount,
+    speciesCount: speciesSet.size,
+    averageIntelligence: intSum / aliveCount,
+    averageSpeed: speedSum / aliveCount,
+    averageStrength: strSum / aliveCount,
+    averageLifespan: lifespanSum / aliveCount,
+    averageReproductionRate: reproSum / aliveCount,
+    averageSize: sizeSum / aliveCount,
+    avgR: rSum / aliveCount,
+    avgG: gSum / aliveCount,
+    avgB: bSum / aliveCount,
   };
 }
