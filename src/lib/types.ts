@@ -126,6 +126,19 @@ export type World = {
   lives: Life[];
   /** O(1) ライフ検索用マップ（id → Life）。cullDead 毎に再構築。 */
   livesById: Map<number, Life>;
+  /** v1.02: cullDead で消えた個体のスナップショット。自動継承で「死亡時点の情報」を
+   *  取り戻すために 200 ターン分だけ保持する（古いものは破棄）。 */
+  recentDeaths: Map<
+    number,
+    {
+      id: number;
+      x: number;
+      y: number;
+      speciesId: string;
+      genes: Genes;
+      deathTurn: number;
+    }
+  >;
   nextLifeId: number;
   terrainBias: Float32Array;
   waveTimeScale: Float32Array;

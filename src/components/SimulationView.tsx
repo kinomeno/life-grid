@@ -829,8 +829,14 @@ export default function SimulationView({
     const cur = w.livesById.get(selectedLifeId);
     // 生きてるなら何もしない
     if (cur && cur.alive) return;
-    // 死亡。cullDead で配列から消えていればスナップショットを使う。
-    const dead = cur ?? lastSelectedSnapshotRef.current;
+    // 死亡。優先順位:
+    //   1) cur (alive=false の状態でまだ配列にいる)
+    //   2) world.recentDeaths（cullDead 時に保存されたスナップショット）
+    //   3) lastSelectedSnapshotRef（軌跡更新時に保持していたスナップショット）
+    const dead =
+      cur ??
+      w.recentDeaths.get(selectedLifeId) ??
+      lastSelectedSnapshotRef.current;
     if (!dead) return;
     // スナップショットの id 不一致（別個体が割り当てられた）は無視
     if (dead.id !== selectedLifeId) return;

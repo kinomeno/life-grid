@@ -183,6 +183,7 @@ export function createWorld(config: WorldConfig): World {
     occupancy,
     lives,
     livesById,
+    recentDeaths: new Map(),
     nextLifeId: nextId,
     terrainBias,
     waveTimeScale,
@@ -1563,6 +1564,26 @@ function nearbyThreatScore(
 
 function cullDead(world: World): void {
   if (world.lives.some((l) => !l.alive)) {
+    // v1.02: 死亡個体を recentDeaths にスナップショットしてから削除する。
+    // 自動継承（高速再生時の死亡検出）で「死亡時点の情報」を取り戻すため。
+    for (const l of world.lives) {
+      if (!l.alive && !world.recentDeaths.has(l.id)) {
+        world.recentDeaths.set(l.id, {
+          id: l.id,
+          x: l.x,
+          y: l.y,
+          speciesId: l.speciesId,
+          genes: l.genes,
+          deathTurn: world.turn,
+        });
+      }
+    }
+    // 200 ターンより古い記録は捨てる（メモリ膨張防止）
+    for (const [id, snap] of world.recentDeaths) {
+      if (world.turn - snap.deathTurn > 200) {
+        world.recentDeaths.delete(id);
+      }
+    }
     world.lives = world.lives.filter((l) => l.alive);
     // livesById を再構築（死亡個体を除去）
     world.livesById.clear();
