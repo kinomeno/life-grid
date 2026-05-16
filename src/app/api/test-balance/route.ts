@@ -13,7 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createWorld, stepWorld } from "@/lib/world";
+import { createWorld, currentEra, stepWorld } from "@/lib/world";
 
 function pct(values: number[], p: number): number {
   if (values.length === 0) return 0;
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
     config: { seed, turns: world.turn, world: `${w}x${w}`, initialN: n },
     alive: alive.length,
     speciesCount: new Set(alive.map((l) => l.speciesId)).size,
-    era: world.era,
+    era: currentEra(world).name,
     strength: {
       ...stats(strengths),
       over100: strengths.filter((s) => s > 100).length,
