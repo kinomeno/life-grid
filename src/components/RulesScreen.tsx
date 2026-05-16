@@ -39,6 +39,13 @@ const SECTIONS_JA: Section[] = [
         lines: [
           "色（R/G/B）／視野／移動速度／体格／強さ／知能／繁殖率／突然変異率／寿命。",
           "高性能ほど維持コスト増。完全な万能化は不可。",
+          "",
+          "▼ v1.01：強さ・知能の上限を 999 / 繁殖率の上限を 2.0 に拡張",
+          "通常レンジ（強さ・知能 0〜100、繁殖率 0〜0.4）が安定して生存可能。",
+          "それを超える「ミュータント個体」は突然変異で稀に発生し、",
+          "高い能力と引き換えに維持コストが指数的に上昇する。",
+          "・強さ 100：コスト ~7/ターン、強さ 200：~28、強さ 500：~175（即死級）",
+          "・観察上の上限は環境次第で自然に決まる。",
         ],
       },
       {
@@ -116,13 +123,15 @@ const SECTIONS_JA: Section[] = [
       {
         lines: [
           "生命同士が接触した場合、戦闘が発生することがあります。",
-          "体格を防御役として組み込んだ確率戦闘：",
+          "体格を防御役として組み込んだ決定論的戦闘（v1.01 から確率廃止）：",
           "・攻撃力 = 自分の強さ",
           "・防御力 = 相手の強さ + 相手の体格 × 0.05",
-          "・差（攻撃 − 防御） 0〜4: 低確率、4〜8: 中〜高、8 以上: ほぼ確実（上限 95%）",
+          "・攻撃力 > 防御力 → 攻撃側が確実に勝利",
           "勝者：相手のエネルギーの 60% を吸収（既定）。敗者は死亡。",
           "体格 100 で +5、140 で +7 の防御。",
           "体格大の弱者が小型強者を撃退できる、戦略の多様性が生まれる。",
+          "強さは上限 999 まで進化可能だが、維持コストが指数的に増加するため、",
+          "観察上の生存可能値は環境次第で自然に決まる。",
         ],
       },
       {
@@ -406,6 +415,13 @@ const SECTIONS_EN: Section[] = [
         lines: [
           "Color (R/G/B) / Vision / Speed / Size / Strength / Intelligence / Reproduction / Mutation / Lifespan.",
           "Higher traits cost more energy. Complete generalization is impossible.",
+          "",
+          "▼ v1.01: Strength & Intelligence cap raised to 999, Reproduction to 2.0",
+          "The normal range (Strength/Intelligence 0–100, Reproduction 0–0.4) is",
+          "sustainable. Mutant individuals beyond this range appear rarely from",
+          "mutations, gaining high ability at exponentially rising upkeep cost.",
+          "・Strength 100: ~7/turn, 200: ~28, 500: ~175 (lethal)",
+          "・The natural sustainable value is decided by the environment.",
         ],
       },
       {
@@ -483,13 +499,15 @@ const SECTIONS_EN: Section[] = [
       {
         lines: [
           "When lives come into contact, combat may occur.",
-          "Probabilistic combat with size as defense:",
+          "Deterministic combat with size as defense (v1.01: probabilistic combat removed):",
           "・Attack = your strength",
           "・Defense = opponent's strength + opponent's size × 0.05",
-          "・diff (atk − def): 0–4 low, 4–8 medium–high, 8+ near-certain (capped 95%)",
+          "・If Attack > Defense → attacker wins for certain",
           "Winner absorbs 60% of opponent's energy. Loser dies.",
           "Size 100 gives +5 defense, 140 gives +7.",
           "Big weak individuals can fend off small strong ones — strategy diversifies.",
+          "Strength can evolve up to 999, but upkeep cost rises exponentially,",
+          "so the actual sustainable value emerges naturally from the environment.",
         ],
       },
       {

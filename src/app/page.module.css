@@ -1686,6 +1686,40 @@
   }
 }
 
+/* v1.02: 自動継承の一時表示チップ。個体詳細パネル上に 5 秒間だけ表示。 */
+:global(.inherit-chip) {
+  display: inline-block;
+  padding: 3px 10px;
+  background: #fdf4d7;
+  border: 1px solid #d9b94a;
+  color: #6e5300;
+  font-size: 11px;
+  line-height: 1.4;
+  border-radius: 999px;
+  margin: 6px 0 2px;
+  letter-spacing: 0.02em;
+}
+
+/* v1.02: マップ全画面モード — HUD（左右パネル・下部ボタン・status・ニュース）を隠して
+   マップを画面いっぱいに見せる観察体験。F キーまたは右上ボタンでトグル。 */
+:global(.sim-root.sim-fullscreen) {
+  grid-template-columns: 1fr !important;
+  grid-template-rows: 1fr auto !important;
+  grid-template-areas:
+    "center"
+    "bottom" !important;
+}
+:global(.sim-root.sim-fullscreen) :global(.sim-left),
+:global(.sim-root.sim-fullscreen) :global(.sim-right),
+:global(.sim-root.sim-fullscreen) :global(.top-status),
+:global(.sim-root.sim-fullscreen) :global(.news-strip),
+:global(.sim-root.sim-fullscreen) :global(.ctrl-bar) {
+  display: none !important;
+}
+:global(.sim-root.sim-fullscreen) :global(.sim-center) {
+  border: none;
+}
+
 @media (max-width: 520px) {
   .header {
     padding: 10px 14px;

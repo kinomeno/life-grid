@@ -15,6 +15,7 @@ import {
   currentEra,
   defaultDisabledGenes,
   defaultSimulationParams,
+  findHeir,
   getBehaviorMode,
   stepWorld,
 } from "@/lib/world";
@@ -100,6 +101,11 @@ export default function SimulationView({
   const [params, setParams] = useState<SimulationParams>(() =>
     defaultSimulationParams()
   );
+  // RAF ループ内で常に最新の params を参照するための ref
+  const paramsRef = useRef(params);
+  useEffect(() => {
+    paramsRef.current = params;
+  }, [params]);
   const [showSettings, setShowSettings] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showLog, setShowLog] = useState(false);
@@ -240,8 +246,19 @@ export default function SimulationView({
       const targetTps = s === 1 ? 4 : s === 10 ? 30 : s === 100 ? 150 : 0;
       if (s > 0 && world && !pausedRef.current) {
         acc += (dt / 1000) * targetTps;
-        const requestedSteps = Math.floor(acc);
+        let requestedSteps = Math.floor(acc);
         acc -= requestedSteps;
+        // v1.02: x1 速度ではターン表示が 1,2,3,... と等間隔（250ms ごと）に
+        // 進むよう、1 フレーム = 最大 1 ステップに制限し、フレーム落ち時の
+        // 「キャッチアップ」（繰越による複数ターン連続実行）も完全に防ぐ。
+        //   - ステップが入った場合は acc を 0 にリセットして次の 250ms を待つ
+        //   - これにより実 TPS は targetTps を超えないが、観察体験は安定
+        if (s === 1) {
+          if (requestedSteps > 0) {
+            requestedSteps = 1;
+            acc = 0;
+          }
+        }
         if (requestedSteps > 0) {
           const frameStart = performance.now();
           let actualSteps = 0;
@@ -272,9 +289,12 @@ export default function SimulationView({
         world &&
         now - lastRenderTime >= RENDER_INTERVAL_MS
       ) {
-        // 補間フェーズ：直近ステップからの経過時間 / ステップ間隔
+        // 補間フェーズ：直近ステップからの経過時間 / ステップ間隔。
+        // v1.02: smoothAnimation=false なら補間を行わず常に 1（ステップ完了状態）に固定。
         const sinceStep = now - lastStepAtRef.current;
-        const phase = Math.min(1, sinceStep / stepDurationMsRef.current);
+        const phase = paramsRef.current.smoothAnimation
+          ? Math.min(1, sinceStep / stepDurationMsRef.current)
+          : 1;
         setAnimPhase(phase);
         setVersion((v) => v + 1);
         if (didStep) refreshDerived(world);
@@ -507,18 +527,47 @@ export default function SimulationView({
       }
 
       // 通常モード：個体選択
-      const idx = y * world.width + x;
-      const id = world.occupancy[idx];
-      if (id === -1) {
+      // v1.02: 移動補間中は描画位置と論理位置がズレるため、半径 1 セルまで許容して
+      // クリック位置に最も近い生命を選択する。範囲内に生命がいなければ選択解除。
+      let bestId = -1;
+      let bestDist = Infinity;
+      const r = 1;
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const nx = (x + dx + world.width) % world.width;
+          const ny = (y + dy + world.height) % world.height;
+          const idx = ny * world.width + nx;
+          const id = world.occupancy[idx];
+          if (id === -1) continue;
+          // 補間後の描画位置（prevX/Y → x/y）に動いている個体を優先
+          const life = world.livesById.get(id);
+          if (!life || !life.alive) continue;
+          // クリック点（x+0.5, y+0.5）と描画想定中心（life.x+0.5, life.y+0.5）の距離
+          let sdx = (life.x + 0.5) - (x + 0.5);
+          let sdy = (life.y + 0.5) - (y + 0.5);
+          // トーラス境界跨ぎ補正
+          if (sdx > world.width / 2) sdx -= world.width;
+          if (sdx < -world.width / 2) sdx += world.width;
+          if (sdy > world.height / 2) sdy -= world.height;
+          if (sdy < -world.height / 2) sdy += world.height;
+          const d = sdx * sdx + sdy * sdy;
+          if (d < bestDist) {
+            bestDist = d;
+            bestId = id;
+          }
+        }
+      }
+      if (bestId === -1) {
         setSelectedLifeId(null);
         return;
       }
-      setSelectedLifeId(id);
+      setSelectedLifeId(bestId);
     },
     [interactionMode]
   );
 
   // V2: マウスホバーで個体ポップアップを更新
+  // v1.02: クリック判定と同じく半径 1 セルまで許容（補間中の描画ズレ対策）
   const handleCellHover = useCallback(
     (x: number, y: number | null, px: number, py: number) => {
       if (y === null) {
@@ -527,18 +576,36 @@ export default function SimulationView({
       }
       const world = worldRef.current;
       if (!world) return;
-      const idx = y * world.width + x;
-      const id = world.occupancy[idx];
-      if (id === -1) {
+      let bestLife: typeof world.lives[number] | null = null;
+      let bestDist = Infinity;
+      const r = 1;
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const nx = (x + dx + world.width) % world.width;
+          const ny = (y + dy + world.height) % world.height;
+          const idx = ny * world.width + nx;
+          const id = world.occupancy[idx];
+          if (id === -1) continue;
+          const life = world.livesById.get(id);
+          if (!life || !life.alive) continue;
+          let sdx = (life.x + 0.5) - (x + 0.5);
+          let sdy = (life.y + 0.5) - (y + 0.5);
+          if (sdx > world.width / 2) sdx -= world.width;
+          if (sdx < -world.width / 2) sdx += world.width;
+          if (sdy > world.height / 2) sdy -= world.height;
+          if (sdy < -world.height / 2) sdy += world.height;
+          const d = sdx * sdx + sdy * sdy;
+          if (d < bestDist) {
+            bestDist = d;
+            bestLife = life;
+          }
+        }
+      }
+      if (!bestLife) {
         setHoverInfo(null);
         return;
       }
-      const life = world.livesById.get(id);
-      if (!life || !life.alive) {
-        setHoverInfo(null);
-        return;
-      }
-      setHoverInfo({ life, px, py });
+      setHoverInfo({ life: bestLife, px, py });
     },
     []
   );
@@ -586,6 +653,32 @@ export default function SimulationView({
   // ズーム倍率（A 案：CSS transform でスケール。0.5〜3.0 倍）
   const [zoom, setZoom] = useState(1.0);
   const viewportRef = useRef<HTMLDivElement | null>(null);
+
+  // v1.02: マップ全画面モード。HUD（パネル・ヘッダー・下部ボタン）を一時的に隠す。
+  // F キーまたは右上ボタンでトグル、ESC で解除。
+  const [fullscreenMap, setFullscreenMap] = useState(false);
+
+  // v1.02: 選択中の生命の移動軌跡。最近 60 ターンの座標を保持。
+  // SimulationCanvas で薄い線として描画される。選択切替・死亡でリセット。
+  const [selectedLifePath, setSelectedLifePath] = useState<
+    { x: number; y: number }[]
+  >([]);
+
+  // v1.02: 自動継承の一時表示用ラベル（例：「← Y-12 から継承」）。
+  // 5 秒で自動的にクリア。行動ログには残さない仕様。
+  const [inheritedFromLabel, setInheritedFromLabel] = useState<string | null>(
+    null
+  );
+  // v1.02: 選択中の生命のスナップショット（生きてた最後の状態）。
+  // cullDead で世界の lives 配列から削除された後でも、findHeir に渡すために保持する。
+  // x10/x100 高速時、死亡同フレーム内に cullDead で消されるケースに対応。
+  const lastSelectedSnapshotRef = useRef<{
+    id: number;
+    x: number;
+    y: number;
+    speciesId: string;
+    genes: import("@/lib/types").Genes;
+  } | null>(null);
 
   /**
    * ズーム時の中心点を計算する。
@@ -674,14 +767,32 @@ export default function SimulationView({
   // スペースバーで再生／一時停止
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== "Space") return;
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      // モーダル内のフォーカス時もスキップ
       if ((e.target as HTMLElement | null)?.isContentEditable) return;
-      e.preventDefault();
-      const cur = speedRef.current;
-      setSpeed(cur === 0 ? 1 : 0);
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        const cur = speedRef.current;
+        setSpeed(cur === 0 ? 1 : 0);
+        return;
+      }
+      // v1.02: F キーでマップ全画面トグル、ESC で解除
+      if (e.code === "KeyF" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setFullscreenMap((v) => !v);
+        return;
+      }
+      if (e.code === "Escape") {
+        setFullscreenMap(false);
+        return;
+      }
+      // v1.02: T キーで補間 ON/OFF（厳密ターン表示）トグル
+      if (e.code === "KeyT" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setParams((p) => ({ ...p, smoothAnimation: !p.smoothAnimation }));
+        return;
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -692,6 +803,84 @@ export default function SimulationView({
   const lastStepAtRef = useRef(performance.now());
   const stepDurationMsRef = useRef(250); // ×1 既定
   const [animPhase, setAnimPhase] = useState(1);
+
+  // v1.02: 選択生命が変わったら移動軌跡をリセット
+  // 一時停止中の選択解除でも確実にキャンバスから古い軌跡を消すため version も増やして再描画を強制
+  useEffect(() => {
+    setSelectedLifePath([]);
+    setVersion((v) => v + 1);
+  }, [selectedLifeId]);
+
+  // v1.02: ターン進行で選択生命の現在位置を移動軌跡に追加
+  // 同時にスナップショットも更新（自動継承時の dead 参照用）
+  useEffect(() => {
+    if (selectedLifeId == null) {
+      lastSelectedSnapshotRef.current = null;
+      return;
+    }
+    const w = worldRef.current;
+    if (!w) return;
+    const life = w.livesById.get(selectedLifeId);
+    if (!life || !life.alive) return;
+    // 生きてる状態のスナップショットを保存（cullDead で消えた後の findHeir 用）
+    lastSelectedSnapshotRef.current = {
+      id: life.id,
+      x: life.x,
+      y: life.y,
+      speciesId: life.speciesId,
+      genes: life.genes,
+    };
+    setSelectedLifePath((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && last.x === life.x && last.y === life.y) return prev;
+      const next = [...prev, { x: life.x, y: life.y }];
+      return next.length > 60 ? next.slice(next.length - 60) : next;
+    });
+  }, [stats.turn, version, selectedLifeId]);
+
+  // v1.02: 選択中の生命が死亡したら、設定 ON なら自動継承する。
+  // 1) 同 speciesId の最近接、2) フォールバック：遺伝子距離最近接。
+  // いずれもいなければ選択解除。
+  //
+  // deps に version も含めることで、雷・隕石などの一時停止中の死亡（stats.turn が
+  // 変わらない場面）でも発火する。world.lives へのミューテーション後に必ず
+  // setVersion(v => v + 1) が呼ばれている前提。
+  useEffect(() => {
+    if (selectedLifeId == null) return;
+    if (!params.inheritOnDeath) return;
+    const w = worldRef.current;
+    if (!w) return;
+    // version 変化で毎フレーム発火するため O(1) lookup を使う
+    const cur = w.livesById.get(selectedLifeId);
+    // 生きてるなら何もしない
+    if (cur && cur.alive) return;
+    // 死亡。優先順位:
+    //   1) cur (alive=false の状態でまだ配列にいる)
+    //   2) world.recentDeaths（cullDead 時に保存されたスナップショット）
+    //   3) lastSelectedSnapshotRef（軌跡更新時に保持していたスナップショット）
+    const dead =
+      cur ??
+      w.recentDeaths.get(selectedLifeId) ??
+      lastSelectedSnapshotRef.current;
+    if (!dead) return;
+    // スナップショットの id 不一致（別個体が割り当てられた）は無視
+    if (dead.id !== selectedLifeId) return;
+    const heir = findHeir(w, dead);
+    if (!heir) {
+      setSelectedLifeId(null);
+      return;
+    }
+    // 「Y-12 から継承」ラベル（一時表示用、行動ログには残さない）
+    setInheritedFromLabel(speciesLabel(dead.speciesId));
+    setSelectedLifeId(heir.id);
+  }, [stats.turn, version, selectedLifeId, params.inheritOnDeath]);
+
+  // 自動継承の一時表示を 5 秒で自動消去
+  useEffect(() => {
+    if (!inheritedFromLabel) return;
+    const t = setTimeout(() => setInheritedFromLabel(null), 5000);
+    return () => clearTimeout(t);
+  }, [inheritedFromLabel]);
 
   // ズーム > 1 ＋ 生命選択中：選択生命を viewport の中心に追従させる
   useEffect(() => {
@@ -725,7 +914,7 @@ export default function SimulationView({
   return (
     <>
     <div
-      className="sim-root"
+      className={`sim-root${fullscreenMap ? " sim-fullscreen" : ""}`}
       style={{
         // 中央列幅をマップサイズ＋枠ぶん（padding+border）に固定。
         // ニュースの文字長に引きずられないようにするため。
@@ -1007,6 +1196,7 @@ export default function SimulationView({
                   version={version}
                   animPhase={animPhase}
                   selectedLifeId={selectedLifeId}
+                  selectedLifePath={selectedLifePath}
                   trackedSpeciesId={trackedSpeciesId}
                   onCellClick={handleCellClick}
                   onCellHover={handleCellHover}
@@ -1104,6 +1294,17 @@ export default function SimulationView({
             🌸
           </button>
           <div className="map-bar-spacer" />
+          {/* v1.02: マップ全画面トグル（F キーでも切替可） */}
+          <button
+            type="button"
+            className="mini-btn"
+            onClick={() => setFullscreenMap((v) => !v)}
+            title={fullscreenMap ? t("ctrl.exit_fullscreen") : t("ctrl.enter_fullscreen")}
+            aria-label={fullscreenMap ? t("ctrl.exit_fullscreen") : t("ctrl.enter_fullscreen")}
+            aria-pressed={fullscreenMap}
+          >
+            {fullscreenMap ? "⛶✕" : "⛶"}
+          </button>
           {/* ズーム */}
           <div className="zoom-mini">
             <button
@@ -1156,6 +1357,12 @@ export default function SimulationView({
                   onDeselect={() => setSelectedLifeId(null)}
                   deselectLabel={t("info.deselect")}
                 />
+                {/* v1.02: 自動継承の一時表示（行動ログには残さない） */}
+                {inheritedFromLabel && (
+                  <div className="inherit-chip">
+                    ← {inheritedFromLabel} {t("info.inherited_from")}
+                  </div>
+                )}
                 {/* 遺伝子 ID（コピー可） */}
                 <GeneIdRow life={selectedLife} />
                 {/* G3 保護トグル */}
@@ -1216,15 +1423,21 @@ export default function SimulationView({
                   />
                   <InfoRow
                     label={t("info.strength")}
-                    value={selectedLife.genes.strength.toFixed(0)}
+                    value={`${selectedLife.genes.strength.toFixed(0)} / 999${
+                      selectedLife.genes.strength > 100 ? "  ⚠" : ""
+                    }`}
                   />
                   <InfoRow
                     label={t("info.intelligence")}
-                    value={selectedLife.genes.intelligence}
+                    value={`${selectedLife.genes.intelligence} / 999${
+                      selectedLife.genes.intelligence > 100 ? "  ⚠" : ""
+                    }`}
                   />
                   <InfoRow
                     label={t("info.reproduction_rate")}
-                    value={selectedLife.genes.reproductionRate.toFixed(2)}
+                    value={`${selectedLife.genes.reproductionRate.toFixed(2)} / 2.00${
+                      selectedLife.genes.reproductionRate > 0.4 ? "  ⚠" : ""
+                    }`}
                   />
                   <InfoRow
                     label={t("info.mutation_rate")}
@@ -1468,6 +1681,40 @@ export default function SimulationView({
                   }
                 />
                 <span>{t("settings.toggle.news")}</span>
+              </label>
+              {/* v1.02: 自動継承トグル */}
+              <label
+                className="settings-toggle"
+                title={t("settings.param.inherit_on_death_hint")}
+              >
+                <input
+                  type="checkbox"
+                  checked={params.inheritOnDeath}
+                  onChange={(e) =>
+                    setParams((p) => ({
+                      ...p,
+                      inheritOnDeath: e.target.checked,
+                    }))
+                  }
+                />
+                <span>{t("settings.param.inherit_on_death")}</span>
+              </label>
+              {/* v1.02: 補間アニメーション ON/OFF（T キーでも切替可） */}
+              <label
+                className="settings-toggle"
+                title={t("settings.param.smooth_animation_hint")}
+              >
+                <input
+                  type="checkbox"
+                  checked={params.smoothAnimation}
+                  onChange={(e) =>
+                    setParams((p) => ({
+                      ...p,
+                      smoothAnimation: e.target.checked,
+                    }))
+                  }
+                />
+                <span>{t("settings.param.smooth_animation")}</span>
               </label>
             </section>
 
