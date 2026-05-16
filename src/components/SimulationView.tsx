@@ -650,6 +650,16 @@ export default function SimulationView({
   const [inheritedFromLabel, setInheritedFromLabel] = useState<string | null>(
     null
   );
+  // v1.02: 選択中の生命のスナップショット（生きてた最後の状態）。
+  // cullDead で世界の lives 配列から削除された後でも、findHeir に渡すために保持する。
+  // x10/x100 高速時、死亡同フレーム内に cullDead で消されるケースに対応。
+  const lastSelectedSnapshotRef = useRef<{
+    id: number;
+    x: number;
+    y: number;
+    speciesId: string;
+    genes: import("@/lib/types").Genes;
+  } | null>(null);
 
   /**
    * ズーム時の中心点を計算する。
@@ -777,19 +787,31 @@ export default function SimulationView({
   }, [selectedLifeId]);
 
   // v1.02: ターン進行で選択生命の現在位置を移動軌跡に追加
+  // 同時にスナップショットも更新（自動継承時の dead 参照用）
   useEffect(() => {
-    if (selectedLifeId == null) return;
+    if (selectedLifeId == null) {
+      lastSelectedSnapshotRef.current = null;
+      return;
+    }
     const w = worldRef.current;
     if (!w) return;
-    const life = w.lives.find((l) => l.id === selectedLifeId && l.alive);
-    if (!life) return;
+    const life = w.livesById.get(selectedLifeId);
+    if (!life || !life.alive) return;
+    // 生きてる状態のスナップショットを保存（cullDead で消えた後の findHeir 用）
+    lastSelectedSnapshotRef.current = {
+      id: life.id,
+      x: life.x,
+      y: life.y,
+      speciesId: life.speciesId,
+      genes: life.genes,
+    };
     setSelectedLifePath((prev) => {
       const last = prev[prev.length - 1];
       if (last && last.x === life.x && last.y === life.y) return prev;
       const next = [...prev, { x: life.x, y: life.y }];
       return next.length > 60 ? next.slice(next.length - 60) : next;
     });
-  }, [stats.turn, selectedLifeId]);
+  }, [stats.turn, version, selectedLifeId]);
 
   // v1.02: 選択中の生命が死亡したら、設定 ON なら自動継承する。
   // 1) 同 speciesId の最近接、2) フォールバック：遺伝子距離最近接。
@@ -805,14 +827,20 @@ export default function SimulationView({
     if (!w) return;
     // version 変化で毎フレーム発火するため O(1) lookup を使う
     const cur = w.livesById.get(selectedLifeId);
-    if (!cur || cur.alive) return; // まだ生きてるなら何もしない
-    const heir = findHeir(w, cur);
+    // 生きてるなら何もしない
+    if (cur && cur.alive) return;
+    // 死亡。cullDead で配列から消えていればスナップショットを使う。
+    const dead = cur ?? lastSelectedSnapshotRef.current;
+    if (!dead) return;
+    // スナップショットの id 不一致（別個体が割り当てられた）は無視
+    if (dead.id !== selectedLifeId) return;
+    const heir = findHeir(w, dead);
     if (!heir) {
       setSelectedLifeId(null);
       return;
     }
     // 「Y-12 から継承」ラベル（一時表示用、行動ログには残さない）
-    setInheritedFromLabel(speciesLabel(cur.speciesId));
+    setInheritedFromLabel(speciesLabel(dead.speciesId));
     setSelectedLifeId(heir.id);
   }, [stats.turn, version, selectedLifeId, params.inheritOnDeath]);
 

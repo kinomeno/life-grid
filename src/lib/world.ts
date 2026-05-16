@@ -1039,8 +1039,14 @@ const ERA_ENVIRONMENTS: EraEnvironment[] = [
  * 1) 同 speciesId で最も位置が近い生きた個体
  * 2) 同系統がいなければ、全生命の中で遺伝子距離が最も近い個体
  * いなければ null。トーラス境界を考慮した位置距離・各遺伝子の差の二乗和を使う。
+ *
+ * dead は Life でなくスナップショット（id/x/y/speciesId/genes）でも受け取れる。
+ * x10/x100 高速時に cullDead で world.lives から既に削除されている個体に対応する。
  */
-export function findHeir(world: World, dead: Life): Life | null {
+export function findHeir(
+  world: World,
+  dead: { id: number; x: number; y: number; speciesId: string; genes: Genes }
+): Life | null {
   const { width, height } = world;
 
   // (1) 同系統での最近接
