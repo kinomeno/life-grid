@@ -67,6 +67,7 @@ export function defaultSimulationParams(): SimulationParams {
     combatAdvantage: COMBAT_ENERGY_LOSS_RATIO,
     disabledGenes: defaultDisabledGenes(),
     newsEnabled: true,
+    inheritOnDeath: true,
   };
 }
 
@@ -1032,6 +1033,81 @@ const ERA_ENVIRONMENTS: EraEnvironment[] = [
     energyScale: 0.78,
   },
 ];
+
+/**
+ * v1.02: 選択中の生命が死亡したときの「後継者」を探す。
+ * 1) 同 speciesId で最も位置が近い生きた個体
+ * 2) 同系統がいなければ、全生命の中で遺伝子距離が最も近い個体
+ * いなければ null。トーラス境界を考慮した位置距離・各遺伝子の差の二乗和を使う。
+ */
+export function findHeir(world: World, dead: Life): Life | null {
+  const { width, height } = world;
+
+  // (1) 同系統での最近接
+  let bestSame: Life | null = null;
+  let bestSameDist = Infinity;
+  // (2) 全体での遺伝子距離最近接（同系統がいなかった場合のフォールバック）
+  let bestGene: Life | null = null;
+  let bestGeneDist = Infinity;
+
+  for (const l of world.lives) {
+    if (!l.alive || l.id === dead.id) continue;
+
+    if (l.speciesId === dead.speciesId) {
+      const d = torusDist2(dead.x, dead.y, l.x, l.y, width, height);
+      if (d < bestSameDist) {
+        bestSameDist = d;
+        bestSame = l;
+      }
+    } else if (!bestSame) {
+      // 同系統が既に見つかっていれば、遺伝子距離は調べない（最適化）
+      const d = geneDist2(dead.genes, l.genes);
+      if (d < bestGeneDist) {
+        bestGeneDist = d;
+        bestGene = l;
+      }
+    }
+  }
+
+  return bestSame ?? bestGene;
+}
+
+function torusDist2(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  width: number,
+  height: number
+): number {
+  let dx = Math.abs(ax - bx);
+  let dy = Math.abs(ay - by);
+  if (dx > width / 2) dx = width - dx;
+  if (dy > height / 2) dy = height - dy;
+  return dx * dx + dy * dy;
+}
+
+function geneDist2(a: Genes, b: Genes): number {
+  // 各遺伝子の差の二乗和（粗い指標）。範囲が大きく異なるので個別にスケーリング。
+  let d = 0;
+  d += (a.r - b.r) ** 2;
+  d += (a.g - b.g) ** 2;
+  d += (a.b - b.b) ** 2;
+  // 0〜100 系（強さ・知能・速度・体格）はそのまま
+  d += (a.strength - b.strength) ** 2;
+  d += (a.intelligence - b.intelligence) ** 2;
+  d += (a.size - b.size) ** 2;
+  d += (a.speed - b.speed) ** 2;
+  // 視野（1〜4）はスケール拡大
+  d += ((a.vision - b.vision) * 25) ** 2;
+  // 0〜2.0 の繁殖率は 50 倍してスケール合わせ
+  d += ((a.reproductionRate - b.reproductionRate) * 50) ** 2;
+  // 寿命 200〜600 → そのまま比較すると支配的になるので 0.2 倍
+  d += ((a.lifespan - b.lifespan) * 0.2) ** 2;
+  // 突然変異率 0.04〜0.12 は 1000 倍
+  d += ((a.mutationRate - b.mutationRate) * 1000) ** 2;
+  return d;
+}
 
 /**
  * 現在の時代インデックス、時代名、時代内進行率（0〜1）、環境を返す。

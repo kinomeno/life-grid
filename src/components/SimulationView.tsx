@@ -15,6 +15,7 @@ import {
   currentEra,
   defaultDisabledGenes,
   defaultSimulationParams,
+  findHeir,
   getBehaviorMode,
   stepWorld,
 } from "@/lib/world";
@@ -597,6 +598,12 @@ export default function SimulationView({
     { x: number; y: number }[]
   >([]);
 
+  // v1.02: 自動継承の一時表示用ラベル（例：「← Y-12 から継承」）。
+  // 5 秒で自動的にクリア。行動ログには残さない仕様。
+  const [inheritedFromLabel, setInheritedFromLabel] = useState<string | null>(
+    null
+  );
+
   /**
    * ズーム時の中心点を計算する。
    * 生命選択中なら生命位置（補間済）、未選択ならマップ中央。
@@ -734,6 +741,33 @@ export default function SimulationView({
       return next.length > 60 ? next.slice(next.length - 60) : next;
     });
   }, [stats.turn, selectedLifeId]);
+
+  // v1.02: 選択中の生命が死亡したら、設定 ON なら自動継承する。
+  // 1) 同 speciesId の最近接、2) フォールバック：遺伝子距離最近接。
+  // いずれもいなければ選択解除。
+  useEffect(() => {
+    if (selectedLifeId == null) return;
+    if (!params.inheritOnDeath) return;
+    const w = worldRef.current;
+    if (!w) return;
+    const cur = w.lives.find((l) => l.id === selectedLifeId);
+    if (!cur || cur.alive) return; // まだ生きてるなら何もしない
+    const heir = findHeir(w, cur);
+    if (!heir) {
+      setSelectedLifeId(null);
+      return;
+    }
+    // 「Y-12 から継承」ラベル（一時表示用、行動ログには残さない）
+    setInheritedFromLabel(speciesLabel(cur.speciesId));
+    setSelectedLifeId(heir.id);
+  }, [stats.turn, selectedLifeId, params.inheritOnDeath]);
+
+  // 自動継承の一時表示を 5 秒で自動消去
+  useEffect(() => {
+    if (!inheritedFromLabel) return;
+    const t = setTimeout(() => setInheritedFromLabel(null), 5000);
+    return () => clearTimeout(t);
+  }, [inheritedFromLabel]);
 
   // ズーム > 1 ＋ 生命選択中：選択生命を viewport の中心に追従させる
   useEffect(() => {
@@ -1210,6 +1244,12 @@ export default function SimulationView({
                   onDeselect={() => setSelectedLifeId(null)}
                   deselectLabel={t("info.deselect")}
                 />
+                {/* v1.02: 自動継承の一時表示（行動ログには残さない） */}
+                {inheritedFromLabel && (
+                  <div className="inherit-chip">
+                    ← {inheritedFromLabel} {t("info.inherited_from")}
+                  </div>
+                )}
                 {/* 遺伝子 ID（コピー可） */}
                 <GeneIdRow life={selectedLife} />
                 {/* G3 保護トグル */}
@@ -1528,6 +1568,23 @@ export default function SimulationView({
                   }
                 />
                 <span>{t("settings.toggle.news")}</span>
+              </label>
+              {/* v1.02: 自動継承トグル */}
+              <label
+                className="settings-toggle"
+                title={t("settings.param.inherit_on_death_hint")}
+              >
+                <input
+                  type="checkbox"
+                  checked={params.inheritOnDeath}
+                  onChange={(e) =>
+                    setParams((p) => ({
+                      ...p,
+                      inheritOnDeath: e.target.checked,
+                    }))
+                  }
+                />
+                <span>{t("settings.param.inherit_on_death")}</span>
               </label>
             </section>
 
