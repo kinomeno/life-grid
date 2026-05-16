@@ -57,11 +57,24 @@ export default function SimulationView({
   onBackToTitle,
 }: Props) {
   const { t, locale } = useLocale();
+  // 画面幅を追跡し、モバイルでマップが overflow しないようにする
+  const [screenWidth, setScreenWidth] = useState<number>(() =>
+    typeof window !== "undefined" ? window.innerWidth : 1280
+  );
+  useEffect(() => {
+    const onResize = () => setScreenWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    onResize();
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
   const cellSize = useMemo(() => {
-    const maxPx = 720;
+    // 画面幅から余白を引いた値とデスクトップ時の上限 720px のうち小さい方
+    // モバイル縦画面では左右パネルを畳むため画面幅の大半が使える
+    const padding = 24;
+    const maxPx = Math.min(720, Math.max(180, screenWidth - padding));
     const fit = Math.floor(maxPx / Math.max(width, height));
     return Math.max(2, Math.min(8, fit));
-  }, [width, height]);
+  }, [width, height, screenWidth]);
 
   const [seed, setSeed] = useState<number | null>(null);
   const worldRef = useRef<World | null>(null);
