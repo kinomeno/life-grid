@@ -67,7 +67,7 @@ export default function SimulationCanvas({
     }
 
     drawEnergyField(ctx, world, cellSize, off, imgRef.current);
-    drawSelectedPath(ctx, selectedLifePath, cellSize);
+    drawSelectedPath(ctx, selectedLifePath, cellSize, world.width, world.height);
     drawLives(ctx, world, cellSize, trackedSpeciesId, selectedLifeId, animPhase);
     drawCombatFlashes(ctx, world, cellSize, animPhase);
     drawCataclysm(ctx, world, cellSize);
@@ -129,28 +129,34 @@ export default function SimulationCanvas({
 
 /**
  * v1.02: 選択中の生命の移動軌跡を薄い線で描画する。
- * 古い点ほど透明度が高い（消えていく）。トーラス境界をまたぐセグメントは描画しない。
+ * 古い点ほど透明度が高い（消えていく）。
+ * トーラス境界をまたぐセグメントだけスキップ（速度が高い生命の数マスジャンプは描画する）。
  */
 function drawSelectedPath(
   ctx: CanvasRenderingContext2D,
   path: { x: number; y: number }[],
-  cellSize: number
+  cellSize: number,
+  worldWidth: number,
+  worldHeight: number
 ) {
   if (!path || path.length < 2) return;
   const half = cellSize / 2;
+  // トーラス境界跨ぎ判定：マップサイズの半分以上ジャンプしている場合は跨ぎとみなす
+  const wrapX = worldWidth / 2;
+  const wrapY = worldHeight / 2;
   ctx.save();
   ctx.lineWidth = Math.max(1, cellSize * 0.18);
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   const n = path.length;
-  // セグメントごとに透明度を変える（古いほど薄い）
   for (let i = 1; i < n; i++) {
     const p0 = path[i - 1];
     const p1 = path[i];
-    // トーラス境界跨ぎ（隣接 1 マスじゃない大ジャンプ）は描画しない
     const dx = Math.abs(p1.x - p0.x);
     const dy = Math.abs(p1.y - p0.y);
-    if (dx > 1 || dy > 1) continue;
+    // トーラス跨ぎ（マップ反対側へジャンプ）だけスキップ。
+    // 速度が高い生命の 2〜3 マスジャンプも線として描画したいため緩い判定にする。
+    if (dx > wrapX || dy > wrapY) continue;
     // 古いほど透明、新しいほど濃い。範囲 0.08〜0.55
     const t = i / (n - 1);
     const alpha = 0.08 + t * 0.47;
