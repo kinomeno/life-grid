@@ -48,6 +48,8 @@ export type SimulationParams = {
   newsEnabled: boolean;
   /** v1.02: 選択中の生命が死んだとき、同系統 → 遺伝子近接の順で別個体を自動選択する。既定 true。 */
   inheritOnDeath: boolean;
+  /** v1.02: 移動の補間アニメーション。true=滑らか（既定）/ false=厳密なターン表示（パチッと移動）。 */
+  smoothAnimation: boolean;
 };
 
 /**

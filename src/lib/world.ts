@@ -68,6 +68,7 @@ export function defaultSimulationParams(): SimulationParams {
     disabledGenes: defaultDisabledGenes(),
     newsEnabled: true,
     inheritOnDeath: true,
+    smoothAnimation: true,
   };
 }
 

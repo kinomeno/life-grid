@@ -101,6 +101,11 @@ export default function SimulationView({
   const [params, setParams] = useState<SimulationParams>(() =>
     defaultSimulationParams()
   );
+  // RAF ループ内で常に最新の params を参照するための ref
+  const paramsRef = useRef(params);
+  useEffect(() => {
+    paramsRef.current = params;
+  }, [params]);
   const [showSettings, setShowSettings] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showLog, setShowLog] = useState(false);
@@ -273,9 +278,12 @@ export default function SimulationView({
         world &&
         now - lastRenderTime >= RENDER_INTERVAL_MS
       ) {
-        // 補間フェーズ：直近ステップからの経過時間 / ステップ間隔
+        // 補間フェーズ：直近ステップからの経過時間 / ステップ間隔。
+        // v1.02: smoothAnimation=false なら補間を行わず常に 1（ステップ完了状態）に固定。
         const sinceStep = now - lastStepAtRef.current;
-        const phase = Math.min(1, sinceStep / stepDurationMsRef.current);
+        const phase = paramsRef.current.smoothAnimation
+          ? Math.min(1, sinceStep / stepDurationMsRef.current)
+          : 1;
         setAnimPhase(phase);
         setVersion((v) => v + 1);
         if (didStep) refreshDerived(world);
@@ -766,6 +774,12 @@ export default function SimulationView({
       }
       if (e.code === "Escape") {
         setFullscreenMap(false);
+        return;
+      }
+      // v1.02: T キーで補間 ON/OFF（厳密ターン表示）トグル
+      if (e.code === "KeyT" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setParams((p) => ({ ...p, smoothAnimation: !p.smoothAnimation }));
         return;
       }
     };
@@ -1673,6 +1687,23 @@ export default function SimulationView({
                   }
                 />
                 <span>{t("settings.param.inherit_on_death")}</span>
+              </label>
+              {/* v1.02: 補間アニメーション ON/OFF（T キーでも切替可） */}
+              <label
+                className="settings-toggle"
+                title={t("settings.param.smooth_animation_hint")}
+              >
+                <input
+                  type="checkbox"
+                  checked={params.smoothAnimation}
+                  onChange={(e) =>
+                    setParams((p) => ({
+                      ...p,
+                      smoothAnimation: e.target.checked,
+                    }))
+                  }
+                />
+                <span>{t("settings.param.smooth_animation")}</span>
               </label>
             </section>
 
