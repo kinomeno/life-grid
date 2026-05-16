@@ -770,8 +770,10 @@ export default function SimulationView({
   const [animPhase, setAnimPhase] = useState(1);
 
   // v1.02: 選択生命が変わったら移動軌跡をリセット
+  // 一時停止中の選択解除でも確実にキャンバスから古い軌跡を消すため version も増やして再描画を強制
   useEffect(() => {
     setSelectedLifePath([]);
+    setVersion((v) => v + 1);
   }, [selectedLifeId]);
 
   // v1.02: ターン進行で選択生命の現在位置を移動軌跡に追加
@@ -792,12 +794,17 @@ export default function SimulationView({
   // v1.02: 選択中の生命が死亡したら、設定 ON なら自動継承する。
   // 1) 同 speciesId の最近接、2) フォールバック：遺伝子距離最近接。
   // いずれもいなければ選択解除。
+  //
+  // deps に version も含めることで、雷・隕石などの一時停止中の死亡（stats.turn が
+  // 変わらない場面）でも発火する。world.lives へのミューテーション後に必ず
+  // setVersion(v => v + 1) が呼ばれている前提。
   useEffect(() => {
     if (selectedLifeId == null) return;
     if (!params.inheritOnDeath) return;
     const w = worldRef.current;
     if (!w) return;
-    const cur = w.lives.find((l) => l.id === selectedLifeId);
+    // version 変化で毎フレーム発火するため O(1) lookup を使う
+    const cur = w.livesById.get(selectedLifeId);
     if (!cur || cur.alive) return; // まだ生きてるなら何もしない
     const heir = findHeir(w, cur);
     if (!heir) {
@@ -807,7 +814,7 @@ export default function SimulationView({
     // 「Y-12 から継承」ラベル（一時表示用、行動ログには残さない）
     setInheritedFromLabel(speciesLabel(cur.speciesId));
     setSelectedLifeId(heir.id);
-  }, [stats.turn, selectedLifeId, params.inheritOnDeath]);
+  }, [stats.turn, version, selectedLifeId, params.inheritOnDeath]);
 
   // 自動継承の一時表示を 5 秒で自動消去
   useEffect(() => {
