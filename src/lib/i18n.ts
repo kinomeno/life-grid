@@ -22,7 +22,7 @@ type Dictionary = Record<string, string>;
 const ja: Dictionary = {
   "app.title": "LIFE GRID",
   "app.subtitle": "生命進化シミュレーター",
-  "app.version": "ver 1.00",
+  "app.version": "ver 1.02",
   "lang.toggle.ja": "JA",
   "lang.toggle.en": "EN",
 
@@ -217,7 +217,7 @@ const ja: Dictionary = {
 const en: Dictionary = {
   "app.title": "LIFE GRID",
   "app.subtitle": "Life Evolution Simulator",
-  "app.version": "ver 1.00",
+  "app.version": "ver 1.02",
   "lang.toggle.ja": "JA",
   "lang.toggle.en": "EN",
 
