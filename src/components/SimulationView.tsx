@@ -68,10 +68,12 @@ export default function SimulationView({
     return () => window.removeEventListener("resize", onResize);
   }, []);
   const cellSize = useMemo(() => {
-    // 画面幅から余白を引いた値とデスクトップ時の上限 720px のうち小さい方
-    // モバイル縦画面では左右パネルを畳むため画面幅の大半が使える
-    const padding = 24;
-    const maxPx = Math.min(720, Math.max(180, screenWidth - padding));
+    // 画面幅から余白を引いた値とデスクトップ時の上限 720px のうち小さい方。
+    // モバイル縦画面では左右パネルを畳むため画面幅の大半が使えるが、
+    // .sim-center / .canvas-wrap の左右 padding + border ぶんを差し引かないと
+    // Canvas が親 wrap より大きくなり右端がはみ出るので余裕をもって 40px 引く。
+    const padding = 40;
+    const maxPx = Math.min(720, Math.max(160, screenWidth - padding));
     const fit = Math.floor(maxPx / Math.max(width, height));
     return Math.max(2, Math.min(8, fit));
   }, [width, height, screenWidth]);
@@ -726,8 +728,14 @@ export default function SimulationView({
       className="sim-root"
       style={{
         // 中央列幅をマップサイズ＋枠ぶん（padding+border）に固定。
-        // これでニュースの文字長に引きずられない。
-        gridTemplateColumns: `240px ${cellSize * width + 26}px 240px`,
+        // ニュースの文字長に引きずられないようにするため。
+        // ただしモバイル（<=880px）では CSS 側の grid-template-columns: 1fr
+        // を効かせたいので、インラインでは指定しない。
+        ...(screenWidth > 880
+          ? {
+              gridTemplateColumns: `240px ${cellSize * width + 26}px 240px`,
+            }
+          : {}),
       }}
     >
       <div className="top-status">

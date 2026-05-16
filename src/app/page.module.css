@@ -1726,6 +1726,11 @@
 
 /* モバイル縦画面：観察モード（高度な操作機能を隠して観察に集中させる） */
 @media (max-width: 520px) and (orientation: portrait) {
+  /* 右上の status バー（シード／マップ／turn/s／実倍率）を非表示
+     観察に集中させ、ヘッダーの縦積みを防ぐ */
+  :global(.top-status) {
+    display: none !important;
+  }
   /* マップ操作モード（⚡☄🌵🌸）を非表示 */
   :global(.map-bar .mini-btn) {
     display: none;
