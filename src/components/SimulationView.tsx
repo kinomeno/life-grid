@@ -248,13 +248,16 @@ export default function SimulationView({
         acc += (dt / 1000) * targetTps;
         let requestedSteps = Math.floor(acc);
         acc -= requestedSteps;
-        // v1.02: x1 速度はフレーム落ち時の「複数ターン一気送り」を抑制し、
-        // ターン表示が 1,2,3,... と必ず連続するように 1 フレーム = 最大 1 ステップに制限。
-        // 落ちた分は実 TPS の低下（実倍率表示で確認可）として現れる。
-        if (s === 1 && requestedSteps > 1) {
-          acc += requestedSteps - 1; // 余分は次フレームに繰り越す（ただし 1 に制限）
-          requestedSteps = 1;
-          if (acc > 1) acc = 1; // 累積し過ぎ防止
+        // v1.02: x1 速度ではターン表示が 1,2,3,... と等間隔（250ms ごと）に
+        // 進むよう、1 フレーム = 最大 1 ステップに制限し、フレーム落ち時の
+        // 「キャッチアップ」（繰越による複数ターン連続実行）も完全に防ぐ。
+        //   - ステップが入った場合は acc を 0 にリセットして次の 250ms を待つ
+        //   - これにより実 TPS は targetTps を超えないが、観察体験は安定
+        if (s === 1) {
+          if (requestedSteps > 0) {
+            requestedSteps = 1;
+            acc = 0;
+          }
         }
         if (requestedSteps > 0) {
           const frameStart = performance.now();
