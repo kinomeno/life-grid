@@ -174,21 +174,24 @@ function interp(prev: number, cur: number, phase: number, size: number): number 
 }
 
 /**
- * 個体の形状を決定する（0〜100 スケール）。
- * ■（四角）は強さ MAX (=100) ちょうどの個体のみ。極めて稀少な「強さの到達」表現。
- * ▲（三角）は知能 75 以上で思考型の特徴を獲得した個体。
- *  - strength == 100 && intelligence >= 75 → star（賢く最強：極めて稀少）
- *  - strength == 100                       → square（強さの極致）
- *  - intelligence >= 75                    → triangle（思考型）
- *  - その他                                 → circle（通常）
+ * 個体の形状を決定する。
+ * v1.01 で上限が 999 に拡張されたため、しきい値も再定義：
+ *  - strength >= 100 && intelligence >= 100 → star（賢く強い「ミュータント」、極めて稀少）
+ *  - strength  >= 100                       → square（強さのミュータント）
+ *  - intelligence >= 75                     → triangle（思考型、現状の知能上限近く）
+ *  - その他                                  → circle（通常）
+ *
+ * 注：strength=100 は v1.00 までは「上限」だったが、v1.01 では「ミュータント開始点」。
+ *     形状ボーナスは「100 超」の希少性を表す視覚キューとして残す。
  */
 type LifeShape = "circle" | "square" | "triangle" | "star";
 function getLifeShape(life: Life): LifeShape {
   const g = life.genes;
-  const maxStrong = g.strength >= 100;
+  const mutantStrong = g.strength >= 100;
+  const smartMutant = g.intelligence >= 100;
   const smart = g.intelligence >= 75;
-  if (maxStrong && smart) return "star";
-  if (maxStrong) return "square";
+  if (mutantStrong && smartMutant) return "star";
+  if (mutantStrong) return "square";
   if (smart) return "triangle";
   return "circle";
 }

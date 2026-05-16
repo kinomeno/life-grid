@@ -3,10 +3,15 @@ import {
   COMBAT_ENERGY_LOSS_RATIO,
   COST_BASE,
   COST_INTELLIGENCE,
+  COST_INTELLIGENCE_EXP,
   COST_SIZE,
   COST_SPEED_PER_STEP,
   COST_STRENGTH,
+  COST_STRENGTH_EXP,
   COST_VISION,
+  GENE_INTELLIGENCE_NORMAL_CAP,
+  GENE_REPRODUCTION_NORMAL_CAP,
+  GENE_STRENGTH_NORMAL_CAP,
   ENERGY_DIFFUSION,
   ENERGY_INITIAL_MEAN,
   ENERGY_INITIAL_VARIANCE,
@@ -257,10 +262,10 @@ function randomGenes(rng: RNG): Genes {
     vision: randomInt(rng, GENE_VISION_MIN, GENE_VISION_MAX + 1),
     speed: randomInt(rng, GENE_SPEED_MIN, GENE_SPEED_MAX + 1),
     size: randomRange(rng, GENE_SIZE_MIN, GENE_SIZE_MAX),
-    // 強さは整数 1〜100
-    strength: randomInt(rng, GENE_STRENGTH_MIN, GENE_STRENGTH_MAX + 1),
-    intelligence: randomInt(rng, GENE_INTELLIGENCE_MIN, GENE_INTELLIGENCE_MAX + 1),
-    reproductionRate: randomRange(rng, GENE_REPRODUCTION_MIN, GENE_REPRODUCTION_MAX),
+    // v1.01: 初期分布は通常レンジ（1〜100）のみ。突然変異で 100 超に達する。
+    strength: randomInt(rng, GENE_STRENGTH_MIN, GENE_STRENGTH_NORMAL_CAP + 1),
+    intelligence: randomInt(rng, GENE_INTELLIGENCE_MIN, GENE_INTELLIGENCE_NORMAL_CAP + 1),
+    reproductionRate: randomRange(rng, GENE_REPRODUCTION_MIN, GENE_REPRODUCTION_NORMAL_CAP),
     mutationRate: randomRange(rng, GENE_MUTATION_MIN, GENE_MUTATION_MAX),
     lifespan: randomRange(rng, GENE_LIFESPAN_MIN, GENE_LIFESPAN_MAX),
   };
@@ -269,6 +274,9 @@ function randomGenes(rng: RNG): Genes {
 export function mutatGenes(parentGenes: Genes, mutationRate: number, rng: RNG): Genes {
   const genes = { ...parentGenes };
   // factor は変動幅 = (max-min) * factor。既定 0.3 = 範囲の 30% まで変動。
+  // v1.01: ジャンプ変異 — 突然変異発生時、5% の確率で 8〜15 倍の大変動が起きる。
+  // これにより、強さ・知能・繁殖率で 100 を超える「ミュータント個体」が
+  // 数百〜数千世代に 1 度、自然に現れる。ほとんどは即死するが観察として面白い。
   const mutate = (
     gene: number,
     min: number,
@@ -276,7 +284,13 @@ export function mutatGenes(parentGenes: Genes, mutationRate: number, rng: RNG): 
     factor = 0.3
   ): number => {
     if (rng() < mutationRate) {
-      const variation = (rng() - 0.5) * 2 * (max - min) * factor;
+      let variation = (rng() - 0.5) * 2 * (max - min) * factor;
+      if (rng() < 0.15) {
+        // ジャンプ変異：通常変動の 10〜20 倍。
+        // 平均 100 以下に淘汰される設計（tier2 線形 1.0）でも、
+        // 数百ターンに 1 度はミュータントが観察できる頻度を確保する。
+        variation *= 10 + rng() * 10;
+      }
       return clamp(gene + variation, min, max);
     }
     return gene;
@@ -285,25 +299,32 @@ export function mutatGenes(parentGenes: Genes, mutationRate: number, rng: RNG): 
   genes.g = Math.round(mutate(genes.g, 0, 255));
   genes.b = Math.round(mutate(genes.b, 0, 255));
   genes.vision = Math.round(mutate(genes.vision, GENE_VISION_MIN, GENE_VISION_MAX));
-  // 速度（1〜100）：知能と同様に小刻みな変動（±3）にする
+  // 速度（1〜100）：小刻みな変動（±3）
   genes.speed = Math.round(
     mutate(genes.speed, GENE_SPEED_MIN, GENE_SPEED_MAX, 0.03)
   );
   genes.size = mutate(genes.size, GENE_SIZE_MIN, GENE_SIZE_MAX);
-  // 強さ（1〜100）：細分化のため小刻みな変動（±3）にする
+  // v1.01: 強さ（1〜999）：通常変異は ±3 相当（factor 0.003 で範囲 998 に対し ±3）
+  // 100 超のミュータントは稀に発生 → 数世代以内に死亡する設計
   genes.strength = Math.round(
-    mutate(genes.strength, GENE_STRENGTH_MIN, GENE_STRENGTH_MAX, 0.03)
+    mutate(genes.strength, GENE_STRENGTH_MIN, GENE_STRENGTH_MAX, 0.003)
   );
-  // 知能は連続スケール 0〜100 のため変動を細かく（factor 0.03 → ±3）
+  // v1.01: 知能（0〜999）：同じく ±3 相当
   genes.intelligence = Math.round(
     mutate(
       genes.intelligence,
       GENE_INTELLIGENCE_MIN,
       GENE_INTELLIGENCE_MAX,
-      0.03
+      0.003
     )
   );
-  genes.reproductionRate = mutate(genes.reproductionRate, GENE_REPRODUCTION_MIN, GENE_REPRODUCTION_MAX);
+  // v1.01: 繁殖率（0.1〜2.0）：factor 0.05 で範囲 1.9 に対し ±0.095
+  genes.reproductionRate = mutate(
+    genes.reproductionRate,
+    GENE_REPRODUCTION_MIN,
+    GENE_REPRODUCTION_MAX,
+    0.05
+  );
   genes.mutationRate = mutate(genes.mutationRate, GENE_MUTATION_MIN, GENE_MUTATION_MAX);
   genes.lifespan = mutate(genes.lifespan, GENE_LIFESPAN_MIN, GENE_LIFESPAN_MAX);
   return genes;
@@ -311,6 +332,34 @@ export function mutatGenes(parentGenes: Genes, mutationRate: number, rng: RNG): 
 
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
+}
+
+/**
+ * v1.01: 強さ・知能の維持コスト。単一の滑らかな非線形カーブ（^2.0）。
+ * 「最大値で即死」のような硬い設計をやめ、コスト関数だけで「自然な生存可能値」が
+ * 進化過程で決まるようにする。確率戦闘も廃止して、戦闘優位もコスト負担も
+ * すべて連続変数として作用する。
+ *
+ *  目安（base = COST_STRENGTH = 0.0007）:
+ *    v =  20 :   0.28
+ *    v =  50 :   1.75
+ *    v = 100 :   7.0    （以前の倍）
+ *    v = 150 :  15.75
+ *    v = 200 :  28.0    （数十ターンで死亡レベル）
+ *    v = 300 :  63.0    （短命）
+ *    v = 500 : 175.0    （超短命）
+ *    v = 700 : 343.0    （ほぼ即死）
+ *    v = 999 : 698.6    （即死、エネルギーキャパを大幅超過）
+ *
+ * 平均的個体のエネルギーキャパ（size）は 60〜140 程度なので、
+ *  - 強さ 100 程度までは安定に維持可能
+ *  - 強さ 150 程度はエネルギー豊かな環境でのみ生存
+ *  - 強さ 200 超は短命確定
+ *  - 強さ 500 超は実質即死
+ */
+function nonlinearGeneCost(v: number, base: number, exponent: number): number {
+  if (v <= 0) return 0;
+  return base * Math.pow(v, exponent);
 }
 
 function wrapDelta(d: number, size: number): number {
@@ -1158,11 +1207,15 @@ function actLife(world: World, life: Life): void {
   energy[idx] = available - absorb;
   life.energy += absorb;
 
-  // 強さ・知能ともに非線形コスト（^1.8）。
-  //   strength 100:    係数 * 3981
-  //   intelligence 100:係数 * 3981
-  const strengthCost = COST_STRENGTH * Math.pow(g.strength, 1.8);
-  const intelligenceCost = COST_INTELLIGENCE * Math.pow(g.intelligence, 1.8);
+  // v1.01: 強さ・知能でコスト指数を別々に持たせる。
+  // 強さ ^2.0（戦闘優位が直接効くため厳しめ）、知能 ^1.85（間接効果なので緩め）。
+  // 戦闘は決定論。バランスは指数差で取る。
+  const strengthCost = nonlinearGeneCost(g.strength, COST_STRENGTH, COST_STRENGTH_EXP);
+  const intelligenceCost = nonlinearGeneCost(
+    g.intelligence,
+    COST_INTELLIGENCE,
+    COST_INTELLIGENCE_EXP
+  );
   const upkeep =
     COST_BASE +
     COST_VISION * g.vision +
@@ -1229,8 +1282,11 @@ function findBestNeighborCell(
 ): { x: number; y: number } {
   const { width, height, energy, occupancy } = world;
   const g = life.genes;
-  const intel = Math.max(0, Math.min(100, g.intelligence));
-  const scanRate = intel / 100;
+  // v1.01: 知能上限 999 に対応。100 でのクランプを廃止し、100 超のミュータントが
+  // 行動上のメリットも得られるようにする（avoidWeight / bodyWeight は線形伸長）。
+  // scanRate（視野評価率）だけは確率なので 1.0 で飽和させる。
+  const intel = Math.max(0, g.intelligence);
+  const scanRate = Math.min(1.0, intel / 100);
   const avoidWeight = Math.max(0, (intel - 20) / 80);
   const bodyWeight = Math.max(0, (intel - 70) / 30);
 
@@ -1330,7 +1386,8 @@ export type BehaviorMode =
 export function getBehaviorMode(world: World, life: Life): BehaviorMode {
   if (!life.alive) return "normal";
   const g = life.genes;
-  const intel = Math.max(0, Math.min(100, g.intelligence));
+  // v1.01: 100 クランプ廃止（知能 100 超でも bodyWeight が伸び続ける）
+  const intel = Math.max(0, g.intelligence);
   if (intel <= 0) return "random";
   const bodyWeight = Math.max(0, (intel - 70) / 30);
   if (bodyWeight <= 0) return "normal";
@@ -1531,15 +1588,9 @@ function handleCombat(world: World, life: Life): void {
     const effectiveAtk = life.genes.strength;
     const effectiveDef = opponent.genes.strength + opponent.genes.size * 0.05;
     if (effectiveAtk > effectiveDef) {
-      // 確率戦闘：差分が大きいほど確実勝利。
-      //   diff 0:    0%（試行成立せず）
-      //   diff 4:   50%
-      //   diff 8+: 95%（上限）
-      const diff = effectiveAtk - effectiveDef;
-      const killChance = Math.min(0.95, Math.max(0, diff / 8));
-      if (Math.random() >= killChance) {
-        continue; // 攻撃失敗
-      }
+      // v1.01: 確率戦闘を廃止し決定論に。強さの差は実効値として直接勝敗を決め、
+      // バランスはコスト関数（^2.0）側で取る。
+      // 強さを伸ばすと戦闘で確実に勝てるが、維持コストが指数的に重くなる。
       const era = currentEra(world);
       const lootEnergy =
         opponent.energy *

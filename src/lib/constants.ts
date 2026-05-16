@@ -16,17 +16,20 @@ export const GENE_SPEED_MIN = 1;
 export const GENE_SPEED_MAX = 100;
 export const GENE_SIZE_MIN = 60;
 export const GENE_SIZE_MAX = 140;
-// 強さは 1〜100 の連続スケール。コストは非線形（高強さほど急増）。
+// v1.01: 強さは 1〜999 の連続スケール。
+// 0〜100 が通常レンジ、100〜300 が困難（ミュータント）、300〜500 が短命確定、500〜999 がほぼ即死。
 export const GENE_STRENGTH_MIN = 1;
-export const GENE_STRENGTH_MAX = 100;
+export const GENE_STRENGTH_MAX = 999;
+// 観察 UI で「通常」と呼ぶしきい値（≦ ここまでは安定して生存可能）
+export const GENE_STRENGTH_NORMAL_CAP = 100;
 export const GENE_INTELLIGENCE_MIN = 0;
-// 知能は 0〜100 の連続スケール（整数）。
-//  - scanRate    = intelligence / 100
-//  - avoidWeight = max(0, (intelligence - 20) / 80)
-//  - bodyWeight  = max(0, (intelligence - 70) / 30)
-export const GENE_INTELLIGENCE_MAX = 100;
+// v1.01: 知能は 0〜999 の連続スケール。100 超は維持コストが指数的に増加。
+export const GENE_INTELLIGENCE_MAX = 999;
+export const GENE_INTELLIGENCE_NORMAL_CAP = 100;
+// v1.01: 繁殖率は 0.1〜2.0 に拡張。0.4 超では分裂エネルギーコストが急増。
 export const GENE_REPRODUCTION_MIN = 0.1;
-export const GENE_REPRODUCTION_MAX = 0.4;
+export const GENE_REPRODUCTION_MAX = 2.0;
+export const GENE_REPRODUCTION_NORMAL_CAP = 0.4;
 export const GENE_MUTATION_MIN = 0.04;
 export const GENE_MUTATION_MAX = 0.12;
 export const GENE_LIFESPAN_MIN = 200;
@@ -37,19 +40,31 @@ export const INITIAL_ENERGY_RATIO = 0.4;
 export const COST_BASE = 0.25;
 export const COST_VISION = 0.15;
 export const COST_SPEED_PER_STEP = 0.25;
-// 強さコスト：^1.8 を維持し、戦闘報酬側（COMBAT_ENERGY_LOSS_RATIO）で MAX 張り付きを抑える方針。
-//  - 強さ 20:  0.15
-//  - 強さ 50:  0.80
-//  - 強さ 80:  1.85
-//  - 強さ 100: 2.79
+// v1.01: 強さ・知能のコスト指数を別々に持たせる。
+// 強さ ^2.0（戦闘優位が強いため厳しめ）
+// 知能 ^1.85（間接効果なので緩め、100 超の天才個体が稀に出るように）
+export const COST_STRENGTH_EXP = 2.0;
+export const COST_INTELLIGENCE_EXP = 1.85;
+
+// v1.01: 強さ・知能ともに単一の滑らかなカーブ（base * v^EXP）で維持コストを計算。
+// 段階分けや「100 超を強制ペナルティ」のようなロジックは廃止し、
+// 「自然な形で生存可能値が決まる」設計にしている。
+//
+// 目安（strength: base=0.0007 * v^2.0）:
+//   v =  50 :   1.75
+//   v = 100 :   7.0
+//   v = 150 :  15.75
+//   v = 200 :  28.0   （数十ターンで死亡）
+//   v = 300 :  63.0   （短命）
+//   v = 500 : 175.0   （超短命）
+//   v = 999 : 698.6   （即死）
+//
+// 目安（intelligence: base=0.0005 * v^1.85）:
+//   v = 100 :   3.54
+//   v = 200 :  ~12.6
+//   v = 500 :  ~70
+//   v = 999 :  ~265
 export const COST_STRENGTH = 0.0007;
-// 知能コストも非線形：COST_INTELLIGENCE * intelligence^1.8
-//  - 知能 20:  0.11
-//  - 知能 50:  0.57
-//  - 知能 80:  1.32
-//  - 知能 100: 1.99
-// 確率戦闘導入後、知能の survival 価値が上がり MAX 化する傾向あり。
-// 0.0004 → 0.0005 へ微増して平均を 60〜70 程度に抑える。
 export const COST_INTELLIGENCE = 0.0005;
 export const COST_SIZE = 0.005;
 

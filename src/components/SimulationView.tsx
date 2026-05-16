@@ -1216,15 +1216,21 @@ export default function SimulationView({
                   />
                   <InfoRow
                     label={t("info.strength")}
-                    value={selectedLife.genes.strength.toFixed(0)}
+                    value={`${selectedLife.genes.strength.toFixed(0)} / 999${
+                      selectedLife.genes.strength > 100 ? "  ⚠" : ""
+                    }`}
                   />
                   <InfoRow
                     label={t("info.intelligence")}
-                    value={selectedLife.genes.intelligence}
+                    value={`${selectedLife.genes.intelligence} / 999${
+                      selectedLife.genes.intelligence > 100 ? "  ⚠" : ""
+                    }`}
                   />
                   <InfoRow
                     label={t("info.reproduction_rate")}
-                    value={selectedLife.genes.reproductionRate.toFixed(2)}
+                    value={`${selectedLife.genes.reproductionRate.toFixed(2)} / 2.00${
+                      selectedLife.genes.reproductionRate > 0.4 ? "  ⚠" : ""
+                    }`}
                   />
                   <InfoRow
                     label={t("info.mutation_rate")}
