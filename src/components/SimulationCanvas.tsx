@@ -11,6 +11,8 @@ type Props = {
   /** 移動補間フェーズ（0=直前位置, 1=現在位置）。未指定なら 1。 */
   animPhase?: number;
   selectedLifeId?: number | null;
+  /** v1.02: 選択生命の最近の移動座標列（古い順、最大 60 点）。空配列なら描画しない。 */
+  selectedLifePath?: { x: number; y: number }[];
   trackedSpeciesId?: string | null;
   onCellClick?: (x: number, y: number) => void;
   /** マウスホバー位置をワールド座標で通知。y=null なら離脱。px/py は viewport 内の px。 */
@@ -23,6 +25,7 @@ export default function SimulationCanvas({
   version,
   animPhase = 1,
   selectedLifeId = null,
+  selectedLifePath = [],
   trackedSpeciesId = null,
   onCellClick,
   onCellHover,
@@ -64,11 +67,20 @@ export default function SimulationCanvas({
     }
 
     drawEnergyField(ctx, world, cellSize, off, imgRef.current);
+    drawSelectedPath(ctx, selectedLifePath, cellSize);
     drawLives(ctx, world, cellSize, trackedSpeciesId, selectedLifeId, animPhase);
     drawCombatFlashes(ctx, world, cellSize, animPhase);
     drawCataclysm(ctx, world, cellSize);
     drawBirthFlashes(ctx, world, cellSize);
-  }, [world, cellSize, version, animPhase, selectedLifeId, trackedSpeciesId]);
+  }, [
+    world,
+    cellSize,
+    version,
+    animPhase,
+    selectedLifeId,
+    selectedLifePath,
+    trackedSpeciesId,
+  ]);
 
   function handleClick(e: React.MouseEvent<HTMLCanvasElement>) {
     if (!onCellClick) return;
@@ -113,6 +125,42 @@ export default function SimulationCanvas({
       style={{ cursor: onCellClick ? "crosshair" : "default" }}
     />
   );
+}
+
+/**
+ * v1.02: 選択中の生命の移動軌跡を薄い線で描画する。
+ * 古い点ほど透明度が高い（消えていく）。トーラス境界をまたぐセグメントは描画しない。
+ */
+function drawSelectedPath(
+  ctx: CanvasRenderingContext2D,
+  path: { x: number; y: number }[],
+  cellSize: number
+) {
+  if (!path || path.length < 2) return;
+  const half = cellSize / 2;
+  ctx.save();
+  ctx.lineWidth = Math.max(1, cellSize * 0.18);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const n = path.length;
+  // セグメントごとに透明度を変える（古いほど薄い）
+  for (let i = 1; i < n; i++) {
+    const p0 = path[i - 1];
+    const p1 = path[i];
+    // トーラス境界跨ぎ（隣接 1 マスじゃない大ジャンプ）は描画しない
+    const dx = Math.abs(p1.x - p0.x);
+    const dy = Math.abs(p1.y - p0.y);
+    if (dx > 1 || dy > 1) continue;
+    // 古いほど透明、新しいほど濃い。範囲 0.08〜0.55
+    const t = i / (n - 1);
+    const alpha = 0.08 + t * 0.47;
+    ctx.strokeStyle = `rgba(40, 40, 40, ${alpha.toFixed(3)})`;
+    ctx.beginPath();
+    ctx.moveTo(p0.x * cellSize + half, p0.y * cellSize + half);
+    ctx.lineTo(p1.x * cellSize + half, p1.y * cellSize + half);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawEnergyField(

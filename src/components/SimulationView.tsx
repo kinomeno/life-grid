@@ -587,6 +587,16 @@ export default function SimulationView({
   const [zoom, setZoom] = useState(1.0);
   const viewportRef = useRef<HTMLDivElement | null>(null);
 
+  // v1.02: マップ全画面モード。HUD（パネル・ヘッダー・下部ボタン）を一時的に隠す。
+  // F キーまたは右上ボタンでトグル、ESC で解除。
+  const [fullscreenMap, setFullscreenMap] = useState(false);
+
+  // v1.02: 選択中の生命の移動軌跡。最近 60 ターンの座標を保持。
+  // SimulationCanvas で薄い線として描画される。選択切替・死亡でリセット。
+  const [selectedLifePath, setSelectedLifePath] = useState<
+    { x: number; y: number }[]
+  >([]);
+
   /**
    * ズーム時の中心点を計算する。
    * 生命選択中なら生命位置（補間済）、未選択ならマップ中央。
@@ -674,14 +684,26 @@ export default function SimulationView({
   // スペースバーで再生／一時停止
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== "Space") return;
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      // モーダル内のフォーカス時もスキップ
       if ((e.target as HTMLElement | null)?.isContentEditable) return;
-      e.preventDefault();
-      const cur = speedRef.current;
-      setSpeed(cur === 0 ? 1 : 0);
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        const cur = speedRef.current;
+        setSpeed(cur === 0 ? 1 : 0);
+        return;
+      }
+      // v1.02: F キーでマップ全画面トグル、ESC で解除
+      if (e.code === "KeyF" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setFullscreenMap((v) => !v);
+        return;
+      }
+      if (e.code === "Escape") {
+        setFullscreenMap(false);
+        return;
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -692,6 +714,26 @@ export default function SimulationView({
   const lastStepAtRef = useRef(performance.now());
   const stepDurationMsRef = useRef(250); // ×1 既定
   const [animPhase, setAnimPhase] = useState(1);
+
+  // v1.02: 選択生命が変わったら移動軌跡をリセット
+  useEffect(() => {
+    setSelectedLifePath([]);
+  }, [selectedLifeId]);
+
+  // v1.02: ターン進行で選択生命の現在位置を移動軌跡に追加
+  useEffect(() => {
+    if (selectedLifeId == null) return;
+    const w = worldRef.current;
+    if (!w) return;
+    const life = w.lives.find((l) => l.id === selectedLifeId && l.alive);
+    if (!life) return;
+    setSelectedLifePath((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && last.x === life.x && last.y === life.y) return prev;
+      const next = [...prev, { x: life.x, y: life.y }];
+      return next.length > 60 ? next.slice(next.length - 60) : next;
+    });
+  }, [stats.turn, selectedLifeId]);
 
   // ズーム > 1 ＋ 生命選択中：選択生命を viewport の中心に追従させる
   useEffect(() => {
@@ -725,7 +767,7 @@ export default function SimulationView({
   return (
     <>
     <div
-      className="sim-root"
+      className={`sim-root${fullscreenMap ? " sim-fullscreen" : ""}`}
       style={{
         // 中央列幅をマップサイズ＋枠ぶん（padding+border）に固定。
         // ニュースの文字長に引きずられないようにするため。
@@ -1007,6 +1049,7 @@ export default function SimulationView({
                   version={version}
                   animPhase={animPhase}
                   selectedLifeId={selectedLifeId}
+                  selectedLifePath={selectedLifePath}
                   trackedSpeciesId={trackedSpeciesId}
                   onCellClick={handleCellClick}
                   onCellHover={handleCellHover}
@@ -1104,6 +1147,17 @@ export default function SimulationView({
             🌸
           </button>
           <div className="map-bar-spacer" />
+          {/* v1.02: マップ全画面トグル（F キーでも切替可） */}
+          <button
+            type="button"
+            className="mini-btn"
+            onClick={() => setFullscreenMap((v) => !v)}
+            title={fullscreenMap ? t("ctrl.exit_fullscreen") : t("ctrl.enter_fullscreen")}
+            aria-label={fullscreenMap ? t("ctrl.exit_fullscreen") : t("ctrl.enter_fullscreen")}
+            aria-pressed={fullscreenMap}
+          >
+            {fullscreenMap ? "⛶✕" : "⛶"}
+          </button>
           {/* ズーム */}
           <div className="zoom-mini">
             <button

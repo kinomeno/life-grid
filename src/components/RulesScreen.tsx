@@ -415,6 +415,13 @@ const SECTIONS_EN: Section[] = [
         lines: [
           "Color (R/G/B) / Vision / Speed / Size / Strength / Intelligence / Reproduction / Mutation / Lifespan.",
           "Higher traits cost more energy. Complete generalization is impossible.",
+          "",
+          "▼ v1.01: Strength & Intelligence cap raised to 999, Reproduction to 2.0",
+          "The normal range (Strength/Intelligence 0–100, Reproduction 0–0.4) is",
+          "sustainable. Mutant individuals beyond this range appear rarely from",
+          "mutations, gaining high ability at exponentially rising upkeep cost.",
+          "・Strength 100: ~7/turn, 200: ~28, 500: ~175 (lethal)",
+          "・The natural sustainable value is decided by the environment.",
         ],
       },
       {
@@ -492,13 +499,15 @@ const SECTIONS_EN: Section[] = [
       {
         lines: [
           "When lives come into contact, combat may occur.",
-          "Probabilistic combat with size as defense:",
+          "Deterministic combat with size as defense (v1.01: probabilistic combat removed):",
           "・Attack = your strength",
           "・Defense = opponent's strength + opponent's size × 0.05",
-          "・diff (atk − def): 0–4 low, 4–8 medium–high, 8+ near-certain (capped 95%)",
+          "・If Attack > Defense → attacker wins for certain",
           "Winner absorbs 60% of opponent's energy. Loser dies.",
           "Size 100 gives +5 defense, 140 gives +7.",
           "Big weak individuals can fend off small strong ones — strategy diversifies.",
+          "Strength can evolve up to 999, but upkeep cost rises exponentially,",
+          "so the actual sustainable value emerges naturally from the environment.",
         ],
       },
       {
