@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import { LocaleProvider } from "@/components/LocaleProvider";
 
@@ -58,6 +60,10 @@ export default function RootLayout({
     <html lang="ja">
       <body>
         <LocaleProvider>{children}</LocaleProvider>
+        {/* v1.02: Vercel Web Analytics（訪問者数・PV）と Speed Insights（Core Web Vitals）。
+            無料プラン（Hobby）で月 2,500 イベント分まで利用可能。 */}
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
