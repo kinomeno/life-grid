@@ -508,18 +508,47 @@ export default function SimulationView({
       }
 
       // 通常モード：個体選択
-      const idx = y * world.width + x;
-      const id = world.occupancy[idx];
-      if (id === -1) {
+      // v1.02: 移動補間中は描画位置と論理位置がズレるため、半径 1 セルまで許容して
+      // クリック位置に最も近い生命を選択する。範囲内に生命がいなければ選択解除。
+      let bestId = -1;
+      let bestDist = Infinity;
+      const r = 1;
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const nx = (x + dx + world.width) % world.width;
+          const ny = (y + dy + world.height) % world.height;
+          const idx = ny * world.width + nx;
+          const id = world.occupancy[idx];
+          if (id === -1) continue;
+          // 補間後の描画位置（prevX/Y → x/y）に動いている個体を優先
+          const life = world.livesById.get(id);
+          if (!life || !life.alive) continue;
+          // クリック点（x+0.5, y+0.5）と描画想定中心（life.x+0.5, life.y+0.5）の距離
+          let sdx = (life.x + 0.5) - (x + 0.5);
+          let sdy = (life.y + 0.5) - (y + 0.5);
+          // トーラス境界跨ぎ補正
+          if (sdx > world.width / 2) sdx -= world.width;
+          if (sdx < -world.width / 2) sdx += world.width;
+          if (sdy > world.height / 2) sdy -= world.height;
+          if (sdy < -world.height / 2) sdy += world.height;
+          const d = sdx * sdx + sdy * sdy;
+          if (d < bestDist) {
+            bestDist = d;
+            bestId = id;
+          }
+        }
+      }
+      if (bestId === -1) {
         setSelectedLifeId(null);
         return;
       }
-      setSelectedLifeId(id);
+      setSelectedLifeId(bestId);
     },
     [interactionMode]
   );
 
   // V2: マウスホバーで個体ポップアップを更新
+  // v1.02: クリック判定と同じく半径 1 セルまで許容（補間中の描画ズレ対策）
   const handleCellHover = useCallback(
     (x: number, y: number | null, px: number, py: number) => {
       if (y === null) {
@@ -528,18 +557,36 @@ export default function SimulationView({
       }
       const world = worldRef.current;
       if (!world) return;
-      const idx = y * world.width + x;
-      const id = world.occupancy[idx];
-      if (id === -1) {
+      let bestLife: typeof world.lives[number] | null = null;
+      let bestDist = Infinity;
+      const r = 1;
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const nx = (x + dx + world.width) % world.width;
+          const ny = (y + dy + world.height) % world.height;
+          const idx = ny * world.width + nx;
+          const id = world.occupancy[idx];
+          if (id === -1) continue;
+          const life = world.livesById.get(id);
+          if (!life || !life.alive) continue;
+          let sdx = (life.x + 0.5) - (x + 0.5);
+          let sdy = (life.y + 0.5) - (y + 0.5);
+          if (sdx > world.width / 2) sdx -= world.width;
+          if (sdx < -world.width / 2) sdx += world.width;
+          if (sdy > world.height / 2) sdy -= world.height;
+          if (sdy < -world.height / 2) sdy += world.height;
+          const d = sdx * sdx + sdy * sdy;
+          if (d < bestDist) {
+            bestDist = d;
+            bestLife = life;
+          }
+        }
+      }
+      if (!bestLife) {
         setHoverInfo(null);
         return;
       }
-      const life = world.livesById.get(id);
-      if (!life || !life.alive) {
-        setHoverInfo(null);
-        return;
-      }
-      setHoverInfo({ life, px, py });
+      setHoverInfo({ life: bestLife, px, py });
     },
     []
   );

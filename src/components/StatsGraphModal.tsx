@@ -94,6 +94,9 @@ type GeneSpec = {
   max: number;
   bins: number;
   pick: (l: Life) => number;
+  /** v1.02: true ならヒストグラムの max 軸を実データに応じて動的に伸縮する。
+   *  最低 100 まで表示、ミュータントが出現すれば自動的に軸が広がる。 */
+  dynamicScale?: boolean;
 };
 
 const GENES: GeneSpec[] = [
@@ -102,16 +105,18 @@ const GENES: GeneSpec[] = [
     tKey: "info.intelligence",
     min: GENE_INTELLIGENCE_MIN,
     max: GENE_INTELLIGENCE_MAX,
-    bins: 10,
+    bins: 16,
     pick: (l) => l.genes.intelligence,
+    dynamicScale: true,
   },
   {
     key: "strength",
     tKey: "info.strength",
     min: GENE_STRENGTH_MIN,
     max: GENE_STRENGTH_MAX,
-    bins: 14,
+    bins: 16,
     pick: (l) => l.genes.strength,
+    dynamicScale: true,
   },
   {
     key: "vision",
@@ -452,9 +457,24 @@ function drawHistogram(
   ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
   if (lives.length === 0) return;
 
+  // v1.02: dynamicScale なら実データの max に応じて軸を伸縮する
+  let effectiveMax = gene.max;
+  if (gene.dynamicScale) {
+    let observedMax = 0;
+    for (const l of lives) {
+      if (!l.alive) continue;
+      const v = gene.pick(l);
+      if (v > observedMax) observedMax = v;
+    }
+    // 最低 100 までは表示、それを超えるなら 50 単位で切り上げ
+    effectiveMax = Math.max(100, Math.ceil(observedMax / 50) * 50);
+    // gene.max（999 など）を絶対上限とする
+    if (effectiveMax > gene.max) effectiveMax = gene.max;
+  }
+
   // bin 集計
   const counts = new Array(gene.bins).fill(0) as number[];
-  const range = gene.max - gene.min;
+  const range = effectiveMax - gene.min;
   for (const l of lives) {
     if (!l.alive) continue;
     const v = gene.pick(l);
@@ -492,11 +512,11 @@ function drawHistogram(
   ctx.fillText(`${maxCount}`, padL - 4, padT + 6);
   ctx.fillText(`0`, padL - 4, padT + innerH);
 
-  // X軸ラベル（min, max）
+  // X軸ラベル（min, max）— effectiveMax を使う（dynamicScale なら実データに追随）
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
   const minLabel = formatVal(gene.min, gene.key);
-  const maxLabel = formatVal(gene.max, gene.key);
+  const maxLabel = formatVal(effectiveMax, gene.key);
   ctx.fillText(minLabel, padL, padT + innerH + 6);
   ctx.textAlign = "right";
   ctx.fillText(maxLabel, padL + innerW, padT + innerH + 6);
