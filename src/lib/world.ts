@@ -1,5 +1,7 @@
 import {
   ABSORB_RATE,
+  ACCURACY_FULL_INTEL,
+  BASE_MUTATION_RATE,
   COMBAT_ENERGY_LOSS_RATIO,
   COST_BASE,
   COST_INTELLIGENCE,
@@ -12,6 +14,12 @@ import {
   GENE_INTELLIGENCE_NORMAL_CAP,
   GENE_REPRODUCTION_NORMAL_CAP,
   GENE_STRENGTH_NORMAL_CAP,
+  GENE_WEIGHT_INIT_MEAN,
+  GENE_WEIGHT_INIT_RANGE,
+  GENE_WEIGHT_MAX,
+  GENE_WEIGHT_MIN,
+  VISION_DEPTH_BONUS_MAX,
+  VISION_DEPTH_INTEL_PER_BONUS,
   ENERGY_DIFFUSION,
   ENERGY_INITIAL_MEAN,
   ENERGY_INITIAL_VARIANCE,
@@ -81,7 +89,6 @@ export function defaultDisabledGenes(): DisabledGeneFlags {
     strength: false,
     intelligence: false,
     reproductionRate: false,
-    mutationRate: false,
     lifespan: false,
   };
 }
@@ -107,7 +114,6 @@ export function applyDisabledGenes(
   if (disabled.intelligence) out.intelligence = FIXED_GENE_VALUES.intelligence;
   if (disabled.reproductionRate)
     out.reproductionRate = FIXED_GENE_VALUES.reproductionRate;
-  if (disabled.mutationRate) out.mutationRate = FIXED_GENE_VALUES.mutationRate;
   if (disabled.lifespan) out.lifespan = FIXED_GENE_VALUES.lifespan;
   return out;
 }
@@ -158,6 +164,8 @@ export function createWorld(config: WorldConfig): World {
       genes,
       alive: true,
       moveAccum: 0,
+      dx: 0,
+      dy: 0,
     };
     lives.push(life);
     occupancy[idx] = life.id;
@@ -258,6 +266,16 @@ function wavePattern(
 }
 
 function randomGenes(rng: RNG): Genes {
+  // v1.10: 重み遺伝子の初期分布は中央値 50 ± 30（つまり 20〜80）。
+  // 極端な値（0 や 100）から始めないことで初期世代の挙動を安定させる。
+  const initW = () =>
+    Math.round(
+      randomRange(
+        rng,
+        GENE_WEIGHT_INIT_MEAN - GENE_WEIGHT_INIT_RANGE,
+        GENE_WEIGHT_INIT_MEAN + GENE_WEIGHT_INIT_RANGE
+      )
+    );
   return {
     r: randomInt(rng, 0, 256),
     g: randomInt(rng, 0, 256),
@@ -269,8 +287,15 @@ function randomGenes(rng: RNG): Genes {
     strength: randomInt(rng, GENE_STRENGTH_MIN, GENE_STRENGTH_NORMAL_CAP + 1),
     intelligence: randomInt(rng, GENE_INTELLIGENCE_MIN, GENE_INTELLIGENCE_NORMAL_CAP + 1),
     reproductionRate: randomRange(rng, GENE_REPRODUCTION_MIN, GENE_REPRODUCTION_NORMAL_CAP),
-    mutationRate: randomRange(rng, GENE_MUTATION_MIN, GENE_MUTATION_MAX),
     lifespan: randomRange(rng, GENE_LIFESPAN_MIN, GENE_LIFESPAN_MAX),
+    // v1.10: 行動判断の重み遺伝子（中央値 50 ± 30 から進化）
+    wAppetite: initW(),
+    wPredation: initW(),
+    wCaution: initW(),
+    wGregarious: initW(),
+    wLoyalty: initW(),
+    wRepro: initW(),
+    wStarvSensitive: initW(),
   };
 }
 
@@ -328,8 +353,16 @@ export function mutatGenes(parentGenes: Genes, mutationRate: number, rng: RNG): 
     GENE_REPRODUCTION_MAX,
     0.05
   );
-  genes.mutationRate = mutate(genes.mutationRate, GENE_MUTATION_MIN, GENE_MUTATION_MAX);
+  // v1.10: mutationRate 遺伝子は廃止（環境設定の倍率で制御）
   genes.lifespan = mutate(genes.lifespan, GENE_LIFESPAN_MIN, GENE_LIFESPAN_MAX);
+  // v1.10: 行動判断の重み遺伝子（factor 0.05 で範囲 100 に対し ±5）
+  genes.wAppetite = Math.round(mutate(genes.wAppetite, GENE_WEIGHT_MIN, GENE_WEIGHT_MAX, 0.05));
+  genes.wPredation = Math.round(mutate(genes.wPredation, GENE_WEIGHT_MIN, GENE_WEIGHT_MAX, 0.05));
+  genes.wCaution = Math.round(mutate(genes.wCaution, GENE_WEIGHT_MIN, GENE_WEIGHT_MAX, 0.05));
+  genes.wGregarious = Math.round(mutate(genes.wGregarious, GENE_WEIGHT_MIN, GENE_WEIGHT_MAX, 0.05));
+  genes.wLoyalty = Math.round(mutate(genes.wLoyalty, GENE_WEIGHT_MIN, GENE_WEIGHT_MAX, 0.05));
+  genes.wRepro = Math.round(mutate(genes.wRepro, GENE_WEIGHT_MIN, GENE_WEIGHT_MAX, 0.05));
+  genes.wStarvSensitive = Math.round(mutate(genes.wStarvSensitive, GENE_WEIGHT_MIN, GENE_WEIGHT_MAX, 0.05));
   return genes;
 }
 
@@ -1112,8 +1145,14 @@ function geneDist2(a: Genes, b: Genes): number {
   d += ((a.reproductionRate - b.reproductionRate) * 50) ** 2;
   // 寿命 200〜600 → そのまま比較すると支配的になるので 0.2 倍
   d += ((a.lifespan - b.lifespan) * 0.2) ** 2;
-  // 突然変異率 0.04〜0.12 は 1000 倍
-  d += ((a.mutationRate - b.mutationRate) * 1000) ** 2;
+  // v1.10: 重み遺伝子の差も遺伝子距離に含める（性格の近さを反映）
+  d += (a.wAppetite - b.wAppetite) ** 2;
+  d += (a.wPredation - b.wPredation) ** 2;
+  d += (a.wCaution - b.wCaution) ** 2;
+  d += (a.wGregarious - b.wGregarious) ** 2;
+  d += (a.wLoyalty - b.wLoyalty) ** 2;
+  d += (a.wRepro - b.wRepro) ** 2;
+  d += (a.wStarvSensitive - b.wStarvSensitive) ** 2;
   return d;
 }
 
@@ -1246,6 +1285,8 @@ function actLife(world: World, life: Life): void {
   const allowedSteps = Math.floor(life.moveAccum);
   life.moveAccum -= allowedSteps;
 
+  const startX = life.x;
+  const startY = life.y;
   const target = findBestNeighborCell(world, life);
   let steps = 0;
   while (steps < allowedSteps) {
@@ -1277,6 +1318,19 @@ function actLife(world: World, life: Life): void {
     life.y = ny;
     steps++;
     life.energy -= COST_SPEED_PER_STEP;
+  }
+  // v1.10: 今ターンの実移動を「向き」として記録（判断材料・描画用）。
+  // トーラス境界跨ぎを考慮して短い方の向きを採用。
+  if (steps > 0) {
+    let mdx = wrapDelta(life.x - startX, width);
+    let mdy = wrapDelta(life.y - startY, height);
+    // 単位ベクトル化（小さな値で十分）
+    life.dx = Math.sign(mdx);
+    life.dy = Math.sign(mdy);
+  } else {
+    // 静止：向きをリセット
+    life.dx = 0;
+    life.dy = 0;
   }
 
   const idx = life.y * width + life.x;
@@ -1341,24 +1395,31 @@ function actLife(world: World, life: Life): void {
 }
 
 /**
- * 知能（intelligence）に応じた連続スケールの行動決定。
+ * v1.10: 単層ニューラルネット風の連続スコア評価。
  *
- * 仕様（intelligence は 0〜100 の整数）：
- *  - scanRate    = intelligence / 100                  : 視野内セルの評価率
- *  - avoidWeight = max(0, (intelligence - 20) / 80)    : 敵回避の重み（20 から立ち上がる）
- *  - bodyWeight  = max(0, (intelligence - 70) / 30)    : 状況判断の有効度（70 から立ち上がる）
+ * 設計思想：
+ *  - ハードコードのモード切替（飢餓/逃走/繁殖/通常）を廃止
+ *  - 入力（観察事実）× 重み（遺伝子）の線形和で各セルを評価
+ *  - 知能は「重みが正確に反映される度合い（accuracy）」として作用
+ *  - 性格は遺伝子の組み合わせから創発する
  *
- * スコア合成式：
- *   score = energyScore × (1 + avoidWeight × 0.3)
- *         − threatScore × avoidWeight
- *         + modeBonus  × bodyWeight
- *         − distCost
+ * accuracy = min(1.0, sqrt(intel / 200))
+ *  - 知能 0   →  0% （完全ランダム）
+ *  - 知能 50  → 50%
+ *  - 知能 100 → 71%
+ *  - 知能 200 → 100% （重みが完全反映）
+ *  - 知能 200 超 → 視野深度ボーナス（広域認識）
  *
- * モード（bodyWeight > 0 のときのみ起動）：
- *  - 飢餓: energy < size×0.3       → 餌スコアを重視
- *  - 逃走: 自strength < 隣接敵     → 敵から離れる方向を評価
- *  - 繁殖: energy > size×0.8 etc.  → 空きセル評価ボーナス
- *  - 通常: 上記いずれでもない       → エネルギー優先 + 弱敵回避
+ * 入力特徴量（各セル）:
+ *  f_energy       : セルのエネルギー量 / 100
+ *  f_dist         : 距離コスト
+ *  f_prey         : 最近接の倒せる敵のエネルギー量
+ *  f_threat       : 最近接の倒せない敵の強さ
+ *  f_approach     : 倒せない敵が自分の方向に向かっているか
+ *  f_allyCount    : 視野内の仲間数（事前計算）
+ *  f_allyEnergy   : 仲間の平均エネルギー（事前計算）
+ *  f_empty        : 空きセル（繁殖可能性）
+ *  f_starvHunger  : 飢餓×食料の組み合わせ特徴
  */
 function findBestNeighborCell(
   world: World,
@@ -1366,45 +1427,92 @@ function findBestNeighborCell(
 ): { x: number; y: number } {
   const { width, height, energy, occupancy } = world;
   const g = life.genes;
-  // v1.01: 知能上限 999 に対応。100 でのクランプを廃止し、100 超のミュータントが
-  // 行動上のメリットも得られるようにする（avoidWeight / bodyWeight は線形伸長）。
-  // scanRate（視野評価率）だけは確率なので 1.0 で飽和させる。
   const intel = Math.max(0, g.intelligence);
-  const scanRate = Math.min(1.0, intel / 100);
-  const avoidWeight = Math.max(0, (intel - 20) / 80);
-  const bodyWeight = Math.max(0, (intel - 70) / 30);
 
   // 行動用 RNG（ターン × ライフID 由来で再現性維持）
   const rngSeed =
     ((world.turn + 1) * 2654435761) ^ ((life.id + 1) * 73856093);
   const rng = mulberry32(rngSeed >>> 0);
 
-  // 知能 0：ランダム行動（隣接 8 セルから空きセルを 1 つ選ぶ。なければ自身に留まる）
-  if (intel <= 0) {
+  // accuracy：知能の機能精度。0 なら完全ランダム
+  const accuracy = Math.min(1.0, Math.sqrt(intel / ACCURACY_FULL_INTEL));
+  if (accuracy === 0) {
     return randomNeighborOrStay(world, life, rng);
   }
 
-  // モード判定（bodyWeight > 0 のときのみ）
-  type Mode = "normal" | "starving" | "fleeing" | "breeding";
-  let mode: Mode = "normal";
-  if (bodyWeight > 0) {
-    if (life.energy < g.size * 0.3) {
-      mode = "starving";
-    } else if (hasNearStrongerEnemy(world, life)) {
-      mode = "fleeing";
-    } else if (
-      life.energy > g.size * 0.8 &&
-      life.age >= g.lifespan * MIN_REPRODUCTIVE_AGE_RATIO
-    ) {
-      mode = "breeding";
+  // 視野範囲：vision + 知能ボーナス（上限あり）
+  const visionBonus = Math.min(
+    VISION_DEPTH_BONUS_MAX,
+    Math.floor(intel / VISION_DEPTH_INTEL_PER_BONUS)
+  );
+  const depth = Math.max(1, g.vision + visionBonus);
+
+  // 自分の状態
+  const selfHunger = Math.max(0, Math.min(1, 1 - life.energy / g.size)); // 0=満腹, 1=空腹
+  const selfDef = g.strength + g.size * 0.05;
+
+  // 重み遺伝子（0〜100 → 0〜1 正規化）
+  const wA = g.wAppetite / 100;
+  const wP = g.wPredation / 100;
+  const wC = g.wCaution / 100;
+  const wG = g.wGregarious / 100;
+  const wL = g.wLoyalty / 100;
+  const wR = g.wRepro / 100;
+  const wS = g.wStarvSensitive / 100;
+
+  // 視野内の生命を事前スキャン（仲間集計 + 敵リスト）
+  let allyCount = 0;
+  let allyEnergySum = 0;
+  type VisibleEnemy = {
+    x: number;
+    y: number;
+    energy: number;
+    strength: number;
+    dx: number;
+    dy: number;
+    winnable: boolean;
+  };
+  const enemies: VisibleEnemy[] = [];
+  const livesById = world.livesById;
+  for (let dy = -depth; dy <= depth; dy++) {
+    for (let dx = -depth; dx <= depth; dx++) {
+      const dist = Math.abs(dx) + Math.abs(dy);
+      if (dist > depth) continue;
+      if (dx === 0 && dy === 0) continue;
+      const nx = (life.x + dx + width) % width;
+      const ny = (life.y + dy + height) % height;
+      const idx = ny * width + nx;
+      const occId = occupancy[idx];
+      if (occId === -1) continue;
+      const other = livesById.get(occId);
+      if (!other || !other.alive) continue;
+      if (other.speciesId === life.speciesId) {
+        // 仲間
+        allyCount++;
+        allyEnergySum += other.energy;
+      } else {
+        // 敵：倒せるかどうかを判定
+        const enemyDef = other.genes.strength + other.genes.size * 0.05;
+        const winnable = g.strength > enemyDef;
+        enemies.push({
+          x: nx,
+          y: ny,
+          energy: other.energy,
+          strength: other.genes.strength,
+          dx: other.dx,
+          dy: other.dy,
+          winnable,
+        });
+      }
     }
   }
+  const fAllyCount = Math.min(1.0, allyCount / 10);
+  const fAllyEnergy =
+    allyCount > 0
+      ? Math.min(1.0, allyEnergySum / allyCount / 100)
+      : 0;
 
-  const range = g.vision;
-  // 視野深度ボーナス：知能 25 ごとに +1 セル（0〜+4）
-  const intelDepthBonus = Math.floor(intel / 25);
-  const depth = Math.max(1, range + intelDepthBonus);
-
+  // 各セルのスコアを計算して最大を求める
   let bestX = life.x;
   let bestY = life.y;
   let bestScore = -Infinity;
@@ -1413,34 +1521,79 @@ function findBestNeighborCell(
     for (let dx = -depth; dx <= depth; dx++) {
       const dist = Math.abs(dx) + Math.abs(dy);
       if (dist > depth) continue;
-
-      // 視野サーチ率で間引き（自セル位置は必ず評価）
-      if ((dx !== 0 || dy !== 0) && rng() > scanRate) continue;
-
       const nx = (life.x + dx + width) % width;
       const ny = (life.y + dy + height) % height;
       const idx = ny * width + nx;
+      // 移動先は空きセル（自セルは例外）
       if (occupancy[idx] !== -1 && (dx !== 0 || dy !== 0)) continue;
 
-      const energyScore = energy[idx];
-      const distCost = dist * 0.5;
-      const threatScore =
-        avoidWeight > 0 ? nearbyThreatScore(world, nx, ny, life) : 0;
+      // === 入力特徴量 ===
+      const f_energy = energy[idx] / 100;
+      const f_dist = dist / Math.max(1, depth);
+      const f_empty = 1; // 既に空きセルしか通っていない
+      const f_starvHunger = f_energy * selfHunger;
 
-      let modeBonus = 0;
-      if (mode === "starving") {
-        modeBonus = energyScore * 0.8;
-      } else if (mode === "fleeing") {
-        modeBonus = dist * 1.5;
-      } else if (mode === "breeding") {
-        modeBonus = (depth - dist) * 0.3;
+      // 敵との関係（最も近い「倒せる敵」「倒せない敵」を探す）
+      let nearestPreyDist = Infinity;
+      let nearestPreyEnergy = 0;
+      let nearestThreatDist = Infinity;
+      let nearestThreatStrength = 0;
+      let nearestThreatApproach = 0;
+      for (const e of enemies) {
+        // セル (nx, ny) から敵 e への距離（トーラス考慮）
+        let edx = e.x - nx;
+        let edy = e.y - ny;
+        if (edx > width / 2) edx -= width;
+        if (edx < -width / 2) edx += width;
+        if (edy > height / 2) edy -= height;
+        if (edy < -height / 2) edy += height;
+        const eDist = Math.abs(edx) + Math.abs(edy);
+        if (e.winnable) {
+          if (eDist < nearestPreyDist) {
+            nearestPreyDist = eDist;
+            nearestPreyEnergy = e.energy;
+          }
+        } else {
+          if (eDist < nearestThreatDist) {
+            nearestThreatDist = eDist;
+            nearestThreatStrength = e.strength;
+            // 接近度：敵の (dx, dy) と自分から敵へのベクトルの内積
+            // 敵がこちらに向かってきている = (e.dx, e.dy) · (-edx, -edy) > 0
+            // 正規化（ベクトル長で割らないが、向きの方向性として使える）
+            const dot = -e.dx * edx + -e.dy * edy;
+            nearestThreatApproach = Math.max(-1, Math.min(1, dot / 2));
+          }
+        }
       }
+      // 距離を 0-1 に正規化（近いほど大）
+      const f_prey =
+        nearestPreyDist === Infinity
+          ? 0
+          : Math.max(0, 1 - nearestPreyDist / depth) *
+            Math.min(1.0, nearestPreyEnergy / 100);
+      const f_threat =
+        nearestThreatDist === Infinity
+          ? 0
+          : Math.max(0, 1 - nearestThreatDist / depth) *
+            Math.min(1.0, nearestThreatStrength / 999);
+      const f_approach =
+        nearestThreatDist === Infinity
+          ? 0
+          : Math.max(0, nearestThreatApproach);
 
-      const score =
-        energyScore * (1 + avoidWeight * 0.3) -
-        threatScore * avoidWeight -
-        distCost +
-        modeBonus * bodyWeight;
+      // === 重み × 特徴の線形和 ===
+      const weightedSum =
+        wA * f_energy +
+        wP * f_prey +
+        wC * -1 * (f_threat + 0.5 * f_approach) +
+        wG * fAllyCount +
+        wL * fAllyEnergy +
+        wR * f_empty * (f_empty > 0 ? 1 : 0) +
+        wS * f_starvHunger;
+
+      // accuracy で重み係数の有効度を制御。知能低い分はランダムノイズ
+      const noise = (1 - accuracy) * (rng() - 0.5) * 2; // -1〜+1
+      const score = accuracy * weightedSum + noise - 0.3 * f_dist;
 
       if (score > bestScore) {
         bestScore = score;
@@ -1454,36 +1607,50 @@ function findBestNeighborCell(
 
 /**
  * 個体の現在の行動モードを返す（UI 表示用）。
- *  - random   : 知能 0（ランダム移動）
- *  - normal   : 通常（餌＋弱敵回避）
- *  - starving : 飢餓
- *  - fleeing  : 逃走
- *  - breeding : 繁殖
+ *
+ * v1.10: ハードコードのモード切替（飢餓/逃走/繁殖）を廃止。
+ * 代わりに重み遺伝子から「性格タグ」を導出する。
+ *  - random  : 知能 0（完全ランダム）
+ *  - normal  : 通常範囲
+ *  - hunter  : wPredation 突出
+ *  - timid   : wCaution 突出
+ *  - glutton : wAppetite 突出
+ *  - social  : wGregarious 突出
+ *  - breeder : wRepro 突出
  */
 export type BehaviorMode =
   | "random"
   | "normal"
-  | "starving"
-  | "fleeing"
-  | "breeding";
+  | "hunter"
+  | "timid"
+  | "glutton"
+  | "social"
+  | "breeder";
 
 export function getBehaviorMode(world: World, life: Life): BehaviorMode {
   if (!life.alive) return "normal";
   const g = life.genes;
-  // v1.01: 100 クランプ廃止（知能 100 超でも bodyWeight が伸び続ける）
   const intel = Math.max(0, g.intelligence);
   if (intel <= 0) return "random";
-  const bodyWeight = Math.max(0, (intel - 70) / 30);
-  if (bodyWeight <= 0) return "normal";
-  if (life.energy < g.size * 0.3) return "starving";
-  if (hasNearStrongerEnemy(world, life)) return "fleeing";
-  if (
-    life.energy > g.size * 0.8 &&
-    life.age >= g.lifespan * MIN_REPRODUCTIVE_AGE_RATIO
-  ) {
-    return "breeding";
+
+  // 性格タグ：最も突出した重み遺伝子から判定。
+  // 70 以上で「突出」とみなす。
+  const weights: { mode: BehaviorMode; value: number }[] = [
+    { mode: "hunter", value: g.wPredation },
+    { mode: "timid", value: g.wCaution },
+    { mode: "glutton", value: g.wAppetite },
+    { mode: "social", value: g.wGregarious },
+    { mode: "breeder", value: g.wRepro },
+  ];
+  let topMode: BehaviorMode = "normal";
+  let topValue = 70; // しきい値
+  for (const w of weights) {
+    if (w.value > topValue) {
+      topValue = w.value;
+      topMode = w.mode;
+    }
   }
-  return "normal";
+  return topMode;
 }
 
 /** 隣接 8 セルからランダムな空きセルを返す。なければ自身位置。 */
@@ -1630,8 +1797,9 @@ function reproduceLife(
   childPos: { x: number; y: number }
 ): void {
   const rng = mulberry32((world.turn * 73856093) ^ (parent.id * 19349663) >>> 0);
+  // v1.10: 全個体共通の固定突然変異率 × 環境設定の倍率（0 設定で完全コピー）
   const effectiveMutationRate = clamp(
-    parent.genes.mutationRate * world.params.mutationRateMultiplier,
+    BASE_MUTATION_RATE * world.params.mutationRateMultiplier,
     0,
     1
   );
@@ -1655,6 +1823,9 @@ function reproduceLife(
     genes: childGenes,
     alive: true,
     moveAccum: 0,
+    // v1.10: 向きは初期 0（静止状態）
+    dx: 0,
+    dy: 0,
   };
   world.lives.push(childLife);
   world.livesById.set(childLife.id, childLife);

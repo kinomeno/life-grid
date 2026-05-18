@@ -1440,12 +1440,39 @@ export default function SimulationView({
                     }`}
                   />
                   <InfoRow
-                    label={t("info.mutation_rate")}
-                    value={selectedLife.genes.mutationRate.toFixed(3)}
-                  />
-                  <InfoRow
                     label={t("info.lifespan")}
                     value={selectedLife.genes.lifespan.toFixed(0)}
+                  />
+                </div>
+                {/* v1.10: 行動判断の重み遺伝子（性格） */}
+                <div className="info-grid-2 info-compact">
+                  <InfoRow
+                    label={t("info.w_appetite")}
+                    value={selectedLife.genes.wAppetite.toFixed(0)}
+                  />
+                  <InfoRow
+                    label={t("info.w_predation")}
+                    value={selectedLife.genes.wPredation.toFixed(0)}
+                  />
+                  <InfoRow
+                    label={t("info.w_caution")}
+                    value={selectedLife.genes.wCaution.toFixed(0)}
+                  />
+                  <InfoRow
+                    label={t("info.w_gregarious")}
+                    value={selectedLife.genes.wGregarious.toFixed(0)}
+                  />
+                  <InfoRow
+                    label={t("info.w_loyalty")}
+                    value={selectedLife.genes.wLoyalty.toFixed(0)}
+                  />
+                  <InfoRow
+                    label={t("info.w_repro")}
+                    value={selectedLife.genes.wRepro.toFixed(0)}
+                  />
+                  <InfoRow
+                    label={t("info.w_starv_sensitive")}
+                    value={selectedLife.genes.wStarvSensitive.toFixed(0)}
                   />
                 </div>
               </>
@@ -1935,7 +1962,6 @@ function allDisabledGenes(): DisabledGeneFlags {
     strength: true,
     intelligence: true,
     reproductionRate: true,
-    mutationRate: true,
     lifespan: true,
   };
 }
@@ -1948,7 +1974,6 @@ const GENE_TOGGLE_ITEMS: { key: keyof DisabledGeneFlags; tKey: string }[] = [
   { key: "strength", tKey: "gene.strength" },
   { key: "intelligence", tKey: "gene.intelligence" },
   { key: "reproductionRate", tKey: "gene.reproduction_rate" },
-  { key: "mutationRate", tKey: "gene.mutation_rate" },
   { key: "lifespan", tKey: "gene.lifespan" },
 ];
 

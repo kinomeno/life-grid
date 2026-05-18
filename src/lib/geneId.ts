@@ -2,8 +2,6 @@ import {
   GENE_INTELLIGENCE_MAX,
   GENE_LIFESPAN_MAX,
   GENE_LIFESPAN_MIN,
-  GENE_MUTATION_MAX,
-  GENE_MUTATION_MIN,
   GENE_REPRODUCTION_MAX,
   GENE_REPRODUCTION_MIN,
   GENE_SIZE_MAX,
@@ -14,25 +12,29 @@ import {
   GENE_STRENGTH_MIN,
   GENE_VISION_MAX,
   GENE_VISION_MIN,
+  GENE_WEIGHT_MAX,
+  GENE_WEIGHT_MIN,
 } from "./constants";
 import type { Genes } from "./types";
 
 /**
- * 11個の遺伝子を区切りなしの文字列に直列化する。
+ * v1.10: 遺伝子を区切りなしの文字列に直列化する。
  *
  * 各遺伝子を桁数固定にすることで、後でパースして元に戻せる。
- *  - r,g,b: 3桁 (000-255) = 9
- *  - vision: 1桁 (1-9)    = 1
- *  - speed: 3桁 (1-100)   = 3  (旧 0.39 以前の 1 桁 ID とは非互換)
- *  - size: 3桁 (000-999)  = 3
- *  - strength: 3桁 (1-100)= 3  (旧 0.39 以前の 2 桁 ID とは非互換)
- *  - intelligence: 3桁    = 3
- *  - reproductionRate: 2桁= 2
- *  - mutationRate: 3桁    = 3
- *  - lifespan: 4桁        = 4
- * 合計 31桁。
+ *  - r,g,b: 3桁 ×3                = 9
+ *  - vision: 1桁 (1-9)            = 1
+ *  - speed: 3桁 (001-100)         = 3
+ *  - size: 3桁 (060-140)          = 3
+ *  - strength: 3桁 (001-999)      = 3
+ *  - intelligence: 3桁 (000-999)  = 3
+ *  - reproductionRate: 3桁 (010-200, 100 倍値)= 3
+ *  - lifespan: 4桁                = 4
+ *  - wAppetite～wStarvSensitive: 1桁 ×7（10刻みで精度を犠牲に短縮） = 7
+ * 合計 36桁。
+ *
+ * v1.10 から mutationRate を廃止。重み遺伝子 7 つを追加した。
  */
-export const GENE_ID_LENGTH = 31;
+export const GENE_ID_LENGTH = 36;
 export function encodeGeneId(genes: Genes): string {
   const r = pad(genes.r, 3);
   const g = pad(genes.g, 3);
@@ -42,10 +44,17 @@ export function encodeGeneId(genes: Genes): string {
   const size = pad(Math.round(genes.size), 3);
   const strength = pad(Math.round(genes.strength), 3);
   const intel = pad(Math.round(genes.intelligence), 3);
-  const repro = pad(Math.round(genes.reproductionRate * 100), 2);
-  const mut = pad(Math.round(genes.mutationRate * 1000), 3);
+  const repro = pad(Math.round(genes.reproductionRate * 100), 3);
   const life = pad(Math.round(genes.lifespan), 4);
-  return `${r}${g}${b}${vision}${speed}${size}${strength}${intel}${repro}${mut}${life}`;
+  // 重み遺伝子は 0-100 を 0-9 にマッピング（10刻みで精度を犠牲）
+  const w1 = compressWeight(genes.wAppetite);
+  const w2 = compressWeight(genes.wPredation);
+  const w3 = compressWeight(genes.wCaution);
+  const w4 = compressWeight(genes.wGregarious);
+  const w5 = compressWeight(genes.wLoyalty);
+  const w6 = compressWeight(genes.wRepro);
+  const w7 = compressWeight(genes.wStarvSensitive);
+  return `${r}${g}${b}${vision}${speed}${size}${strength}${intel}${repro}${life}${w1}${w2}${w3}${w4}${w5}${w6}${w7}`;
 }
 
 /** ID を Genes に戻す。失敗時は null。 */
@@ -83,20 +92,22 @@ export function decodeGeneId(id: string): Genes | null {
     GENE_INTELLIGENCE_MAX
   );
   const reproductionRate = clamp(
-    parseInt(trimmed.slice(p, (p += 2)), 10) / 100,
+    parseInt(trimmed.slice(p, (p += 3)), 10) / 100,
     GENE_REPRODUCTION_MIN,
     GENE_REPRODUCTION_MAX
-  );
-  const mutationRate = clamp(
-    parseInt(trimmed.slice(p, (p += 3)), 10) / 1000,
-    GENE_MUTATION_MIN,
-    GENE_MUTATION_MAX
   );
   const lifespan = clamp(
     parseInt(trimmed.slice(p, (p += 4)), 10),
     GENE_LIFESPAN_MIN,
     GENE_LIFESPAN_MAX
   );
+  const wAppetite = decompressWeight(parseInt(trimmed.slice(p, (p += 1)), 10));
+  const wPredation = decompressWeight(parseInt(trimmed.slice(p, (p += 1)), 10));
+  const wCaution = decompressWeight(parseInt(trimmed.slice(p, (p += 1)), 10));
+  const wGregarious = decompressWeight(parseInt(trimmed.slice(p, (p += 1)), 10));
+  const wLoyalty = decompressWeight(parseInt(trimmed.slice(p, (p += 1)), 10));
+  const wRepro = decompressWeight(parseInt(trimmed.slice(p, (p += 1)), 10));
+  const wStarvSensitive = decompressWeight(parseInt(trimmed.slice(p, (p += 1)), 10));
   return {
     r,
     g,
@@ -107,8 +118,14 @@ export function decodeGeneId(id: string): Genes | null {
     strength,
     intelligence,
     reproductionRate,
-    mutationRate,
     lifespan,
+    wAppetite,
+    wPredation,
+    wCaution,
+    wGregarious,
+    wLoyalty,
+    wRepro,
+    wStarvSensitive,
   };
 }
 
@@ -124,4 +141,17 @@ function pad(n: number, len: number): string {
 
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
+}
+
+// 重み遺伝子（0-100）を 0-9 の 1 桁にマッピング
+function compressWeight(w: number): string {
+  const v = Math.max(GENE_WEIGHT_MIN, Math.min(GENE_WEIGHT_MAX, w));
+  return String(Math.min(9, Math.floor(v / 10)));
+}
+
+// 1 桁（0-9）を 0-100 の重み遺伝子に戻す（10刻みの中央値）
+function decompressWeight(d: number): number {
+  const v = Math.max(0, Math.min(9, d));
+  // 0→5, 1→15, ..., 9→95（中央値）
+  return v * 10 + 5;
 }

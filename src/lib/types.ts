@@ -8,8 +8,25 @@ export type Genes = {
   strength: number;
   intelligence: number;
   reproductionRate: number;
-  mutationRate: number;
+  // v1.10: mutationRate 遺伝子は廃止（環境設定の全体倍率のみで制御）
   lifespan: number;
+  // ──── v1.10: 行動判断の重み遺伝子（0〜100 連続スケール）────
+  // accuracy = min(1.0, sqrt(intel/200)) で精度がかかる。
+  // ハードコードのモード切替は廃止し、これらの重み × 観察特徴の線形和で行動が決まる。
+  /** セルのエネルギー量への引力（食欲） */
+  wAppetite: number;
+  /** 倒せる獲物のエネルギーへの引力（捕食欲） */
+  wPredation: number;
+  /** 倒せない敵への警戒（強さ・体格・速さ・向き）。マイナス係数として作用 */
+  wCaution: number;
+  /** 視野内の仲間数への引力（社交性） */
+  wGregarious: number;
+  /** 仲間のエネルギー量への引力（強者追従、v1.10 では正方向のみ） */
+  wLoyalty: number;
+  /** 繁殖機会（空きセル）への引力 */
+  wRepro: number;
+  /** 飢餓×食料の組み合わせ特徴への重み（飢餓時の食欲） */
+  wStarvSensitive: number;
 };
 
 export type Life = {
@@ -28,6 +45,9 @@ export type Life = {
   moveAccum: number;
   /** プレイヤーの保護フラグ：true なら戦闘・天変地異で死なない。 */
   protected?: boolean;
+  /** v1.10: 直前の移動方向（向き）。判断材料・描画用。 (0,0) は静止。 */
+  dx: number;
+  dy: number;
 };
 
 /** 日本語と英語の両方を保持するメッセージ。表示時にロケールで選択。 */
@@ -65,7 +85,7 @@ export type DisabledGeneFlags = {
   strength: boolean;
   intelligence: boolean;
   reproductionRate: boolean;
-  mutationRate: boolean;
+  // v1.10: mutationRate は遺伝子から廃止された（環境設定の倍率で制御）
   lifespan: boolean;
 };
 

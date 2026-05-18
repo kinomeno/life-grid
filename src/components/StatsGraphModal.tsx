@@ -158,14 +158,6 @@ const GENES: GeneSpec[] = [
     bins: 12,
     pick: (l) => l.genes.reproductionRate,
   },
-  {
-    key: "mutationRate",
-    tKey: "info.mutation_rate",
-    min: GENE_MUTATION_MIN,
-    max: GENE_MUTATION_MAX,
-    bins: 12,
-    pick: (l) => l.genes.mutationRate,
-  },
 ];
 
 type Tab = "timeseries" | "distribution";

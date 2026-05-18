@@ -30,10 +30,29 @@ export const GENE_INTELLIGENCE_NORMAL_CAP = 100;
 export const GENE_REPRODUCTION_MIN = 0.1;
 export const GENE_REPRODUCTION_MAX = 2.0;
 export const GENE_REPRODUCTION_NORMAL_CAP = 0.4;
+// v1.10: mutationRate 遺伝子は廃止。全個体共通の固定突然変異率を使う。
+// 環境設定の mutationRateMultiplier（0 まで設定可）で全体倍率を制御。
+export const BASE_MUTATION_RATE = 0.08;
+// 環境設定 UI の表示レンジ（参考値）
 export const GENE_MUTATION_MIN = 0.04;
 export const GENE_MUTATION_MAX = 0.12;
 export const GENE_LIFESPAN_MIN = 200;
 export const GENE_LIFESPAN_MAX = 600;
+
+// v1.10: 行動判断の重み遺伝子（0〜100 連続スケール）
+export const GENE_WEIGHT_MIN = 0;
+export const GENE_WEIGHT_MAX = 100;
+// 重み遺伝子の初期分布の中央値とばらつき
+export const GENE_WEIGHT_INIT_MEAN = 50;
+export const GENE_WEIGHT_INIT_RANGE = 30; // 中央値 ± 30 の範囲で初期化（20〜80）
+
+// v1.10: accuracy = min(1.0, sqrt(intel / ACCURACY_FULL_INTEL))
+// 200 で 100% 機能、それ以上は飽和。
+export const ACCURACY_FULL_INTEL = 200;
+// 視野深度ボーナス上限（パフォーマンス保護）
+export const VISION_DEPTH_BONUS_MAX = 7;
+// 視野深度ボーナスの傾き：知能 N ごとに +1
+export const VISION_DEPTH_INTEL_PER_BONUS = 50;
 
 export const INITIAL_ENERGY_RATIO = 0.4;
 
@@ -95,6 +114,13 @@ export const FIXED_GENE_VALUES = {
   strength: 50,
   intelligence: 50,
   reproductionRate: 0.25,
-  mutationRate: 0.08,
   lifespan: 400,
+  // v1.10: 重み遺伝子の中央値固定
+  wAppetite: 50,
+  wPredation: 50,
+  wCaution: 50,
+  wGregarious: 50,
+  wLoyalty: 50,
+  wRepro: 50,
+  wStarvSensitive: 50,
 } as const;
