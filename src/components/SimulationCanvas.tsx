@@ -399,35 +399,26 @@ function drawLives(
       ctx.strokeStyle = "rgba(220, 50, 50, 0.4)";
       ctx.stroke();
 
-      // v1.10: 選択中生命の向きを矢印で表示（dx, dy がある場合のみ）
-      if (sel.dx !== 0 || sel.dy !== 0) {
-        const arrowLen = Math.max(6, cellSize * 1.6);
-        const arrowTipX = cx + sel.dx * arrowLen;
-        const arrowTipY = cy + sel.dy * arrowLen;
-        ctx.strokeStyle = "rgba(50, 100, 220, 0.8)";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(arrowTipX, arrowTipY);
-        ctx.stroke();
-        // 矢じり
-        const headSize = arrowLen * 0.3;
-        // 進行方向の垂直ベクトル
-        const perpX = -sel.dy;
-        const perpY = sel.dx;
-        ctx.beginPath();
-        ctx.moveTo(arrowTipX, arrowTipY);
-        ctx.lineTo(
-          arrowTipX - sel.dx * headSize + perpX * headSize * 0.5,
-          arrowTipY - sel.dy * headSize + perpY * headSize * 0.5
-        );
-        ctx.moveTo(arrowTipX, arrowTipY);
-        ctx.lineTo(
-          arrowTipX - sel.dx * headSize - perpX * headSize * 0.5,
-          arrowTipY - sel.dy * headSize - perpY * headSize * 0.5
-        );
-        ctx.stroke();
-      }
+      // v1.10: 選択中生命の視野範囲を菱形（マンハッタン距離）で線表示。
+      // depth = vision + 知能ボーナス。低 accuracy 個体は vision-1 で処理されることに注意。
+      const intel = Math.max(0, sel.genes.intelligence);
+      const accuracy = Math.min(1.0, Math.sqrt(intel / 200));
+      const visionBonus = Math.min(7, Math.floor(intel / 50));
+      const effectiveVision =
+        accuracy < 0.5 ? Math.max(1, sel.genes.vision - 1) : sel.genes.vision;
+      const depth = Math.max(1, effectiveVision + visionBonus);
+      const visionRadiusPx = depth * cellSize;
+      ctx.strokeStyle = "rgba(50, 100, 220, 0.55)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - visionRadiusPx);
+      ctx.lineTo(cx + visionRadiusPx, cy);
+      ctx.lineTo(cx, cy + visionRadiusPx);
+      ctx.lineTo(cx - visionRadiusPx, cy);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
   }
 }
