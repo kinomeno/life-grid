@@ -47,8 +47,9 @@ export const GENE_WEIGHT_INIT_MEAN = 50;
 export const GENE_WEIGHT_INIT_RANGE = 30; // 中央値 ± 30 の範囲で初期化（20〜80）
 
 // v1.10: accuracy = min(1.0, sqrt(intel / ACCURACY_FULL_INTEL))
-// 200 で 100% 機能、それ以上は飽和。
-export const ACCURACY_FULL_INTEL = 200;
+// 150 で 100% 機能、それ以上は飽和（視野ボーナスのみ伸びる）
+// 200 だと通常進化範囲（〜100）での accuracy が低すぎたため 150 に下げた
+export const ACCURACY_FULL_INTEL = 150;
 // 視野深度ボーナス上限（パフォーマンス保護）
 export const VISION_DEPTH_BONUS_MAX = 7;
 // 視野深度ボーナスの傾き：知能 N ごとに +1
@@ -84,7 +85,8 @@ export const COST_INTELLIGENCE_EXP = 1.85;
 //   v = 500 :  ~70
 //   v = 999 :  ~265
 export const COST_STRENGTH = 0.0007;
-export const COST_INTELLIGENCE = 0.0005;
+// v1.10: 知能コストを 0.0005 → 0.00035 に軽減（知能の進化圧強化）
+export const COST_INTELLIGENCE = 0.00035;
 export const COST_SIZE = 0.005;
 
 export const ABSORB_RATE = 0.10;

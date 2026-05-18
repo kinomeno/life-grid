@@ -1465,6 +1465,7 @@ function findBestNeighborCell(
   const wS = g.wStarvSensitive / 100;
 
   // 視野内の生命を事前スキャン（仲間集計 + 敵リスト）
+  // v1.10: 視野は円形（ユークリッド距離）で判定する
   let allyCount = 0;
   let allyEnergySum = 0;
   type VisibleEnemy = {
@@ -1478,10 +1479,11 @@ function findBestNeighborCell(
   };
   const enemies: VisibleEnemy[] = [];
   const livesById = world.livesById;
+  const depthSq = depth * depth;
   for (let dy = -depth; dy <= depth; dy++) {
     for (let dx = -depth; dx <= depth; dx++) {
-      const dist = Math.abs(dx) + Math.abs(dy);
-      if (dist > depth) continue;
+      const distSq = dx * dx + dy * dy;
+      if (distSq > depthSq) continue;
       if (dx === 0 && dy === 0) continue;
       const nx = (life.x + dx + width) % width;
       const ny = (life.y + dy + height) % height;
@@ -1523,8 +1525,9 @@ function findBestNeighborCell(
 
   for (let dy = -depth; dy <= depth; dy++) {
     for (let dx = -depth; dx <= depth; dx++) {
-      const dist = Math.abs(dx) + Math.abs(dy);
-      if (dist > depth) continue;
+      const distSq = dx * dx + dy * dy;
+      if (distSq > depthSq) continue;
+      const dist = Math.sqrt(distSq);
       const nx = (life.x + dx + width) % width;
       const ny = (life.y + dy + height) % height;
       const idx = ny * width + nx;
@@ -1538,6 +1541,7 @@ function findBestNeighborCell(
       const f_starvHunger = f_energy * selfHunger;
 
       // 敵との関係（最も近い「倒せる敵」「倒せない敵」を探す）
+      // 距離はユークリッド（円形視野と整合）
       let nearestPreyDist = Infinity;
       let nearestPreyEnergy = 0;
       let nearestThreatDist = Infinity;
@@ -1551,7 +1555,7 @@ function findBestNeighborCell(
         if (edx < -width / 2) edx += width;
         if (edy > height / 2) edy -= height;
         if (edy < -height / 2) edy += height;
-        const eDist = Math.abs(edx) + Math.abs(edy);
+        const eDist = Math.sqrt(edx * edx + edy * edy);
         if (e.winnable) {
           if (eDist < nearestPreyDist) {
             nearestPreyDist = eDist;

@@ -399,10 +399,10 @@ function drawLives(
       ctx.strokeStyle = "rgba(220, 50, 50, 0.4)";
       ctx.stroke();
 
-      // v1.10: 選択中生命の視野範囲を菱形（マンハッタン距離）で線表示。
+      // v1.10: 選択中生命の視野範囲を円（ユークリッド距離）で線表示。
       // depth = vision + 知能ボーナス。低 accuracy 個体は vision-1 で処理されることに注意。
       const intel = Math.max(0, sel.genes.intelligence);
-      const accuracy = Math.min(1.0, Math.sqrt(intel / 200));
+      const accuracy = Math.min(1.0, Math.sqrt(intel / 150));
       const visionBonus = Math.min(7, Math.floor(intel / 50));
       const effectiveVision =
         accuracy < 0.5 ? Math.max(1, sel.genes.vision - 1) : sel.genes.vision;
@@ -412,11 +412,7 @@ function drawLives(
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 3]);
       ctx.beginPath();
-      ctx.moveTo(cx, cy - visionRadiusPx);
-      ctx.lineTo(cx + visionRadiusPx, cy);
-      ctx.lineTo(cx, cy + visionRadiusPx);
-      ctx.lineTo(cx - visionRadiusPx, cy);
-      ctx.closePath();
+      ctx.arc(cx, cy, visionRadiusPx, 0, TWO_PI);
       ctx.stroke();
       ctx.setLineDash([]);
     }
