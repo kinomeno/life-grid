@@ -1206,8 +1206,45 @@ function shuffledIndices(n: number, seed: number): Int32Array {
   return arr;
 }
 
+// v1.10 perf: 拡散の境界処理用に y±1 / x±1 のインデックスを一度だけ計算してキャッシュ。
+// 旧実装は内側ループ内で % width / % height を呼んでいた（10000 セル/turn）。
+let _yPrevCache: Int32Array | null = null;
+let _yNextCache: Int32Array | null = null;
+let _xPrevCache: Int32Array | null = null;
+let _xNextCache: Int32Array | null = null;
+// 波形バッファ：トリグを拡散ループから分離して JIT が両方を最適化しやすくする。
+let _waveBuf: Float32Array | null = null;
+function ensureWrapCaches(width: number, height: number): void {
+  if (!_yPrevCache || _yPrevCache.length !== height) {
+    _yPrevCache = new Int32Array(height);
+    _yNextCache = new Int32Array(height);
+    for (let y = 0; y < height; y++) {
+      _yPrevCache[y] = (y - 1 + height) % height;
+      _yNextCache[y] = (y + 1) % height;
+    }
+  }
+  if (!_xPrevCache || _xPrevCache.length !== width) {
+    _xPrevCache = new Int32Array(width);
+    _xNextCache = new Int32Array(width);
+    for (let x = 0; x < width; x++) {
+      _xPrevCache[x] = (x - 1 + width) % width;
+      _xNextCache[x] = (x + 1) % width;
+    }
+  }
+  const cells = width * height;
+  if (!_waveBuf || _waveBuf.length !== cells) {
+    _waveBuf = new Float32Array(cells);
+  }
+}
+
 function updateEnergy(world: World): void {
   const { width, height, energy, energyNext: next, turn, terrainBias, waveTimeScale, wavePatternId, params } = world;
+  ensureWrapCaches(width, height);
+  const yPrev = _yPrevCache!;
+  const yNext = _yNextCache!;
+  const xPrev = _xPrevCache!;
+  const xNext = _xNextCache!;
+  const waveBuf = _waveBuf!;
 
   // 時代環境（Phase 3：状態ベース化）と既存のユーザー設定を合算
   const era = currentEra(world);
@@ -1231,40 +1268,49 @@ function updateEnergy(world: World): void {
     era.progress <= fadeStart
       ? 0
       : (era.progress - fadeStart) / (1 - fadeStart); // 0..1
+  const blendInv = 1 - blend;
 
+  // v1.10 perf: 波形は拡散ループから分離して別パスで計算する。
+  //   - トリグ集中ループは JIT が最適化しやすい
+  //   - 振幅 0 のときはトリグをスキップして 0 で埋める
+  if (waveAmp === 0) {
+    waveBuf.fill(0);
+  } else {
+    let idx = 0;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const phase = phaseBase * waveTimeScale[idx];
+        let v = wavePattern(patternA, x, y, phase, SF);
+        if (blend > 0) {
+          const vB = wavePattern(patternB, x, y, phase, SF);
+          v = v * blendInv + vB * blend;
+        }
+        waveBuf[idx] = v * waveAmp;
+        idx++;
+      }
+    }
+  }
+
+  // 拡散 + 再生ループ。波形はバッファから読むだけ。
   for (let y = 0; y < height; y++) {
-    const ym = (y - 1 + height) % height;
-    const yp = (y + 1) % height;
+    const rowY = y * width;
+    const rowYm = yPrev[y] * width;
+    const rowYp = yNext[y] * width;
     for (let x = 0; x < width; x++) {
-      const idx = y * width + x;
-      const xm = (x - 1 + width) % width;
-      const xp = (x + 1) % width;
+      const idx = rowY + x;
       const cur = energy[idx];
 
       const neighborSum =
-        energy[y * width + xm] +
-        energy[y * width + xp] +
-        energy[ym * width + x] +
-        energy[yp * width + x];
-      const avgNeighbor = neighborSum * 0.25;
-      const diffused = cur + (avgNeighbor - cur) * ENERGY_DIFFUSION;
+        energy[rowY + xPrev[x]] +
+        energy[rowY + xNext[x]] +
+        energy[rowYm + x] +
+        energy[rowYp + x];
+      const diffused = cur + (neighborSum * 0.25 - cur) * ENERGY_DIFFUSION;
 
-      const tScale = waveTimeScale[idx];
-      const phase = phaseBase * tScale;
-
-      let waveBase = wavePattern(patternA, x, y, phase, SF);
-      if (blend > 0) {
-        const waveBaseB = wavePattern(patternB, x, y, phase, SF);
-        waveBase = waveBase * (1 - blend) + waveBaseB * blend;
-      }
-
-      const wave = waveBase * waveAmp;
-
-      const bias = terrainBias[idx];
-      const regen = regenPerTurn * (1 + bias * 0.6) + wave;
+      const regen = regenPerTurn * (1 + terrainBias[idx] * 0.6) + waveBuf[idx];
       let v = diffused + regen;
       if (v < 0) v = 0;
-      if (v > ENERGY_MAX) v = ENERGY_MAX;
+      else if (v > ENERGY_MAX) v = ENERGY_MAX;
       next[idx] = v;
     }
   }
@@ -1431,13 +1477,25 @@ function actLife(world: World, life: Life): void {
  *  f_empty        : 空きセル（繁殖可能性）
  *  f_starvHunger  : 飢餓×食料の組み合わせ特徴
  */
+// v1.10 perf: 視野内の敵情報を典型的な配列で持つ。各 findBestNeighborCell 呼び出し毎に
+// オブジェクト割り当てが発生していたのを、モジュール共有のスクラッチバッファで再利用。
+// シングルスレッド前提なので安全。
+const ENEMY_CAP = 256;
+const _eX = new Int16Array(ENEMY_CAP);
+const _eY = new Int16Array(ENEMY_CAP);
+const _eEnergy = new Float32Array(ENEMY_CAP);
+const _eStrength = new Float32Array(ENEMY_CAP);
+const _eDx = new Int8Array(ENEMY_CAP);
+const _eDy = new Int8Array(ENEMY_CAP);
+const _eWinnable = new Uint8Array(ENEMY_CAP);
+
 function findBestNeighborCell(
   world: World,
   life: Life
 ): { x: number; y: number } {
-  const { width, height, energy, occupancy } = world;
+  const { width, height, energy, occupancy, livesById } = world;
   const g = life.genes;
-  const intel = Math.max(0, g.intelligence);
+  const intel = g.intelligence > 0 ? g.intelligence : 0;
 
   // 行動用 RNG（ターン × ライフID 由来で再現性維持）
   const rngSeed =
@@ -1445,168 +1503,178 @@ function findBestNeighborCell(
   const rng = mulberry32(rngSeed >>> 0);
 
   // accuracy：知能の機能精度。0 なら完全ランダム
-  const accuracy = Math.min(1.0, Math.sqrt(intel / ACCURACY_FULL_INTEL));
+  const accuracy =
+    intel >= ACCURACY_FULL_INTEL ? 1.0 : Math.sqrt(intel / ACCURACY_FULL_INTEL);
   if (accuracy === 0) {
     return randomNeighborOrStay(world, life, rng);
   }
 
   // 視野範囲：vision + 知能ボーナス（上限あり）
   // v1.10 Phase 4: 低 accuracy（知能 50 未満）の個体は視野を最小化して計算量を抑える。
-  //   理由：低 accuracy ではノイズ項が大きいため、広い視野で評価しても結果に差が出にくい。
-  //   観察上も「ぼんやり個体は遠くを見ても見えない」のは自然。
-  const visionBonus = Math.min(
-    VISION_DEPTH_BONUS_MAX,
-    Math.floor(intel / VISION_DEPTH_INTEL_PER_BONUS)
-  );
-  const effectiveVision = accuracy < 0.5 ? Math.max(1, g.vision - 1) : g.vision;
-  const depth = Math.max(1, effectiveVision + visionBonus);
+  const visionBonusRaw = (intel / VISION_DEPTH_INTEL_PER_BONUS) | 0;
+  const visionBonus =
+    visionBonusRaw > VISION_DEPTH_BONUS_MAX
+      ? VISION_DEPTH_BONUS_MAX
+      : visionBonusRaw;
+  const effectiveVision =
+    accuracy < 0.5 ? (g.vision > 1 ? g.vision - 1 : 1) : g.vision;
+  const depthRaw = effectiveVision + visionBonus;
+  const depth = depthRaw < 1 ? 1 : depthRaw;
+  const depthSq = depth * depth;
+  const invDepth = 1 / depth;
 
   // 自分の状態
-  const selfHunger = Math.max(0, Math.min(1, 1 - life.energy / g.size)); // 0=満腹, 1=空腹
-  const selfDef = g.strength + g.size * 0.05;
+  const selfHunger =
+    life.energy < g.size ? 1 - life.energy / g.size : 0; // 0=満腹, 1=空腹
 
   // 重み遺伝子（0〜100 → 0〜1 正規化）
-  const wA = g.wAppetite / 100;
-  const wP = g.wPredation / 100;
-  const wC = g.wCaution / 100;
-  const wG = g.wGregarious / 100;
-  const wL = g.wLoyalty / 100;
-  const wR = g.wRepro / 100;
-  const wS = g.wStarvSensitive / 100;
+  const wA = g.wAppetite * 0.01;
+  const wP = g.wPredation * 0.01;
+  const wC = g.wCaution * 0.01;
+  const wG = g.wGregarious * 0.01;
+  const wL = g.wLoyalty * 0.01;
+  const wR = g.wRepro * 0.01;
+  const wS = g.wStarvSensitive * 0.01;
 
   // 視野内の生命を事前スキャン（仲間集計 + 敵リスト）
   // v1.10: 視野は円形（ユークリッド距離）で判定する
+  const lx = life.x;
+  const ly = life.y;
+  const speciesId = life.speciesId;
+  const myStrength = g.strength;
   let allyCount = 0;
   let allyEnergySum = 0;
-  type VisibleEnemy = {
-    x: number;
-    y: number;
-    energy: number;
-    strength: number;
-    dx: number;
-    dy: number;
-    winnable: boolean;
-  };
-  const enemies: VisibleEnemy[] = [];
-  const livesById = world.livesById;
-  const depthSq = depth * depth;
+  let enemyCount = 0;
+  const halfW = width / 2;
+  const halfH = height / 2;
+
   for (let dy = -depth; dy <= depth; dy++) {
     for (let dx = -depth; dx <= depth; dx++) {
       const distSq = dx * dx + dy * dy;
       if (distSq > depthSq) continue;
       if (dx === 0 && dy === 0) continue;
-      const nx = (life.x + dx + width) % width;
-      const ny = (life.y + dy + height) % height;
+      let nx = lx + dx;
+      if (nx < 0) nx += width;
+      else if (nx >= width) nx -= width;
+      let ny = ly + dy;
+      if (ny < 0) ny += height;
+      else if (ny >= height) ny -= height;
       const idx = ny * width + nx;
       const occId = occupancy[idx];
       if (occId === -1) continue;
       const other = livesById.get(occId);
       if (!other || !other.alive) continue;
-      if (other.speciesId === life.speciesId) {
-        // 仲間
+      if (other.speciesId === speciesId) {
         allyCount++;
         allyEnergySum += other.energy;
-      } else {
-        // 敵：倒せるかどうかを判定
-        const enemyDef = other.genes.strength + other.genes.size * 0.05;
-        const winnable = g.strength > enemyDef;
-        enemies.push({
-          x: nx,
-          y: ny,
-          energy: other.energy,
-          strength: other.genes.strength,
-          dx: other.dx,
-          dy: other.dy,
-          winnable,
-        });
+      } else if (enemyCount < ENEMY_CAP) {
+        const og = other.genes;
+        const enemyDef = og.strength + og.size * 0.05;
+        _eX[enemyCount] = nx;
+        _eY[enemyCount] = ny;
+        _eEnergy[enemyCount] = other.energy;
+        _eStrength[enemyCount] = og.strength;
+        _eDx[enemyCount] = other.dx;
+        _eDy[enemyCount] = other.dy;
+        _eWinnable[enemyCount] = myStrength > enemyDef ? 1 : 0;
+        enemyCount++;
       }
     }
   }
-  const fAllyCount = Math.min(1.0, allyCount / 10);
-  const fAllyEnergy =
-    allyCount > 0
-      ? Math.min(1.0, allyEnergySum / allyCount / 100)
-      : 0;
+  const fAllyCount = allyCount > 10 ? 1.0 : allyCount * 0.1;
+  let fAllyEnergy = 0;
+  if (allyCount > 0) {
+    const v = allyEnergySum / allyCount * 0.01;
+    fAllyEnergy = v > 1 ? 1 : v;
+  }
 
   // 各セルのスコアを計算して最大を求める
-  let bestX = life.x;
-  let bestY = life.y;
+  let bestX = lx;
+  let bestY = ly;
   let bestScore = -Infinity;
 
   for (let dy = -depth; dy <= depth; dy++) {
     for (let dx = -depth; dx <= depth; dx++) {
       const distSq = dx * dx + dy * dy;
       if (distSq > depthSq) continue;
-      const dist = Math.sqrt(distSq);
-      const nx = (life.x + dx + width) % width;
-      const ny = (life.y + dy + height) % height;
+      let nx = lx + dx;
+      if (nx < 0) nx += width;
+      else if (nx >= width) nx -= width;
+      let ny = ly + dy;
+      if (ny < 0) ny += height;
+      else if (ny >= height) ny -= height;
       const idx = ny * width + nx;
       // 移動先は空きセル（自セルは例外）
       if (occupancy[idx] !== -1 && (dx !== 0 || dy !== 0)) continue;
 
       // === 入力特徴量 ===
-      const f_energy = energy[idx] / 100;
-      const f_dist = dist / Math.max(1, depth);
-      const f_empty = 1; // 既に空きセルしか通っていない
+      const f_energy = energy[idx] * 0.01;
+      const dist = distSq > 0 ? Math.sqrt(distSq) : 0;
+      const f_dist = dist * invDepth;
       const f_starvHunger = f_energy * selfHunger;
 
       // 敵との関係（最も近い「倒せる敵」「倒せない敵」を探す）
-      // 距離はユークリッド（円形視野と整合）
-      let nearestPreyDist = Infinity;
-      let nearestPreyEnergy = 0;
-      let nearestThreatDist = Infinity;
-      let nearestThreatStrength = 0;
-      let nearestThreatApproach = 0;
-      for (const e of enemies) {
-        // セル (nx, ny) から敵 e への距離（トーラス考慮）
-        let edx = e.x - nx;
-        let edy = e.y - ny;
-        if (edx > width / 2) edx -= width;
-        if (edx < -width / 2) edx += width;
-        if (edy > height / 2) edy -= height;
-        if (edy < -height / 2) edy += height;
-        const eDist = Math.sqrt(edx * edx + edy * edy);
-        if (e.winnable) {
-          if (eDist < nearestPreyDist) {
-            nearestPreyDist = eDist;
-            nearestPreyEnergy = e.energy;
-          }
-        } else {
-          if (eDist < nearestThreatDist) {
-            nearestThreatDist = eDist;
-            nearestThreatStrength = e.strength;
-            // 接近度：敵の (dx, dy) と自分から敵へのベクトルの内積
-            // 敵がこちらに向かってきている = (e.dx, e.dy) · (-edx, -edy) > 0
-            // 正規化（ベクトル長で割らないが、向きの方向性として使える）
-            const dot = -e.dx * edx + -e.dy * edy;
-            nearestThreatApproach = Math.max(-1, Math.min(1, dot / 2));
+      // perf: 二乗距離で比較し、最後だけ sqrt
+      let f_prey = 0;
+      let f_threat = 0;
+      let f_approach = 0;
+      if (enemyCount > 0) {
+        let nearestPreySq = Infinity;
+        let nearestPreyEnergy = 0;
+        let nearestThreatSq = Infinity;
+        let nearestThreatStrength = 0;
+        let nearestThreatApproachRaw = 0;
+        for (let k = 0; k < enemyCount; k++) {
+          let edx = _eX[k] - nx;
+          let edy = _eY[k] - ny;
+          if (edx > halfW) edx -= width;
+          else if (edx < -halfW) edx += width;
+          if (edy > halfH) edy -= height;
+          else if (edy < -halfH) edy += height;
+          const eDistSq = edx * edx + edy * edy;
+          if (_eWinnable[k]) {
+            if (eDistSq < nearestPreySq) {
+              nearestPreySq = eDistSq;
+              nearestPreyEnergy = _eEnergy[k];
+            }
+          } else if (eDistSq < nearestThreatSq) {
+            nearestThreatSq = eDistSq;
+            nearestThreatStrength = _eStrength[k];
+            // 接近度：敵の (dx, dy) と「敵→自分」ベクトルの内積
+            const dot = -_eDx[k] * edx + -_eDy[k] * edy;
+            const half = dot * 0.5;
+            nearestThreatApproachRaw =
+              half > 1 ? 1 : half < -1 ? -1 : half;
           }
         }
+        if (nearestPreySq !== Infinity) {
+          const d = Math.sqrt(nearestPreySq);
+          const proximity = 1 - d * invDepth;
+          if (proximity > 0) {
+            const eClamp = nearestPreyEnergy > 100 ? 1 : nearestPreyEnergy * 0.01;
+            f_prey = proximity * eClamp;
+          }
+        }
+        if (nearestThreatSq !== Infinity) {
+          const d = Math.sqrt(nearestThreatSq);
+          const proximity = 1 - d * invDepth;
+          if (proximity > 0) {
+            const sClamp =
+              nearestThreatStrength > 999 ? 1 : nearestThreatStrength / 999;
+            f_threat = proximity * sClamp;
+          }
+          if (nearestThreatApproachRaw > 0) f_approach = nearestThreatApproachRaw;
+        }
       }
-      // 距離を 0-1 に正規化（近いほど大）
-      const f_prey =
-        nearestPreyDist === Infinity
-          ? 0
-          : Math.max(0, 1 - nearestPreyDist / depth) *
-            Math.min(1.0, nearestPreyEnergy / 100);
-      const f_threat =
-        nearestThreatDist === Infinity
-          ? 0
-          : Math.max(0, 1 - nearestThreatDist / depth) *
-            Math.min(1.0, nearestThreatStrength / 999);
-      const f_approach =
-        nearestThreatDist === Infinity
-          ? 0
-          : Math.max(0, nearestThreatApproach);
 
       // === 重み × 特徴の線形和 ===
       const weightedSum =
         wA * f_energy +
-        wP * f_prey +
-        wC * -1 * (f_threat + 0.5 * f_approach) +
+        wP * f_prey -
+        wC * (f_threat + 0.5 * f_approach) +
         wG * fAllyCount +
         wL * fAllyEnergy +
-        wR * f_empty * (f_empty > 0 ? 1 : 0) +
+        wR + // f_empty = 1 (空きセルしか通っていない)
         wS * f_starvHunger;
 
       // accuracy で重み係数の有効度を制御。知能低い分はランダムノイズ
@@ -1802,50 +1870,72 @@ function reproduceLife(
   world.occupancy[idx] = childLife.id;
 }
 
+// v1.10 perf: モジュール共有の隣接オフセット（配列リテラル割り当てを回避）
+const NEIGHBOR_DX = new Int8Array([-1, 0, 1, -1, 1, -1, 0, 1]);
+const NEIGHBOR_DY = new Int8Array([-1, -1, -1, 0, 0, 1, 1, 1]);
+
 function handleCombat(world: World, life: Life): void {
-  const { width, height, occupancy, energy } = world;
-  const { x, y } = life;
-  const neighbors = [
-    [-1, -1], [0, -1], [1, -1],
-    [-1, 0],           [1, 0],
-    [-1, 1],  [0, 1],  [1, 1],
-  ];
+  const { width, height, occupancy, energy, livesById } = world;
+  const x = life.x;
+  const y = life.y;
+  const speciesId = life.speciesId;
 
   // v1.10: 隣接 3×3 内の同系統数を数えて、戦闘時のボーナス算定に使う。
   // 仲間が多いほど戦闘力が増す（群れの戦闘力）。対数で逓減して支配的にならないように。
   let attackerAllyCount = 0;
-  for (const [dx, dy] of neighbors) {
-    const nx = (x + dx + width) % width;
-    const ny = (y + dy + height) % height;
-    const nidx = ny * width + nx;
-    if (occupancy[nidx] === -1) continue;
-    const neighbor = world.livesById.get(occupancy[nidx]);
-    if (neighbor && neighbor.alive && neighbor.speciesId === life.speciesId) {
+  let hasOpponent = false;
+  // 兼用：仲間カウントと、敵が存在するかの早期判定を同時に行う
+  for (let i = 0; i < 8; i++) {
+    let nx = x + NEIGHBOR_DX[i];
+    if (nx < 0) nx += width;
+    else if (nx >= width) nx -= width;
+    let ny = y + NEIGHBOR_DY[i];
+    if (ny < 0) ny += height;
+    else if (ny >= height) ny -= height;
+    const occId = occupancy[ny * width + nx];
+    if (occId === -1) continue;
+    const neighbor = livesById.get(occId);
+    if (!neighbor || !neighbor.alive) continue;
+    if (neighbor.speciesId === speciesId) {
       attackerAllyCount++;
+    } else {
+      hasOpponent = true;
     }
   }
+  // 敵がいなければ何もしない（最頻出ケースの早期 return）
+  if (!hasOpponent) return;
   const allyBonus = Math.log1p(attackerAllyCount) * 1.5;
 
-  for (const [dx, dy] of neighbors) {
-    const nx = (x + dx + width) % width;
-    const ny = (y + dy + height) % height;
+  for (let i = 0; i < 8; i++) {
+    let nx = x + NEIGHBOR_DX[i];
+    if (nx < 0) nx += width;
+    else if (nx >= width) nx -= width;
+    let ny = y + NEIGHBOR_DY[i];
+    if (ny < 0) ny += height;
+    else if (ny >= height) ny -= height;
     const nidx = ny * width + nx;
-    if (occupancy[nidx] === -1) continue;
+    const occId = occupancy[nidx];
+    if (occId === -1) continue;
 
-    const opponent = findLifeById(world, occupancy[nidx]);
+    const opponent = livesById.get(occId);
     if (!opponent || !opponent.alive) continue;
 
     // 同系統は常に攻撃しない（共食い禁止）
-    if (opponent.speciesId === life.speciesId) continue;
+    if (opponent.speciesId === speciesId) continue;
 
     // 防御側も自分の周囲の仲間数で防御力ボーナスを得る（群れの防御力）
     let defenderAllyCount = 0;
-    for (const [ddx, ddy] of neighbors) {
-      const dnx = (opponent.x + ddx + width) % width;
-      const dny = (opponent.y + ddy + height) % height;
+    for (let j = 0; j < 8; j++) {
+      let dnx = opponent.x + NEIGHBOR_DX[j];
+      if (dnx < 0) dnx += width;
+      else if (dnx >= width) dnx -= width;
+      let dny = opponent.y + NEIGHBOR_DY[j];
+      if (dny < 0) dny += height;
+      else if (dny >= height) dny -= height;
       const dnidx = dny * width + dnx;
-      if (occupancy[dnidx] === -1) continue;
-      const dneighbor = world.livesById.get(occupancy[dnidx]);
+      const doccId = occupancy[dnidx];
+      if (doccId === -1) continue;
+      const dneighbor = livesById.get(doccId);
       if (
         dneighbor &&
         dneighbor.alive &&
