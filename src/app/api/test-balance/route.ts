@@ -13,7 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createWorld, currentEra, stepWorld } from "@/lib/world";
+import { createWorld, currentEra, getBehaviorMode, stepWorld } from "@/lib/world";
 
 function pct(values: number[], p: number): number {
   if (values.length === 0) return 0;
@@ -112,5 +112,24 @@ export async function GET(req: NextRequest) {
             )
           : 0,
     },
+    // v1.10: 重み遺伝子の統計
+    weights: {
+      appetite: stats(alive.map((l) => l.genes.wAppetite)),
+      predation: stats(alive.map((l) => l.genes.wPredation)),
+      caution: stats(alive.map((l) => l.genes.wCaution)),
+      gregarious: stats(alive.map((l) => l.genes.wGregarious)),
+      loyalty: stats(alive.map((l) => l.genes.wLoyalty)),
+      repro: stats(alive.map((l) => l.genes.wRepro)),
+      starvSensitive: stats(alive.map((l) => l.genes.wStarvSensitive)),
+    },
+    // v1.10: 性格タグの分布
+    behaviorTags: (() => {
+      const counts: Record<string, number> = {};
+      for (const l of alive) {
+        const tag = getBehaviorMode(world, l);
+        counts[tag] = (counts[tag] || 0) + 1;
+      }
+      return counts;
+    })(),
   });
 }

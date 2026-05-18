@@ -1841,6 +1841,21 @@ function handleCombat(world: World, life: Life): void {
     [-1, 1],  [0, 1],  [1, 1],
   ];
 
+  // v1.10: 隣接 3×3 内の同系統数を数えて、戦闘時のボーナス算定に使う。
+  // 仲間が多いほど戦闘力が増す（群れの戦闘力）。対数で逓減して支配的にならないように。
+  let attackerAllyCount = 0;
+  for (const [dx, dy] of neighbors) {
+    const nx = (x + dx + width) % width;
+    const ny = (y + dy + height) % height;
+    const nidx = ny * width + nx;
+    if (occupancy[nidx] === -1) continue;
+    const neighbor = world.livesById.get(occupancy[nidx]);
+    if (neighbor && neighbor.alive && neighbor.speciesId === life.speciesId) {
+      attackerAllyCount++;
+    }
+  }
+  const allyBonus = Math.log1p(attackerAllyCount) * 1.5;
+
   for (const [dx, dy] of neighbors) {
     const nx = (x + dx + width) % width;
     const ny = (y + dy + height) % height;
@@ -1853,15 +1868,33 @@ function handleCombat(world: World, life: Life): void {
     // 同系統は常に攻撃しない（共食い禁止）
     if (opponent.speciesId === life.speciesId) continue;
 
+    // 防御側も自分の周囲の仲間数で防御力ボーナスを得る（群れの防御力）
+    let defenderAllyCount = 0;
+    for (const [ddx, ddy] of neighbors) {
+      const dnx = (opponent.x + ddx + width) % width;
+      const dny = (opponent.y + ddy + height) % height;
+      const dnidx = dny * width + dnx;
+      if (occupancy[dnidx] === -1) continue;
+      const dneighbor = world.livesById.get(occupancy[dnidx]);
+      if (
+        dneighbor &&
+        dneighbor.alive &&
+        dneighbor.speciesId === opponent.speciesId
+      ) {
+        defenderAllyCount++;
+      }
+    }
+    const defAllyBonus = Math.log1p(defenderAllyCount) * 1.5;
+
     // 体格を防御役として戦闘判定に組み込む（B1 案）。
-    //   effectiveAtk = life.strength
-    //   effectiveDef = opponent.strength + opponent.size * 0.05
+    //   effectiveAtk = life.strength + 仲間ボーナス
+    //   effectiveDef = opponent.strength + opponent.size * 0.05 + 仲間ボーナス
     // 体格 100 で +5、140 で +7 の防御。控えめだが体格の存在意義を増す。
     //   ※ 0.1 だと体格大個体が無敵化し population 全滅。
     // プレイヤーが保護中の個体は戦闘で死なない
     if (opponent.protected) continue;
-    const effectiveAtk = life.genes.strength;
-    const effectiveDef = opponent.genes.strength + opponent.genes.size * 0.05;
+    const effectiveAtk = life.genes.strength + allyBonus;
+    const effectiveDef = opponent.genes.strength + opponent.genes.size * 0.05 + defAllyBonus;
     if (effectiveAtk > effectiveDef) {
       // v1.01: 確率戦闘を廃止し決定論に。強さの差は実効値として直接勝敗を決め、
       // バランスはコスト関数（^2.0）側で取る。
