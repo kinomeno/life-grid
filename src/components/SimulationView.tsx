@@ -724,45 +724,69 @@ export default function SimulationView({
     const border = 2; // viewport 枠
     return canvasH + newsBlock + padding + border;
   }, [cellSize, height, params.newsEnabled]);
-  const ZOOM_MIN = 0.5;
-  const ZOOM_MAX = 3.0;
-  const ZOOM_STEP = 0.2;
+  // v1.10: ズームレベルは固定配列で管理し、1.0（100%）が常にステップに含まれるよう保証する。
+  // 以前は ZOOM_STEP=0.2 で 1.0 基準にしていたが、ZOOM_MIN=0.5 がグリッド外のため、
+  // 0.5 まで縮小→拡大で 0.5→0.7→0.9→1.1 となり 100% を踏まずに飛び越えてしまうバグがあった。
+  const ZOOM_LEVELS = useMemo(
+    () => [
+      0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0,
+    ],
+    []
+  );
+  const ZOOM_MIN = ZOOM_LEVELS[0];
+  const ZOOM_MAX = ZOOM_LEVELS[ZOOM_LEVELS.length - 1];
+  /** delta > 0: 現在値より大きい最小レベル / delta < 0: 現在値より小さい最大レベル */
+  const stepZoom = useCallback(
+    (z: number, delta: number): number => {
+      if (delta > 0) {
+        for (let j = 0; j < ZOOM_LEVELS.length; j++) {
+          if (ZOOM_LEVELS[j] > z + 0.005) return ZOOM_LEVELS[j];
+        }
+        return ZOOM_MAX;
+      }
+      for (let j = ZOOM_LEVELS.length - 1; j >= 0; j--) {
+        if (ZOOM_LEVELS[j] < z - 0.005) return ZOOM_LEVELS[j];
+      }
+      return ZOOM_MIN;
+    },
+    [ZOOM_LEVELS, ZOOM_MIN, ZOOM_MAX]
+  );
   // ズーム時はマップ中央（または選択生命中心）が viewport の中心に来るよう調整
+  const applyZoom = useCallback(
+    (newZoom: number, oldZoom: number) => {
+      if (newZoom === oldZoom) return;
+      const w = worldRef.current;
+      const sel =
+        w && selectedLifeId !== null
+          ? w.lives.find((l) => l.id === selectedLifeId && l.alive) ?? null
+          : null;
+      const focus = getZoomFocus(sel);
+      // 次フレームで scroll 調整（DOM 更新後）
+      requestAnimationFrame(() => scrollToFocus(focus.x, focus.y, newZoom));
+    },
+    [getZoomFocus, scrollToFocus, selectedLifeId]
+  );
   const zoomIn = useCallback(() => {
     setZoom((z) => {
-      const newZoom = Math.min(ZOOM_MAX, Math.round((z + ZOOM_STEP) * 100) / 100);
-      if (newZoom !== z) {
-        const w = worldRef.current;
-        const sel =
-          w && selectedLifeId !== null
-            ? w.lives.find((l) => l.id === selectedLifeId && l.alive) ?? null
-            : null;
-        const focus = getZoomFocus(sel);
-        // 次フレームで scroll 調整（DOM 更新後）
-        requestAnimationFrame(() =>
-          scrollToFocus(focus.x, focus.y, newZoom)
-        );
-      }
+      const newZoom = stepZoom(z, +1);
+      applyZoom(newZoom, z);
       return newZoom;
     });
-  }, [getZoomFocus, scrollToFocus, selectedLifeId]);
+  }, [applyZoom, stepZoom]);
   const zoomOut = useCallback(() => {
     setZoom((z) => {
-      const newZoom = Math.max(ZOOM_MIN, Math.round((z - ZOOM_STEP) * 100) / 100);
-      if (newZoom !== z) {
-        const w = worldRef.current;
-        const sel =
-          w && selectedLifeId !== null
-            ? w.lives.find((l) => l.id === selectedLifeId && l.alive) ?? null
-            : null;
-        const focus = getZoomFocus(sel);
-        requestAnimationFrame(() =>
-          scrollToFocus(focus.x, focus.y, newZoom)
-        );
-      }
+      const newZoom = stepZoom(z, -1);
+      applyZoom(newZoom, z);
       return newZoom;
     });
-  }, [getZoomFocus, scrollToFocus, selectedLifeId]);
+  }, [applyZoom, stepZoom]);
+  /** %表示クリックで 100% に即座に戻す（確実な復帰経路） */
+  const zoomReset = useCallback(() => {
+    setZoom((z) => {
+      applyZoom(1.0, z);
+      return 1.0;
+    });
+  }, [applyZoom]);
 
   // スペースバーで再生／一時停止
   useEffect(() => {
@@ -1129,25 +1153,12 @@ export default function SimulationView({
           }}
           onWheel={(e) => {
             // Q1: マウスホイールでズーム（Ctrl/Shift 不要、viewport 上で直接）
+            // v1.10: ボタンと同じ ZOOM_LEVELS 配列で動くようにし、100% を必ず踏むよう保証。
             e.preventDefault();
-            const delta = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
+            const dir = e.deltaY < 0 ? +1 : -1;
             setZoom((z) => {
-              const newZoom = Math.max(
-                ZOOM_MIN,
-                Math.min(ZOOM_MAX, Math.round((z + delta) * 100) / 100)
-              );
-              if (newZoom !== z) {
-                const w = worldRef.current;
-                const sel =
-                  w && selectedLifeId !== null
-                    ? w.lives.find((l) => l.id === selectedLifeId && l.alive) ??
-                      null
-                    : null;
-                const focus = getZoomFocus(sel);
-                requestAnimationFrame(() =>
-                  scrollToFocus(focus.x, focus.y, newZoom)
-                );
-              }
+              const newZoom = stepZoom(z, dir);
+              applyZoom(newZoom, z);
               return newZoom;
             });
           }}
@@ -1316,9 +1327,17 @@ export default function SimulationView({
             >
               −
             </button>
-            <span className="zoom-mini-value">
+            {/* v1.10: %表示クリックで 100% に即座に復帰（確実な復帰経路） */}
+            <button
+              type="button"
+              className="zoom-mini-value zoom-mini-value-btn"
+              onClick={zoomReset}
+              disabled={Math.abs(zoom - 1.0) < 0.001}
+              title={t("ctrl.zoom_reset")}
+              aria-label={t("ctrl.zoom_reset")}
+            >
               {Math.round(zoom * 100)}%
-            </span>
+            </button>
             <button
               className="zoom-mini-btn"
               onClick={zoomIn}

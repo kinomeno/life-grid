@@ -248,6 +248,28 @@
   text-align: center;
 }
 
+/* v1.10: %表示はクリックで 100% に戻すボタン。通常時は装飾なし、ホバーで強調。 */
+:global(.zoom-mini-value-btn) {
+  background: transparent;
+  border: 1px solid transparent;
+  color: inherit;
+  font-size: inherit;
+  font-family: inherit;
+  padding: 1px 4px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+:global(.zoom-mini-value-btn:hover:not(:disabled)) {
+  background: var(--bg-2);
+  border-color: var(--line);
+}
+
+:global(.zoom-mini-value-btn:disabled) {
+  cursor: default;
+  /* 100% のときは灰色化せず通常表示 */
+}
+
 :global(.panel) {
   padding: 12px 14px;
   border-bottom: 1px solid var(--line-soft);
