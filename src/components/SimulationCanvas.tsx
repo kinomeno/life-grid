@@ -398,6 +398,36 @@ function drawLives(
       ctx.lineTo(cx, cy + armLen);
       ctx.strokeStyle = "rgba(220, 50, 50, 0.4)";
       ctx.stroke();
+
+      // v1.10: 選択中生命の向きを矢印で表示（dx, dy がある場合のみ）
+      if (sel.dx !== 0 || sel.dy !== 0) {
+        const arrowLen = Math.max(6, cellSize * 1.6);
+        const arrowTipX = cx + sel.dx * arrowLen;
+        const arrowTipY = cy + sel.dy * arrowLen;
+        ctx.strokeStyle = "rgba(50, 100, 220, 0.8)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(arrowTipX, arrowTipY);
+        ctx.stroke();
+        // 矢じり
+        const headSize = arrowLen * 0.3;
+        // 進行方向の垂直ベクトル
+        const perpX = -sel.dy;
+        const perpY = sel.dx;
+        ctx.beginPath();
+        ctx.moveTo(arrowTipX, arrowTipY);
+        ctx.lineTo(
+          arrowTipX - sel.dx * headSize + perpX * headSize * 0.5,
+          arrowTipY - sel.dy * headSize + perpY * headSize * 0.5
+        );
+        ctx.moveTo(arrowTipX, arrowTipY);
+        ctx.lineTo(
+          arrowTipX - sel.dx * headSize - perpX * headSize * 0.5,
+          arrowTipY - sel.dy * headSize - perpY * headSize * 0.5
+        );
+        ctx.stroke();
+      }
     }
   }
 }
