@@ -1683,56 +1683,8 @@ function randomNeighborOrStay(
   return { x: life.x, y: life.y };
 }
 
-/** 隣接 8 セルに自分より強い敵が居れば true。同系統は常に除外。 */
-function hasNearStrongerEnemy(world: World, life: Life): boolean {
-  const { width, height, occupancy } = world;
-  const myStr = life.genes.strength;
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      if (dx === 0 && dy === 0) continue;
-      const nx = (life.x + dx + width) % width;
-      const ny = (life.y + dy + height) % height;
-      const idx = ny * width + nx;
-      const id = occupancy[idx];
-      if (id === -1) continue;
-      const opp = findLifeById(world, id);
-      if (!opp || !opp.alive) continue;
-      if (opp.speciesId === life.speciesId) continue;
-      if (opp.genes.strength > myStr) return true;
-    }
-  }
-  return false;
-}
-
-/**
- * セル (cx, cy) の周辺 1 マスに居る敵の脅威スコアを返す。
- * 敵 strength が自分より高いほど大きくなる。
- */
-function nearbyThreatScore(
-  world: World,
-  cx: number,
-  cy: number,
-  self: Life
-): number {
-  const { width, height, occupancy } = world;
-  let total = 0;
-  const myStr = self.genes.strength;
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      if (dx === 0 && dy === 0) continue;
-      const nx = (cx + dx + width) % width;
-      const ny = (cy + dy + height) % height;
-      const id = occupancy[ny * width + nx];
-      if (id === -1 || id === self.id) continue;
-      const opp = findLifeById(world, id);
-      if (!opp || !opp.alive) continue;
-      if (opp.speciesId === self.speciesId) continue;
-      const diff = opp.genes.strength - myStr;
-      if (diff > 0) total += diff;
-    }
-  }
-  return total;
-}
+// v1.10: hasNearStrongerEnemy / nearbyThreatScore は廃止
+// （新しい線形和スコアモデルで敵の警戒は f_threat + wCaution として表現される）
 
 function cullDead(world: World): void {
   if (world.lives.some((l) => !l.alive)) {

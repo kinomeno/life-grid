@@ -129,11 +129,13 @@ const SECTIONS_JA: Section[] = [
         ],
       },
       {
-        heading: "仲間認識（知能 70 以上）",
+        heading: "仲間認識（v1.10 から知能不問）",
         lines: [
-          "知能 70 を超える個体は、同じ系統（同 RGB ブロック）を「仲間」として認識します。",
-          "仲間は戦闘の対象外、脅威スコアも 0。逃走モードでも避けません。",
-          "結果として、賢い種は群れを形成しやすくなります。",
+          "全ての個体は同じ系統（同 RGB ブロック）を「仲間」として認識します。",
+          "仲間は戦闘の対象外（共食い禁止）。",
+          "戦闘時、隣接 3×3 内の同系統数 × log1p で攻撃力・防御力にボーナス。",
+          "群れの戦闘力が自然発生し、社交性遺伝子（wGregarious）の高い個体ほど",
+          "仲間に近づき群れを形成しやすくなります。",
         ],
       },
       {
@@ -514,11 +516,13 @@ const SECTIONS_EN: Section[] = [
         ],
       },
       {
-        heading: "Ally recognition (intelligence 70+)",
+        heading: "Ally recognition (intelligence-independent since v1.10)",
         lines: [
-          "Lives with intelligence > 70 recognize same-species individuals as allies.",
-          "Allies are exempt from combat and contribute 0 to threat scoring; even fleeing mode does not flee from them.",
-          "As a result, smart species tend to form herds.",
+          "All lives recognize same-species individuals as allies regardless of intelligence.",
+          "Allies are exempt from combat (no cannibalism).",
+          "Combat: log1p(ally count in 3×3) × 1.5 bonus to both attacker and defender.",
+          "Group combat strength emerges naturally; lives with high wGregarious",
+          "tend to cluster with allies and form herds.",
         ],
       },
       {
