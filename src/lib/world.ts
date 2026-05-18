@@ -1389,11 +1389,11 @@ function actLife(world: World, life: Life): void {
   const capacity = g.size - life.energy;
   // v1.10: 知能による吸収効率ボーナス（暫定実装・のちに改修予定）
   //   intel  50: +0%
-  //   intel 100: +7.5%
-  //   intel 150: +15%
-  //   intel 250: +30%（上限近く）
-  // 知能が「採餌の上手さ」として直接ペイオフするようにし、平均知能を引き上げる。
-  const absorbIntelBonus = Math.max(0, (g.intelligence - 50) / 200) * 0.3;
+  //   intel 100: +11%
+  //   intel 150: +22.5%
+  //   intel 250: +45%（上限近く）
+  // 0.45：0.5 だと K 戦略過熱、0.4 だと逆に絶滅シード発生。中間で安定狙い。
+  const absorbIntelBonus = Math.max(0, (g.intelligence - 50) / 200) * 0.45;
   const absorb = Math.max(
     0,
     Math.min(available * ABSORB_RATE * (1 + absorbIntelBonus), capacity)

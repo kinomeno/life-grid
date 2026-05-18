@@ -91,8 +91,10 @@ export const COST_INTELLIGENCE_EXP = 1.85;
 //   v = 500 :  ~70
 //   v = 999 :  ~265
 export const COST_STRENGTH = 0.0007;
-// v1.10: 知能コストを 0.0005 → 0.00035 に軽減（知能の進化圧強化）
-export const COST_INTELLIGENCE = 0.00035;
+// v1.10: 知能コストを 0.00035 → 0.00025 にさらに軽減。
+// バランス検証で平均知能 30 前後で停滞していたため。
+//   v= 50:  0.39  v=100:  1.77  v=200:  6.39  v=500: 31.8  v=999: 116.4
+export const COST_INTELLIGENCE = 0.00025;
 export const COST_SIZE = 0.005;
 
 export const ABSORB_RATE = 0.10;
