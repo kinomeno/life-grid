@@ -46,6 +46,19 @@ export const DEFAULT_GRAPH_SERIES: GraphSeriesState = {
   rgb: false,
 };
 
+export type StatsTab = "timeseries" | "distribution";
+
+/** 分布タブで選べる遺伝子。 */
+export type GeneKey =
+  | "intelligence"
+  | "strength"
+  | "vision"
+  | "speed"
+  | "size"
+  | "lifespan"
+  | "reproductionRate"
+  | "mutationRate";
+
 type Props = {
   history: StatsSample[];
   /** 現在の生命リスト（分布タブで使用）。 */
@@ -56,6 +69,11 @@ type Props = {
   /** 時間進行 ON/OFF（true なら世界の時間が進む）。 */
   timeRunning?: boolean;
   onToggleTime?: () => void;
+  /** v1.10: タブ・分布遺伝子選択の状態をモーダル外で保持し、開閉間で永続化する。 */
+  tab: StatsTab;
+  onTabChange: (t: StatsTab) => void;
+  geneKey: GeneKey;
+  onGeneKeyChange: (k: GeneKey) => void;
 };
 
 type Series = {
@@ -75,17 +93,6 @@ const SERIES: Series[] = [
   { key: "avgReproductionRate", tKey: "graph.avg_reproduction_rate", color: "#9f6a3e", pick: (s) => s.averageReproductionRate },
   { key: "avgSize", tKey: "graph.avg_size", color: "#6a3e9f", pick: (s) => s.averageSize },
 ];
-
-/** 分布タブで選べる遺伝子。 */
-type GeneKey =
-  | "intelligence"
-  | "strength"
-  | "vision"
-  | "speed"
-  | "size"
-  | "lifespan"
-  | "reproductionRate"
-  | "mutationRate";
 
 type GeneSpec = {
   key: GeneKey;
@@ -160,8 +167,6 @@ const GENES: GeneSpec[] = [
   },
 ];
 
-type Tab = "timeseries" | "distribution";
-
 export default function StatsGraphModal({
   history,
   lives,
@@ -170,11 +175,16 @@ export default function StatsGraphModal({
   onClose,
   timeRunning = false,
   onToggleTime,
+  tab,
+  onTabChange,
+  geneKey,
+  onGeneKeyChange,
 }: Props) {
   const { t } = useLocale();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [tab, setTab] = useState<Tab>("timeseries");
-  const [geneKey, setGeneKey] = useState<GeneKey>("intelligence");
+  // v1.10: tab・geneKey は親が保持。setter は親へ通知する形に。
+  const setTab = onTabChange;
+  const setGeneKey = onGeneKeyChange;
   // v1.10: 時系列グラフのホバー情報。マウス位置と該当サンプル。
   const [hoverInfo, setHoverInfo] = useState<{
     px: number;

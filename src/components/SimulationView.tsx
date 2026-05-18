@@ -5,6 +5,8 @@ import SimulationCanvas from "./SimulationCanvas";
 import StatsGraphModal, {
   DEFAULT_GRAPH_SERIES,
   type GraphSeriesState,
+  type StatsTab,
+  type GeneKey as StatsGeneKey,
 } from "./StatsGraphModal";
 import ActionLogModal from "./ActionLogModal";
 import RulesScreen from "./RulesScreen";
@@ -148,6 +150,10 @@ export default function SimulationView({
   const [graphSeries, setGraphSeries] = useState<GraphSeriesState>(
     DEFAULT_GRAPH_SERIES
   );
+  // v1.10: モーダルを閉じても保持。タブと分布の遺伝子選択を再オープン時も覚えておく。
+  const [statsTab, setStatsTab] = useState<StatsTab>("timeseries");
+  const [statsGeneKey, setStatsGeneKey] =
+    useState<StatsGeneKey>("intelligence");
   // ロック解除状態（x100 速度に必要）
   const [unlocked, setUnlocked] = useState(false);
   const [pwTarget, setPwTarget] = useState<{
@@ -1842,6 +1848,10 @@ export default function SimulationView({
           onClose={() => setShowStats(false)}
           timeRunning={statsKeepRunning}
           onToggleTime={() => setStatsKeepRunning((v) => !v)}
+          tab={statsTab}
+          onTabChange={setStatsTab}
+          geneKey={statsGeneKey}
+          onGeneKeyChange={setStatsGeneKey}
         />
       )}
 

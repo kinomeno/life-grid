@@ -60,6 +60,9 @@ export async function GET(req: NextRequest) {
   const alive = world.lives.filter((l) => l.alive);
   const strengths = alive.map((l) => l.genes.strength);
   const intelligences = alive.map((l) => l.genes.intelligence);
+  const visions = alive.map((l) => l.genes.vision);
+  const speeds = alive.map((l) => l.genes.speed);
+  const sizes = alive.map((l) => l.genes.size);
   const reproductionRates = alive.map((l) => l.genes.reproductionRate);
   const ages = alive.map((l) => l.age);
   const energies = alive.map((l) => l.energy);
@@ -94,6 +97,9 @@ export async function GET(req: NextRequest) {
       over200: intelligences.filter((s) => s > 200).length,
       over300: intelligences.filter((s) => s > 300).length,
     },
+    vision: stats(visions),
+    speed: stats(speeds),
+    size: stats(sizes),
     reproductionRate: {
       ...stats(reproductionRates),
       over04: reproductionRates.filter((r) => r > 0.4).length,

@@ -51,14 +51,20 @@ export const GENE_WEIGHT_INIT_RANGE = 30; // 中央値 ± 30 の範囲で初期�
 // 200 だと通常進化範囲（〜100）での accuracy が低すぎたため 150 に下げた
 export const ACCURACY_FULL_INTEL = 150;
 // 視野深度ボーナス上限（パフォーマンス保護）
-export const VISION_DEPTH_BONUS_MAX = 7;
+// v1.10: 7 → 5 に縮小（控えめ）。知能が視野を支配しすぎていたため、
+// 視野遺伝子にも進化圧がかかるよう調整。
+export const VISION_DEPTH_BONUS_MAX = 5;
 // 視野深度ボーナスの傾き：知能 N ごとに +1
-export const VISION_DEPTH_INTEL_PER_BONUS = 50;
+// v1.10: 50 → 75 に拡大。知能 75 で +1、150 で +2、…、375 以上で上限 +5。
+export const VISION_DEPTH_INTEL_PER_BONUS = 75;
 
 export const INITIAL_ENERGY_RATIO = 0.4;
 
 export const COST_BASE = 0.25;
-export const COST_VISION = 0.15;
+// v1.10: 視野コストを 0.15 → 0.12 に軽減。
+// 知能ボーナス縮小（7→5、50→75）と合わせて、視野遺伝子の進化圧をプラス方向に。
+//   vision 1: 0.12, vision 2: 0.24, vision 3: 0.36, vision 4: 0.48
+export const COST_VISION = 0.12;
 export const COST_SPEED_PER_STEP = 0.25;
 // v1.01: 強さ・知能のコスト指数を別々に持たせる。
 // 強さ ^2.0（戦闘優位が強いため厳しめ）
