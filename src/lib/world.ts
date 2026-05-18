@@ -1441,11 +1441,15 @@ function findBestNeighborCell(
   }
 
   // 視野範囲：vision + 知能ボーナス（上限あり）
+  // v1.10 Phase 4: 低 accuracy（知能 50 未満）の個体は視野を最小化して計算量を抑える。
+  //   理由：低 accuracy ではノイズ項が大きいため、広い視野で評価しても結果に差が出にくい。
+  //   観察上も「ぼんやり個体は遠くを見ても見えない」のは自然。
   const visionBonus = Math.min(
     VISION_DEPTH_BONUS_MAX,
     Math.floor(intel / VISION_DEPTH_INTEL_PER_BONUS)
   );
-  const depth = Math.max(1, g.vision + visionBonus);
+  const effectiveVision = accuracy < 0.5 ? Math.max(1, g.vision - 1) : g.vision;
+  const depth = Math.max(1, effectiveVision + visionBonus);
 
   // 自分の状態
   const selfHunger = Math.max(0, Math.min(1, 1 - life.energy / g.size)); // 0=満腹, 1=空腹
