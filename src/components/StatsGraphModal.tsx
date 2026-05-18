@@ -175,6 +175,12 @@ export default function StatsGraphModal({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [tab, setTab] = useState<Tab>("timeseries");
   const [geneKey, setGeneKey] = useState<GeneKey>("intelligence");
+  // v1.10: 時系列グラフのホバー情報。マウス位置と該当サンプル。
+  const [hoverInfo, setHoverInfo] = useState<{
+    px: number;
+    py: number;
+    sample: StatsSample;
+  } | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -190,12 +196,67 @@ export default function StatsGraphModal({
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (tab === "timeseries") {
-      drawChart(ctx, cssW, cssH, history, enabled);
+      drawChart(ctx, cssW, cssH, history, enabled, hoverInfo?.sample.turn ?? null);
     } else {
       const gene = GENES.find((g) => g.key === geneKey) ?? GENES[0];
       drawHistogram(ctx, cssW, cssH, lives, gene);
     }
-  }, [tab, history, enabled, lives, geneKey]);
+  }, [tab, history, enabled, lives, geneKey, hoverInfo]);
+
+  // タブ切替・分布時はホバーをクリア
+  useEffect(() => {
+    if (tab !== "timeseries") setHoverInfo(null);
+  }, [tab]);
+
+  function handleCanvasMove(e: React.MouseEvent<HTMLCanvasElement>) {
+    if (tab !== "timeseries" || history.length < 2) {
+      if (hoverInfo) setHoverInfo(null);
+      return;
+    }
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const padL = 36;
+    const padR = 12;
+    const innerW = rect.width - padL - padR;
+    if (px < padL - 2 || px > padL + innerW + 2) {
+      if (hoverInfo) setHoverInfo(null);
+      return;
+    }
+    const turnMin = history[0].turn;
+    const turnMax = history[history.length - 1].turn;
+    const ratio = (px - padL) / innerW;
+    const targetTurn = turnMin + ratio * (turnMax - turnMin);
+    // 二分探索で最も近いサンプルを取得
+    let lo = 0;
+    let hi = history.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (history[mid].turn < targetTurn) lo = mid + 1;
+      else hi = mid;
+    }
+    const candidates = [
+      history[Math.max(0, lo - 1)],
+      history[lo],
+      history[Math.min(history.length - 1, lo + 1)],
+    ];
+    let best = candidates[0];
+    let bestDiff = Math.abs(best.turn - targetTurn);
+    for (const c of candidates) {
+      const d = Math.abs(c.turn - targetTurn);
+      if (d < bestDiff) {
+        bestDiff = d;
+        best = c;
+      }
+    }
+    setHoverInfo({ px, py, sample: best });
+  }
+
+  function handleCanvasLeave() {
+    setHoverInfo(null);
+  }
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -338,8 +399,77 @@ export default function StatsGraphModal({
             </div>
           )}
 
-          <div className="graph-canvas-wrap">
-            <canvas ref={canvasRef} className="graph-canvas" />
+          <div className="graph-canvas-wrap" style={{ position: "relative" }}>
+            <canvas
+              ref={canvasRef}
+              className="graph-canvas"
+              onMouseMove={handleCanvasMove}
+              onMouseLeave={handleCanvasLeave}
+            />
+            {hoverInfo && tab === "timeseries" && (
+              <div
+                className="graph-tooltip"
+                style={{
+                  position: "absolute",
+                  left: Math.min(hoverInfo.px + 12, 600 - 200),
+                  top: Math.max(8, hoverInfo.py - 100),
+                  pointerEvents: "none",
+                }}
+              >
+                <div className="graph-tooltip-turn">
+                  {t("info.turn")}: {hoverInfo.sample.turn.toLocaleString()}
+                </div>
+                {SERIES.filter(
+                  (s) =>
+                    (enabled as unknown as Record<string, boolean>)[s.key]
+                ).map((s) => (
+                  <div key={s.key} className="graph-tooltip-row">
+                    <span
+                      className="graph-swatch"
+                      style={{ backgroundColor: s.color }}
+                    />
+                    <span className="graph-tooltip-label">{t(s.tKey)}</span>
+                    <span className="graph-tooltip-value">
+                      {formatTooltipValue(s.pick(hoverInfo.sample))}
+                    </span>
+                  </div>
+                ))}
+                {enabled.rgb && (
+                  <>
+                    <div className="graph-tooltip-row">
+                      <span
+                        className="graph-swatch"
+                        style={{ backgroundColor: "#c44" }}
+                      />
+                      <span className="graph-tooltip-label">R</span>
+                      <span className="graph-tooltip-value">
+                        {hoverInfo.sample.avgR.toFixed(0)}
+                      </span>
+                    </div>
+                    <div className="graph-tooltip-row">
+                      <span
+                        className="graph-swatch"
+                        style={{ backgroundColor: "#4a4" }}
+                      />
+                      <span className="graph-tooltip-label">G</span>
+                      <span className="graph-tooltip-value">
+                        {hoverInfo.sample.avgG.toFixed(0)}
+                      </span>
+                    </div>
+                    <div className="graph-tooltip-row">
+                      <span
+                        className="graph-swatch"
+                        style={{ backgroundColor: "#46a" }}
+                      />
+                      <span className="graph-tooltip-label">B</span>
+                      <span className="graph-tooltip-value">
+                        {hoverInfo.sample.avgB.toFixed(0)}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {tab === "timeseries" && history.length === 0 && (
@@ -354,12 +484,20 @@ export default function StatsGraphModal({
   );
 }
 
+function formatTooltipValue(v: number): string {
+  if (v === 0) return "0";
+  if (Math.abs(v) >= 100) return v.toFixed(0);
+  if (Math.abs(v) >= 10) return v.toFixed(1);
+  return v.toFixed(2);
+}
+
 function drawChart(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
   history: StatsSample[],
-  enabled: GraphSeriesState
+  enabled: GraphSeriesState,
+  hoverTurn: number | null = null
 ) {
   const flags = enabled as unknown as Record<string, boolean>;
   ctx.clearRect(0, 0, w, h);
@@ -432,6 +570,19 @@ function drawChart(
       }
       ctx.stroke();
     }
+  }
+
+  // v1.10: ホバー位置に縦線を描画
+  if (hoverTurn !== null) {
+    const x = xAt(hoverTurn);
+    ctx.strokeStyle = "rgba(40, 40, 40, 0.45)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(x, padT);
+    ctx.lineTo(x, padT + innerH);
+    ctx.stroke();
+    ctx.setLineDash([]);
   }
 }
 
