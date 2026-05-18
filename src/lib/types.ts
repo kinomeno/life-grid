@@ -60,8 +60,8 @@ export type SimulationParams = {
   mutationRateMultiplier: number;
   /** エネルギー波速度倍率。0で背景エネルギーが完全に静止する。1.0が既定。 */
   waveSpeed: number;
-  /** 攻撃優位度。攻撃時に奪うエネルギー比率（0〜1）。 */
-  combatAdvantage: number;
+  // v1.10: combatAdvantage は UI から削除し COMBAT_ENERGY_LOSS_RATIO に内部固定。
+  // 戦闘掠奪率は era.environment.combatScale 経由で時代ごとに変動する。
   /** 稼働遺伝子設定。true なら無効化（全個体で固定値）。 */
   disabledGenes: DisabledGeneFlags;
   /** マップ上部のニュースバーを表示するか。 */

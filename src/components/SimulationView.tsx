@@ -1662,16 +1662,8 @@ export default function SimulationView({
                         setParams((p) => ({ ...p, waveSpeed: v }))
                       }
                     />
-                    <ParamSlider
-                      label={t("settings.param.combat_advantage")}
-                      value={params.combatAdvantage}
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      onChange={(v) =>
-                        setParams((p) => ({ ...p, combatAdvantage: v }))
-                      }
-                    />
+                    {/* v1.10: 攻撃優位度のスライダーは廃止。掠奪率は内部定数 +
+                        era.combatScale で時代ごとに変動する。 */}
                     <button
                       className="btn param-reset"
                       onClick={() => setParams(defaultSimulationParams())}
@@ -2008,7 +2000,8 @@ const GENE_TOGGLE_ITEMS: { key: keyof DisabledGeneFlags; tKey: string }[] = [
 
 /**
  * 現在の環境設定を自然な日本語／英語文で説明する。
- * 多様な判定（楽園・修羅場・混沌・凍結・嵐・etc）で「バランス」の出現を抑える。
+ * 多様な判定（楽園・混沌・凍結・嵐・etc）で「バランス」の出現を抑える。
+ * v1.10: combatAdvantage を UI から削除したため、C 軸の判定を撤去し E/M/W のみで判定する。
  */
 function describeEnvironment(
   params: SimulationParams,
@@ -2017,20 +2010,19 @@ function describeEnvironment(
   const E = params.totalEnergy;
   const M = params.mutationRateMultiplier;
   const W = params.waveSpeed;
-  const C = params.combatAdvantage;
 
   // === タイプ判定（早期 return で一意に決まるよう優先度順） ===
   type Verdict = { ja: string; en: string };
   let v: Verdict;
-  if (E >= 1.4 && C <= 0.35 && M <= 1.3) {
+  if (E >= 1.4 && M <= 1.3) {
     v = {
-      ja: "エネルギーが満ち溢れる楽園。捕食圧は低く、温和な生物が長く繁栄する。",
-      en: "An overflowing paradise. Predation pressure is low; gentle species thrive long.",
+      ja: "エネルギーが満ち溢れる楽園。資源は潤沢で温和な生物が長く繁栄する。",
+      en: "An overflowing paradise. Resources abound and gentle species thrive long.",
     };
-  } else if (E < 0.7 && C >= 0.65) {
+  } else if (E < 0.7 && M <= 0.8) {
     v = {
-      ja: "資源が乏しく、強者が弱者を喰らう修羅の世界。",
-      en: "Scarce resources, a brutal world where the strong devour the weak.",
+      ja: "資源が乏しく、強者が弱者を喰らう過酷な世界。",
+      en: "Scarce resources, a harsh world where the strong devour the weak.",
     };
   } else if (M >= 1.6) {
     v = {
@@ -2047,15 +2039,10 @@ function describeEnvironment(
       ja: "嵐のように波が激しく、生物は絶えず移動を強いられる。",
       en: "Storm-like waves force constant migration.",
     };
-  } else if (E >= 1.3 && C <= 0.45) {
+  } else if (E >= 1.3) {
     v = {
       ja: "豊かな実りに恵まれた牧歌的世界。草食的な種が広がりやすい。",
       en: "A pastoral world rich in harvest; herbivore-like species spread easily.",
-    };
-  } else if (C >= 0.7) {
-    v = {
-      ja: "捕食の利益が大きく、肉食戦略が圧倒的に有利。",
-      en: "Predation pays well; carnivorous strategies dominate.",
     };
   } else if (E < 0.8 && M <= 0.6) {
     v = {
@@ -2072,10 +2059,10 @@ function describeEnvironment(
       ja: "豊穣・激変・多様化が同時進行する、ドラマチックな進化の舞台。",
       en: "Abundance, turbulence, and diversification at once — a dramatic stage for evolution.",
     };
-  } else if (W >= 1.5 && C <= 0.4) {
+  } else if (W >= 1.5) {
     v = {
-      ja: "波は激しいが、戦闘は穏やか。回遊と適応が進化の鍵となる世界。",
-      en: "Turbulent waves with mild combat. Migration and adaptation drive evolution.",
+      ja: "波が激しく、回遊と適応が進化の鍵となる世界。",
+      en: "Turbulent waves; migration and adaptation drive evolution.",
     };
   } else {
     v = {

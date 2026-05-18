@@ -292,27 +292,6 @@ const SECTIONS_JA: Section[] = [
         ],
       },
       {
-        key: "env-combat",
-        label: "攻撃優位度",
-        body: [
-          {
-            heading: "概要",
-            lines: [
-              "戦闘時に勝者が奪うエネルギー比率を調整します。",
-              "0.0〜1.0 の範囲。",
-            ],
-          },
-          {
-            heading: "影響",
-            lines: [
-              "・高い値（0.7〜1.0）：捕食による利益が大きく、肉食戦略が非常に有利。猛獣的な生物が繁栄。",
-              "・中程度（0.4〜0.6）：略奪と採食のバランスが取れた進化が見られます。",
-              "・低い値（0.0〜0.3）：戦闘による利益が少なく、採食一辺倒の方が効率的。草食的な種が優位。",
-            ],
-          },
-        ],
-      },
-      {
         key: "env-genes",
         label: "稼働遺伝子",
         body: [
@@ -674,27 +653,6 @@ const SECTIONS_EN: Section[] = [
               "・Medium (0.8–1.2): periodic undulation; gentle circulation arises.",
               "・Low (0.1–0.5): the environment is nearly static; species adapted to terrain dominate.",
               "・Zero: waves are completely halted; only terrain bias remains, settlement becomes viable.",
-            ],
-          },
-        ],
-      },
-      {
-        key: "env-combat",
-        label: "Combat Advantage",
-        body: [
-          {
-            heading: "Overview",
-            lines: [
-              "Adjusts the energy ratio the winner takes in combat.",
-              "Range 0.0–1.0.",
-            ],
-          },
-          {
-            heading: "Effect",
-            lines: [
-              "・High (0.7–1.0): predation yields large gains; carnivore strategies are very advantageous. Predatory lives flourish.",
-              "・Medium (0.4–0.6): a balance of raiding and foraging emerges.",
-              "・Low (0.0–0.3): little gain from combat; foraging alone is more efficient. Herbivore-like species dominate.",
             ],
           },
         ],

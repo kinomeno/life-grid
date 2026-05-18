@@ -72,7 +72,8 @@ export function defaultSimulationParams(): SimulationParams {
     totalEnergy: 1.2,
     mutationRateMultiplier: 1.0,
     waveSpeed: 1.0,
-    combatAdvantage: COMBAT_ENERGY_LOSS_RATIO,
+    // v1.10: combatAdvantage は UI から削除。掠奪率は COMBAT_ENERGY_LOSS_RATIO 固定 +
+    // 時代の era.environment.combatScale 倍率で変動する。
     disabledGenes: defaultDisabledGenes(),
     newsEnabled: true,
     inheritOnDeath: true,
@@ -1971,10 +1972,12 @@ function handleCombat(world: World, life: Life): void {
       // v1.01: 確率戦闘を廃止し決定論に。強さの差は実効値として直接勝敗を決め、
       // バランスはコスト関数（^2.0）側で取る。
       // 強さを伸ばすと戦闘で確実に勝てるが、維持コストが指数的に重くなる。
+      // v1.10: 旧 params.combatAdvantage は廃止。掠奪率は COMBAT_ENERGY_LOSS_RATIO に固定し、
+      // 時代の combatScale で動的に変動する。
       const era = currentEra(world);
       const lootEnergy =
         opponent.energy *
-        world.params.combatAdvantage *
+        COMBAT_ENERGY_LOSS_RATIO *
         era.environment.combatScale;
       life.energy += lootEnergy;
       // 捕食エフェクト：捕食者の位置に被食者が重なって縮小・消滅する演出

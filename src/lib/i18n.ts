@@ -188,7 +188,7 @@ const ja: Dictionary = {
   "settings.param.total_energy": "エネルギー総量",
   "settings.param.mutation_rate": "突然変異率",
   "settings.param.wave_speed": "エネルギー波速度",
-  "settings.param.combat_advantage": "攻撃優位度",
+  // v1.10: 攻撃優位度の UI スライダーは廃止
   "settings.section.seed": "シード値",
   "settings.seed_input_placeholder": "シード値を入力",
   "settings.seed_hint": "シード値を共有すると同じ世界を再現できます。",
@@ -400,7 +400,7 @@ const en: Dictionary = {
   "settings.param.total_energy": "Total Energy",
   "settings.param.mutation_rate": "Mutation Rate",
   "settings.param.wave_speed": "Wave Speed",
-  "settings.param.combat_advantage": "Combat Advantage",
+  // v1.10: Combat Advantage slider removed; constant + era.combatScale drives it now
   "settings.section.seed": "Seed",
   "settings.seed_input_placeholder": "Enter a seed",
   "settings.seed_hint": "Sharing a seed reproduces the same world.",
