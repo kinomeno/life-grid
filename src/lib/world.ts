@@ -1341,7 +1341,17 @@ function actLife(world: World, life: Life): void {
 
   const available = energy[idx];
   const capacity = g.size - life.energy;
-  const absorb = Math.max(0, Math.min(available * ABSORB_RATE, capacity));
+  // v1.10: 知能による吸収効率ボーナス（暫定実装・のちに改修予定）
+  //   intel  50: +0%
+  //   intel 100: +7.5%
+  //   intel 150: +15%
+  //   intel 250: +30%（上限近く）
+  // 知能が「採餌の上手さ」として直接ペイオフするようにし、平均知能を引き上げる。
+  const absorbIntelBonus = Math.max(0, (g.intelligence - 50) / 200) * 0.3;
+  const absorb = Math.max(
+    0,
+    Math.min(available * ABSORB_RATE * (1 + absorbIntelBonus), capacity)
+  );
   energy[idx] = available - absorb;
   life.energy += absorb;
 
@@ -1847,14 +1857,26 @@ function handleCombat(world: World, life: Life): void {
     const defAllyBonus = Math.log1p(defenderAllyCount) * 1.5;
 
     // 体格を防御役として戦闘判定に組み込む（B1 案）。
-    //   effectiveAtk = life.strength + 仲間ボーナス
-    //   effectiveDef = opponent.strength + opponent.size * 0.05 + 仲間ボーナス
+    //   effectiveAtk = life.strength + 仲間ボーナス + 知能ボーナス
+    //   effectiveDef = opponent.strength + opponent.size * 0.05 + 仲間ボーナス + 知能ボーナス
     // 体格 100 で +5、140 で +7 の防御。控えめだが体格の存在意義を増す。
     //   ※ 0.1 だと体格大個体が無敵化し population 全滅。
+    // v1.10: 知能 100 超は戦闘の効果的攻防に +bonus*5（暫定実装・のちに改修予定）
+    //   intel 100: +0
+    //   intel 200: +2.5
+    //   intel 300: +5
+    //   intel 500: +10
+    // 防御側にも同じ補正を入れて、知能差が戦闘上の小さな差になるように。
     // プレイヤーが保護中の個体は戦闘で死なない
     if (opponent.protected) continue;
-    const effectiveAtk = life.genes.strength + allyBonus;
-    const effectiveDef = opponent.genes.strength + opponent.genes.size * 0.05 + defAllyBonus;
+    const atkIntelBonus = Math.max(0, (life.genes.intelligence - 100) / 200) * 5;
+    const defIntelBonus = Math.max(0, (opponent.genes.intelligence - 100) / 200) * 5;
+    const effectiveAtk = life.genes.strength + allyBonus + atkIntelBonus;
+    const effectiveDef =
+      opponent.genes.strength +
+      opponent.genes.size * 0.05 +
+      defAllyBonus +
+      defIntelBonus;
     if (effectiveAtk > effectiveDef) {
       // v1.01: 確率戦闘を廃止し決定論に。強さの差は実効値として直接勝敗を決め、
       // バランスはコスト関数（^2.0）側で取る。
