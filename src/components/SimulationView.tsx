@@ -1515,11 +1515,12 @@ export default function SimulationView({
                       selectedLife.genes.intelligence > 100 ? "  ⚠" : ""
                     }`}
                   />
+                  {/* v1.11b: reproductionRate は「繁殖頻度」として機能。
+                      高 rate = 頻繁に繁殖（r 戦略）、低 rate = 滅多にしない（K 戦略）。
+                      閾値スケールにより、暗黙のコストは「子の低エネルギー化」。 */}
                   <InfoRow
                     label={t("info.reproduction_rate")}
-                    value={`${selectedLife.genes.reproductionRate.toFixed(2)} / 2.00${
-                      selectedLife.genes.reproductionRate > 0.4 ? "  ⚠" : ""
-                    }`}
+                    value={selectedLife.genes.reproductionRate.toFixed(2)}
                   />
                   <InfoRow
                     label={t("info.lifespan")}
