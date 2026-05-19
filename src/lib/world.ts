@@ -1830,7 +1830,17 @@ function findLifeById(world: World, id: number): Life | null {
 
 function shouldReproduce(life: Life): boolean {
   const minAge = life.genes.lifespan * MIN_REPRODUCTIVE_AGE_RATIO;
-  const reproThreshold = life.genes.size * REPRODUCTION_ENERGY_THRESHOLD_RATIO;
+  // v1.11: 繁殖閾値に絶対下限 40 を設定（小型多産の暴走抑制）。
+  //   size  30: 0.6*30 = 18 → 40（下限で抑制）
+  //   size  67: 0.6*67 = 40 → 40（境界）
+  //   size 100: 0.6*100 = 60 → 60（通常レンジ）
+  //   size 200: 0.6*200 = 120 → 120（大型は不変）
+  // 下限 50 だと絶滅シードが出るため 40 に調整。多産は子のエネルギー薄化が
+  // 本来のトレードオフとして効くようになる。
+  const reproThreshold = Math.max(
+    40,
+    life.genes.size * REPRODUCTION_ENERGY_THRESHOLD_RATIO
+  );
   return life.age >= minAge && life.energy >= reproThreshold;
 }
 
