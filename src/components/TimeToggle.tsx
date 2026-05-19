@@ -32,7 +32,6 @@ export default function TimeToggle({
       <span className={`time-switch-label ${running ? "on" : ""}`}>
         {running ? t("modal.time_on") : t("modal.time_off")}
       </span>
-      {running && <span className="time-switch-pulse" aria-hidden="true" />}
     </button>
   );
 }
