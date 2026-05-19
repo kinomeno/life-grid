@@ -10,6 +10,10 @@ export type Genes = {
   reproductionRate: number;
   // v1.10: mutationRate 遺伝子は廃止（環境設定の全体倍率のみで制御）
   lifespan: number;
+  // v1.11: 1 回の出産で生まれる子の数（1〜10）。
+  // 親 + 子 N 体に均等分割 = 各個体が parent.energy / (N+1) を取得（案 A）。
+  // 多産はリスキー（子は低エネルギー）だが、r 戦略として有効。
+  offspringCount: number;
   // ──── v1.10: 行動判断の重み遺伝子（0〜100 連続スケール）────
   // accuracy = min(1.0, sqrt(intel/200)) で精度がかかる。
   // ハードコードのモード切替は廃止し、これらの重み × 観察特徴の線形和で行動が決まる。

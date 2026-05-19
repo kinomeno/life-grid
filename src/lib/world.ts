@@ -8,6 +8,8 @@ import {
   COST_INTELLIGENCE_EXP,
   COST_SIZE,
   COST_SPEED_PER_STEP,
+  COST_SPEED_MAINT,
+  COST_SPEED_EXP,
   COST_STRENGTH,
   COST_STRENGTH_EXP,
   COST_VISION,
@@ -34,11 +36,14 @@ import {
   GENE_LIFESPAN_MIN,
   GENE_MUTATION_MAX,
   GENE_MUTATION_MIN,
+  GENE_OFFSPRING_MAX,
+  GENE_OFFSPRING_MIN,
   GENE_REPRODUCTION_MAX,
   GENE_REPRODUCTION_MIN,
   GENE_SIZE_MAX,
   GENE_SIZE_MIN,
   GENE_SPEED_MAX,
+  GENE_SPEED_NORMAL_CAP,
   GENE_SPEED_MIN,
   GENE_STRENGTH_MAX,
   GENE_STRENGTH_MIN,
@@ -282,13 +287,16 @@ function randomGenes(rng: RNG): Genes {
     g: randomInt(rng, 0, 256),
     b: randomInt(rng, 0, 256),
     vision: randomInt(rng, GENE_VISION_MIN, GENE_VISION_MAX + 1),
-    speed: randomInt(rng, GENE_SPEED_MIN, GENE_SPEED_MAX + 1),
+    // v1.11: 初期分布は通常レンジ（1〜100）。突然変異で 100 超のミュータントが稀に発生。
+    speed: randomInt(rng, GENE_SPEED_MIN, GENE_SPEED_NORMAL_CAP + 1),
     size: randomRange(rng, GENE_SIZE_MIN, GENE_SIZE_MAX),
     // v1.01: 初期分布は通常レンジ（1〜100）のみ。突然変異で 100 超に達する。
     strength: randomInt(rng, GENE_STRENGTH_MIN, GENE_STRENGTH_NORMAL_CAP + 1),
     intelligence: randomInt(rng, GENE_INTELLIGENCE_MIN, GENE_INTELLIGENCE_NORMAL_CAP + 1),
     reproductionRate: randomRange(rng, GENE_REPRODUCTION_MIN, GENE_REPRODUCTION_NORMAL_CAP),
     lifespan: randomRange(rng, GENE_LIFESPAN_MIN, GENE_LIFESPAN_MAX),
+    // v1.11: 初期出産数は 1（単独出産）。突然変異で多産個体が稀に発生。
+    offspringCount: 1,
     // v1.10: 行動判断の重み遺伝子（中央値 50 ± 30 から進化）
     wAppetite: initW(),
     wPredation: initW(),
@@ -328,9 +336,10 @@ export function mutatGenes(parentGenes: Genes, mutationRate: number, rng: RNG): 
   genes.g = Math.round(mutate(genes.g, 0, 255));
   genes.b = Math.round(mutate(genes.b, 0, 255));
   genes.vision = Math.round(mutate(genes.vision, GENE_VISION_MIN, GENE_VISION_MAX));
-  // 速度（1〜100）：小刻みな変動（±3）
+  // v1.11: 速度（1〜999）：strength/intelligence と同じく ±3 相当（factor 0.003 で範囲 998 に対し ±3）
+  // 100 超のミュータントは稀に発生 → 数世代以内に死亡（短命）。
   genes.speed = Math.round(
-    mutate(genes.speed, GENE_SPEED_MIN, GENE_SPEED_MAX, 0.03)
+    mutate(genes.speed, GENE_SPEED_MIN, GENE_SPEED_MAX, 0.003)
   );
   genes.size = mutate(genes.size, GENE_SIZE_MIN, GENE_SIZE_MAX);
   // v1.01: 強さ（1〜999）：通常変異は ±3 相当（factor 0.003 で範囲 998 に対し ±3）
@@ -356,6 +365,11 @@ export function mutatGenes(parentGenes: Genes, mutationRate: number, rng: RNG): 
   );
   // v1.10: mutationRate 遺伝子は廃止（環境設定の倍率で制御）
   genes.lifespan = mutate(genes.lifespan, GENE_LIFESPAN_MIN, GENE_LIFESPAN_MAX);
+  // v1.11: 出産数（1〜10）：factor 0.05 で範囲 9 に対し ±0.45 程度
+  // 整数値だが mutate（連続値）→ round で離散化。たまに ±1 が起きる程度。
+  genes.offspringCount = Math.round(
+    mutate(genes.offspringCount, GENE_OFFSPRING_MIN, GENE_OFFSPRING_MAX, 0.05)
+  );
   // v1.10: 行動判断の重み遺伝子（factor 0.05 で範囲 100 に対し ±5）
   genes.wAppetite = Math.round(mutate(genes.wAppetite, GENE_WEIGHT_MIN, GENE_WEIGHT_MAX, 0.05));
   genes.wPredation = Math.round(mutate(genes.wPredation, GENE_WEIGHT_MIN, GENE_WEIGHT_MAX, 0.05));
@@ -1322,13 +1336,16 @@ function actLife(world: World, life: Life): void {
   const { width, height, energy, occupancy } = world;
   const g = life.genes;
 
-  // 速度を「累積スコア」方式で扱う：speed/33.3 を毎ターン加算、floor 分だけ動く。
-  //  - speed 100: 3.0/turn → 毎ターン 3 ステップ
-  //  - speed 50:  1.5/turn → 1〜2 ステップ
-  //  - speed 33:  1.0/turn → 1 ステップ
-  //  - speed 10:  0.3/turn → 3〜4 ターンに 1 ステップ
-  //  - speed 1:   0.03/turn → 33 ターンに 1 ステップ
-  life.moveAccum += g.speed / 33.3;
+  // v1.11: 速度は 1〜999 の sqrt スケール（線形だと崩壊するため）。
+  //   1 ターンに加算される速度量 = sqrt(speed / 33.3)
+  //     speed   1:  0.17/turn  → 約 6 turn に 1 歩
+  //     speed  33:  1.00       → 毎ターン 1 歩
+  //     speed 100:  1.73       → 約 2 歩
+  //     speed 300:  3.0        → 3 歩
+  //     speed 500:  3.87       → 約 4 歩
+  //     speed 999:  5.48       → 約 5-6 歩（上限相当）
+  //   高速個体は COST_SPEED_MAINT で短命確定（指数 1.7）。
+  life.moveAccum += Math.sqrt(g.speed / 33.3);
   const allowedSteps = Math.floor(life.moveAccum);
   life.moveAccum -= allowedSteps;
 
@@ -1411,12 +1428,16 @@ function actLife(world: World, life: Life): void {
     COST_INTELLIGENCE,
     COST_INTELLIGENCE_EXP
   );
+  // v1.11: 速度 100 超の維持コスト（指数 1.7）。
+  // 速度 999 で約 7.5/turn、100 までは 0.15 以下で軽め。
+  const speedMaintCost = nonlinearGeneCost(g.speed, COST_SPEED_MAINT, COST_SPEED_EXP);
   const upkeep =
     COST_BASE +
     COST_VISION * g.vision +
     intelligenceCost +
     strengthCost +
-    COST_SIZE * g.size;
+    speedMaintCost +
+    COST_SIZE * g.size; // v1.11: COST_SIZE = 0 のため実質ゼロ
   life.energy -= upkeep;
 
   life.age++;
@@ -1444,9 +1465,14 @@ function actLife(world: World, life: Life): void {
   }
 
   if (life.alive && shouldReproduce(life)) {
-    const emptyNeighbor = findEmptyNeighbor(world, life);
-    if (emptyNeighbor) {
-      reproduceLife(world, life, emptyNeighbor);
+    // v1.11: 多産対応。出産数遺伝子に応じて最大 N 体まで空きセルを探す。
+    const wanted = Math.max(
+      1,
+      Math.min(GENE_OFFSPRING_MAX, Math.round(g.offspringCount))
+    );
+    const emptyNeighbors = findEmptyNeighbors(world, life, wanted);
+    if (emptyNeighbors.length > 0) {
+      reproduceLife(world, life, emptyNeighbors);
     }
   }
 }
@@ -1808,33 +1834,52 @@ function shouldReproduce(life: Life): boolean {
   return life.age >= minAge && life.energy >= reproThreshold;
 }
 
-function findEmptyNeighbor(
+/**
+ * v1.11: 周囲 8 セルの空きを最大 `wanted` 個まで列挙する。
+ * 多産（offspringCount > 1）対応。空きがなければ空配列。
+ */
+function findEmptyNeighbors(
   world: World,
-  life: Life
-): { x: number; y: number } | null {
+  life: Life,
+  wanted: number
+): { x: number; y: number }[] {
   const { width, height, occupancy } = world;
-  const { x, y } = life;
-  const offsets = [
-    [-1, -1], [0, -1], [1, -1],
-    [-1, 0],           [1, 0],
-    [-1, 1],  [0, 1],  [1, 1],
-  ];
-  for (const [dx, dy] of offsets) {
-    const nx = (x + dx + width) % width;
-    const ny = (y + dy + height) % height;
+  const result: { x: number; y: number }[] = [];
+  const x = life.x;
+  const y = life.y;
+  for (let i = 0; i < 8 && result.length < wanted; i++) {
+    let nx = x + NEIGHBOR_DX[i];
+    if (nx < 0) nx += width;
+    else if (nx >= width) nx -= width;
+    let ny = y + NEIGHBOR_DY[i];
+    if (ny < 0) ny += height;
+    else if (ny >= height) ny -= height;
     const idx = ny * width + nx;
     if (occupancy[idx] === -1) {
-      return { x: nx, y: ny };
+      result.push({ x: nx, y: ny });
     }
   }
-  return null;
+  return result;
 }
 
+/**
+ * v1.11: 多産対応の出産処理。
+ *
+ * 親の出産数遺伝子 N（1〜10）に応じて子を N 体出産しようとする。
+ * 空きセルが不足した場合は実際に生まれる数が制限される。
+ *
+ * エネルギー分割（案 A：完全均等）：
+ *   親 + 子 N 体に均等分割 → 各個体が parent.energy / (N+1)
+ *   実際に生まれた子 K 体 ≤ N の場合も同じ「N+1 等分」ルール（あぶれた分は親に戻る）
+ *
+ * これにより多産は子のエネルギーが少なくなる自然なトレードオフが生まれる。
+ */
 function reproduceLife(
   world: World,
   parent: Life,
-  childPos: { x: number; y: number }
+  emptyPositions: { x: number; y: number }[]
 ): void {
+  if (emptyPositions.length === 0) return;
   const rng = mulberry32((world.turn * 73856093) ^ (parent.id * 19349663) >>> 0);
   // v1.10: 全個体共通の固定突然変異率 × 環境設定の倍率（0 設定で完全コピー）
   const effectiveMutationRate = clamp(
@@ -1842,33 +1887,49 @@ function reproduceLife(
     0,
     1
   );
-  let childGenes = mutatGenes(parent.genes, effectiveMutationRate, rng);
-  // 稼働遺伝子フラグに従って無効化された遺伝子は固定値で上書き
-  childGenes = applyDisabledGenes(childGenes, world.params.disabledGenes);
-  const splitEnergy = parent.energy * 0.5;
-  parent.energy = splitEnergy;
 
-  const idx = childPos.y * world.width + childPos.x;
-  const childLife: Life = {
-    id: world.nextLifeId++,
-    x: childPos.x,
-    y: childPos.y,
-    // 親マスから子位置へ「分裂・移動」する演出
-    prevX: parent.x,
-    prevY: parent.y,
-    energy: splitEnergy,
-    age: 0,
-    speciesId: speciesIdFromGenes(childGenes),
-    genes: childGenes,
-    alive: true,
-    moveAccum: 0,
-    // v1.10: 向きは初期 0（静止状態）
-    dx: 0,
-    dy: 0,
-  };
-  world.lives.push(childLife);
-  world.livesById.set(childLife.id, childLife);
-  world.occupancy[idx] = childLife.id;
+  // 親の出産数遺伝子（1〜10）の範囲で、空きセル数以下までを実出産数に
+  const wanted = Math.max(
+    1,
+    Math.min(GENE_OFFSPRING_MAX, Math.round(parent.genes.offspringCount))
+  );
+  const actual = Math.min(wanted, emptyPositions.length);
+  if (actual === 0) return;
+
+  // エネルギー分割：親 + 子 wanted 体に均等分割（実出産数 actual に関わらず）
+  // 余り（あぶれた子の分）は親に戻る仕様 = 親が他にエネルギーを保つ自然な式
+  const share = parent.energy / (wanted + 1);
+  const childEnergy = share;
+  const parentRemain = parent.energy - share * actual;
+  parent.energy = parentRemain;
+
+  for (let i = 0; i < actual; i++) {
+    const childPos = emptyPositions[i];
+    let childGenes = mutatGenes(parent.genes, effectiveMutationRate, rng);
+    childGenes = applyDisabledGenes(childGenes, world.params.disabledGenes);
+
+    const idx = childPos.y * world.width + childPos.x;
+    const childLife: Life = {
+      id: world.nextLifeId++,
+      x: childPos.x,
+      y: childPos.y,
+      // 親マスから子位置へ「分裂・移動」する演出
+      prevX: parent.x,
+      prevY: parent.y,
+      energy: childEnergy,
+      age: 0,
+      speciesId: speciesIdFromGenes(childGenes),
+      genes: childGenes,
+      alive: true,
+      moveAccum: 0,
+      // v1.10: 向きは初期 0（静止状態）
+      dx: 0,
+      dy: 0,
+    };
+    world.lives.push(childLife);
+    world.livesById.set(childLife.id, childLife);
+    world.occupancy[idx] = childLife.id;
+  }
 }
 
 // v1.10 perf: モジュール共有の隣接オフセット（配列リテラル割り当てを回避）
@@ -1947,11 +2008,10 @@ function handleCombat(world: World, life: Life): void {
     }
     const defAllyBonus = Math.log1p(defenderAllyCount) * 1.5;
 
-    // 体格を防御役として戦闘判定に組み込む（B1 案）。
+    // v1.11: 体格は戦闘から完全に除外。
     //   effectiveAtk = life.strength + 仲間ボーナス + 知能ボーナス
-    //   effectiveDef = opponent.strength + opponent.size * 0.05 + 仲間ボーナス + 知能ボーナス
-    // 体格 100 で +5、140 で +7 の防御。控えめだが体格の存在意義を増す。
-    //   ※ 0.1 だと体格大個体が無敵化し population 全滅。
+    //   effectiveDef = opponent.strength + 仲間ボーナス + 知能ボーナス
+    // 体格は「エネルギー貯蔵タンク」専用の遺伝子に役割を集約（COST_SIZE=0 とセット）。
     // v1.10: 知能 100 超は戦闘の効果的攻防に +bonus*5（暫定実装・のちに改修予定）
     //   intel 100: +0
     //   intel 200: +2.5
@@ -1963,11 +2023,7 @@ function handleCombat(world: World, life: Life): void {
     const atkIntelBonus = Math.max(0, (life.genes.intelligence - 100) / 200) * 5;
     const defIntelBonus = Math.max(0, (opponent.genes.intelligence - 100) / 200) * 5;
     const effectiveAtk = life.genes.strength + allyBonus + atkIntelBonus;
-    const effectiveDef =
-      opponent.genes.strength +
-      opponent.genes.size * 0.05 +
-      defAllyBonus +
-      defIntelBonus;
+    const effectiveDef = opponent.genes.strength + defAllyBonus + defIntelBonus;
     if (effectiveAtk > effectiveDef) {
       // v1.01: 確率戦闘を廃止し決定論に。強さの差は実効値として直接勝敗を決め、
       // バランスはコスト関数（^2.0）側で取る。
@@ -1980,6 +2036,39 @@ function handleCombat(world: World, life: Life): void {
         COMBAT_ENERGY_LOSS_RATIO *
         era.environment.combatScale;
       life.energy += lootEnergy;
+      // v1.11: 残り 40% は「死骸」としてその場のセルに付与。
+      // セル上限 ENERGY_MAX を超えた分は上下左右 4 セルに均等分配（あふれは消滅）。
+      // 「死骸ホットスポット」で他個体の捕食連鎖を誘発する emergent 戦略の素地に。
+      const carcassEnergy =
+        opponent.energy *
+        (1 - COMBAT_ENERGY_LOSS_RATIO) *
+        era.environment.combatScale
+        + opponent.genes.size * 0.3;
+      const totalAtCell = energy[nidx] + carcassEnergy;
+      if (totalAtCell <= ENERGY_MAX) {
+        energy[nidx] = totalAtCell;
+      } else {
+        energy[nidx] = ENERGY_MAX;
+        const overflow = totalAtCell - ENERGY_MAX;
+        // 上下左右 4 セルに均等分配（斜めは含めない：影響範囲が広がりすぎる）
+        const share = overflow * 0.25;
+        const xN = (nx + 1) % width;
+        const xP = (nx - 1 + width) % width;
+        const yN = (ny + 1) % height;
+        const yP = (ny - 1 + height) % height;
+        const i1 = ny * width + xN;
+        const i2 = ny * width + xP;
+        const i3 = yN * width + nx;
+        const i4 = yP * width + nx;
+        const v1 = energy[i1] + share;
+        const v2 = energy[i2] + share;
+        const v3 = energy[i3] + share;
+        const v4 = energy[i4] + share;
+        energy[i1] = v1 > ENERGY_MAX ? ENERGY_MAX : v1;
+        energy[i2] = v2 > ENERGY_MAX ? ENERGY_MAX : v2;
+        energy[i3] = v3 > ENERGY_MAX ? ENERGY_MAX : v3;
+        energy[i4] = v4 > ENERGY_MAX ? ENERGY_MAX : v4;
+      }
       // 捕食エフェクト：捕食者の位置に被食者が重なって縮小・消滅する演出
       world.combatFlashes.push({
         attackerLifeId: life.id,
@@ -1993,10 +2082,6 @@ function handleCombat(world: World, life: Life): void {
       });
       opponent.alive = false;
       opponent.energy = 0;
-      energy[nidx] = Math.min(
-        ENERGY_MAX,
-        energy[nidx] + opponent.genes.size * 0.3
-      );
       occupancy[nidx] = -1;
       break;
     }

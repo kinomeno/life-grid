@@ -98,6 +98,7 @@ const ja: Dictionary = {
   "info.reproduction_rate": "繁殖率",
   "info.mutation_rate": "突然変異率",
   "info.lifespan": "寿命",
+  "info.offspring_count": "出産数",
 
   "info.id": "ID",
   "info.position": "位置",
@@ -310,6 +311,7 @@ const en: Dictionary = {
   "info.reproduction_rate": "Reproduction",
   "info.mutation_rate": "Mutation",
   "info.lifespan": "Lifespan",
+  "info.offspring_count": "Offspring",
 
   "info.id": "ID",
   "info.position": "Position",

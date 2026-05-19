@@ -10,12 +10,20 @@ export const ENERGY_WAVE_SPATIAL_FREQ = 0.04;
 
 export const GENE_VISION_MIN = 1;
 export const GENE_VISION_MAX = 4;
-// 移動速度は 1〜100 の連続スケール（待機時間方式）。
-// 1 ターンに加算される速度量 = speed / 33.3。floor(累積) ステップ移動。
+// v1.11: 速度は 1〜999 の連続スケール（sqrt + 指数コスト）。
+//   1 ターンに加算される速度量 = sqrt(speed / 33.3)。floor(累積) ステップ移動。
+//     speed   1:  0.17/turn  speed  33:  1.0/turn
+//     speed 100:  1.73       speed 300:  3.0
+//     speed 500:  3.87       speed 999:  5.48
+//   100 超は維持コストが指数的に増加（短命）。500 超は数十ターンで餓死。
 export const GENE_SPEED_MIN = 1;
-export const GENE_SPEED_MAX = 100;
-export const GENE_SIZE_MIN = 60;
-export const GENE_SIZE_MAX = 140;
+export const GENE_SPEED_MAX = 999;
+// 観察 UI で「通常」と呼ぶしきい値
+export const GENE_SPEED_NORMAL_CAP = 100;
+// v1.11: 体格範囲を 60-140 → 30-200 に拡張。
+// 上限張り付きが頻発するようなら 30-999 にさらに拡張を検討。
+export const GENE_SIZE_MIN = 30;
+export const GENE_SIZE_MAX = 200;
 // v1.01: 強さは 1〜999 の連続スケール。
 // 0〜100 が通常レンジ、100〜300 が困難（ミュータント）、300〜500 が短命確定、500〜999 がほぼ即死。
 export const GENE_STRENGTH_MIN = 1;
@@ -30,6 +38,13 @@ export const GENE_INTELLIGENCE_NORMAL_CAP = 100;
 export const GENE_REPRODUCTION_MIN = 0.1;
 export const GENE_REPRODUCTION_MAX = 2.0;
 export const GENE_REPRODUCTION_NORMAL_CAP = 0.4;
+// v1.11: 出産数遺伝子。1 回の繁殖で生まれる子の数。
+//   1: 単独出産（哺乳類的）
+//   3-5: 中程度（鳥・爬虫類的）
+//   8-10: 多産（昆虫・魚的、r 戦略）
+// 親 + 子 N 体に均等分割 = 各個体が parent.energy / (N+1)。
+export const GENE_OFFSPRING_MIN = 1;
+export const GENE_OFFSPRING_MAX = 10;
 // v1.10: mutationRate 遺伝子は廃止。全個体共通の固定突然変異率を使う。
 // 環境設定の mutationRateMultiplier（0 まで設定可）で全体倍率を制御。
 export const BASE_MUTATION_RATE = 0.08;
@@ -66,6 +81,17 @@ export const COST_BASE = 0.25;
 //   vision 1: 0.12, vision 2: 0.24, vision 3: 0.36, vision 4: 0.48
 export const COST_VISION = 0.12;
 export const COST_SPEED_PER_STEP = 0.25;
+// v1.11: 速度の維持コスト（移動の有無に関わらず常時かかる）。
+// 指数 1.7 で、speed 100 までは軽く、超えると急に重くなるカーブ。
+//   speed   1:   0.00006
+//   speed 100:   0.15
+//   speed 200:   0.49
+//   speed 500:   2.33
+//   speed 999:   7.54
+// COST_SPEED_PER_STEP（移動時のみ、0.25/step）と合わせて、
+// 高速個体は短命確定（999 で約 10-15 turn の寿命）。
+export const COST_SPEED_MAINT = 0.00006;
+export const COST_SPEED_EXP = 1.7;
 // v1.01: 強さ・知能のコスト指数を別々に持たせる。
 // 強さ ^2.0（戦闘優位が強いため厳しめ）
 // 知能 ^1.85（間接効果なので緩め、100 超の天才個体が稀に出るように）
@@ -95,7 +121,10 @@ export const COST_STRENGTH = 0.0007;
 // バランス検証で平均知能 30 前後で停滞していたため。
 //   v= 50:  0.39  v=100:  1.77  v=200:  6.39  v=500: 31.8  v=999: 116.4
 export const COST_INTELLIGENCE = 0.00025;
-export const COST_SIZE = 0.005;
+// v1.11: COST_SIZE = 0。体格は「エネルギー貯蔵タンク」専用遺伝子に。
+// 大型化のトレードオフは「繁殖閾値が上がる」(= 0.6 × size) のみ。
+// 戦闘・維持コストともに体格は影響しない。
+export const COST_SIZE = 0;
 
 export const ABSORB_RATE = 0.10;
 
@@ -125,6 +154,8 @@ export const FIXED_GENE_VALUES = {
   intelligence: 50,
   reproductionRate: 0.25,
   lifespan: 400,
+  // v1.11: 出産数の固定値は 1（単独出産が無効化時のデフォルト）
+  offspringCount: 1,
   // v1.10: 重み遺伝子の中央値固定
   wAppetite: 50,
   wPredation: 50,

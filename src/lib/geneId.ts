@@ -2,6 +2,8 @@ import {
   GENE_INTELLIGENCE_MAX,
   GENE_LIFESPAN_MAX,
   GENE_LIFESPAN_MIN,
+  GENE_OFFSPRING_MAX,
+  GENE_OFFSPRING_MIN,
   GENE_REPRODUCTION_MAX,
   GENE_REPRODUCTION_MIN,
   GENE_SIZE_MAX,
@@ -23,18 +25,20 @@ import type { Genes } from "./types";
  * 各遺伝子を桁数固定にすることで、後でパースして元に戻せる。
  *  - r,g,b: 3桁 ×3                = 9
  *  - vision: 1桁 (1-9)            = 1
- *  - speed: 3桁 (001-100)         = 3
- *  - size: 3桁 (060-140)          = 3
+ *  - speed: 3桁 (001-999)         = 3   (v1.11: 100→999 上限拡張)
+ *  - size: 3桁 (030-200)          = 3   (v1.11: 60-140→30-200 範囲変更)
  *  - strength: 3桁 (001-999)      = 3
  *  - intelligence: 3桁 (000-999)  = 3
  *  - reproductionRate: 3桁 (010-200, 100 倍値)= 3
  *  - lifespan: 4桁                = 4
+ *  - offspringCount: 1桁 (1-9 → 1-10 範囲、0=10 にマップ) = 1   (v1.11 追加)
  *  - wAppetite～wStarvSensitive: 1桁 ×7（10刻みで精度を犠牲に短縮） = 7
- * 合計 36桁。
+ * 合計 37桁。
  *
  * v1.10 から mutationRate を廃止。重み遺伝子 7 つを追加した。
+ * v1.11 で offspringCount を 1 桁追加。
  */
-export const GENE_ID_LENGTH = 36;
+export const GENE_ID_LENGTH = 37;
 export function encodeGeneId(genes: Genes): string {
   const r = pad(genes.r, 3);
   const g = pad(genes.g, 3);
@@ -46,6 +50,9 @@ export function encodeGeneId(genes: Genes): string {
   const intel = pad(Math.round(genes.intelligence), 3);
   const repro = pad(Math.round(genes.reproductionRate * 100), 3);
   const life = pad(Math.round(genes.lifespan), 4);
+  // v1.11: 出産数 1-10 を 1-9 + (10→0) として 1 桁に圧縮
+  const ocRaw = Math.max(GENE_OFFSPRING_MIN, Math.min(GENE_OFFSPRING_MAX, Math.round(genes.offspringCount)));
+  const oc = ocRaw === 10 ? "0" : String(ocRaw);
   // 重み遺伝子は 0-100 を 0-9 にマッピング（10刻みで精度を犠牲）
   const w1 = compressWeight(genes.wAppetite);
   const w2 = compressWeight(genes.wPredation);
@@ -54,7 +61,7 @@ export function encodeGeneId(genes: Genes): string {
   const w5 = compressWeight(genes.wLoyalty);
   const w6 = compressWeight(genes.wRepro);
   const w7 = compressWeight(genes.wStarvSensitive);
-  return `${r}${g}${b}${vision}${speed}${size}${strength}${intel}${repro}${life}${w1}${w2}${w3}${w4}${w5}${w6}${w7}`;
+  return `${r}${g}${b}${vision}${speed}${size}${strength}${intel}${repro}${life}${oc}${w1}${w2}${w3}${w4}${w5}${w6}${w7}`;
 }
 
 /** ID を Genes に戻す。失敗時は null。 */
@@ -101,6 +108,9 @@ export function decodeGeneId(id: string): Genes | null {
     GENE_LIFESPAN_MIN,
     GENE_LIFESPAN_MAX
   );
+  // v1.11: 出産数 1 桁（"0"→10）
+  const ocDigit = parseInt(trimmed.slice(p, (p += 1)), 10);
+  const offspringCount = ocDigit === 0 ? 10 : clamp(ocDigit, GENE_OFFSPRING_MIN, GENE_OFFSPRING_MAX);
   const wAppetite = decompressWeight(parseInt(trimmed.slice(p, (p += 1)), 10));
   const wPredation = decompressWeight(parseInt(trimmed.slice(p, (p += 1)), 10));
   const wCaution = decompressWeight(parseInt(trimmed.slice(p, (p += 1)), 10));
@@ -119,6 +129,7 @@ export function decodeGeneId(id: string): Genes | null {
     intelligence,
     reproductionRate,
     lifespan,
+    offspringCount,
     wAppetite,
     wPredation,
     wCaution,

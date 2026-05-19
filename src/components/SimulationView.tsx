@@ -1440,7 +1440,9 @@ export default function SimulationView({
                   />
                   <InfoRow
                     label={t("info.move_speed")}
-                    value={selectedLife.genes.speed}
+                    value={`${selectedLife.genes.speed} / 999${
+                      selectedLife.genes.speed > 100 ? "  ⚠" : ""
+                    }`}
                   />
                   <InfoRow
                     label={t("info.size")}
@@ -1467,6 +1469,11 @@ export default function SimulationView({
                   <InfoRow
                     label={t("info.lifespan")}
                     value={selectedLife.genes.lifespan.toFixed(0)}
+                  />
+                  {/* v1.11: 出産数 */}
+                  <InfoRow
+                    label={t("info.offspring_count")}
+                    value={`${selectedLife.genes.offspringCount} / 10`}
                   />
                 </div>
                 {/* v1.10: 行動判断の重み遺伝子（性格） */}
