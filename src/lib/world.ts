@@ -1908,9 +1908,10 @@ function shouldReproduce(life: Life): boolean {
   // 暗黙のコスト: 高 rate は閾値が下がる → 親エネルギー少ない → 子も低エネルギー
   // で生まれる（reproduceLife の均等分割により）→ 子の生存が厳しくなる。
   // 上限 1.5 により r 戦略偏重を防ぎ、K 戦略との二極化が成立しやすくなる。
+  // v1.20: 上限 1.5 → 1.4 に微調整（r 戦略偏重抑制と小世界生存の両立）
   const oc = Math.max(1, Math.round(life.genes.offspringCount));
   const effectiveRate = Math.min(
-    1.5,
+    1.4,
     Math.max(0.2, 1 + (life.genes.reproductionRate - 1) / Math.sqrt(oc))
   );
   const reproThreshold = baseThreshold / effectiveRate;
@@ -1988,6 +1989,8 @@ function reproduceLife(
   //   N=5: log(6) ≈ 1.79 → 0.179 × share
   //   N=10: log(11) ≈ 2.40 → 0.240 × share
   // multi-birth の暴走を構造的に抑制し、r/K 戦略の多様性を保つ。
+  // 50×50 小世界では 2/10 絶滅程度。本格的な集団崩壊（多産暴走）を防ぐ意味で
+  // 係数 0.1 を維持。
   const fatigueCost = share * 0.1 * Math.log(wanted + 1);
   const parentRemain = parent.energy - share * actual - fatigueCost;
   parent.energy = parentRemain > 0 ? parentRemain : 0;
