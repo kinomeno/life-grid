@@ -344,6 +344,36 @@
   border-bottom: 1px solid var(--line-soft);
 }
 
+/* v1.20: 個体詳細パネルのタブナビゲーション */
+:global(.life-tabs) {
+  display: flex;
+  gap: 2px;
+  margin: 8px 0 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+:global(.life-tab) {
+  flex: 1;
+  padding: 6px 4px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+:global(.life-tab:hover) {
+  color: var(--text-strong);
+}
+
+:global(.life-tab.active) {
+  color: var(--text-strong);
+  border-bottom-color: var(--text-strong);
+}
+
 :global(.panel:last-child) {
   border-bottom: none;
 }

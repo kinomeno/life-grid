@@ -10,13 +10,16 @@ export const ENERGY_WAVE_SPATIAL_FREQ = 0.04;
 
 export const GENE_VISION_MIN = 1;
 export const GENE_VISION_MAX = 4;
-// v1.11: 速度は 1〜999 の連続スケール（sqrt + 指数コスト）。
+// v1.11/v1.20: 速度は 0〜999 の連続スケール（sqrt + 指数コスト）。
+//   speed = 0: 完全静止（植物的生物。光合成戦略）
 //   1 ターンに加算される速度量 = sqrt(speed / 33.3)。floor(累積) ステップ移動。
-//     speed   1:  0.17/turn  speed  33:  1.0/turn
-//     speed 100:  1.73       speed 300:  3.0
-//     speed 500:  3.87       speed 999:  5.48
+//     speed   0:  0/turn      （植物）
+//     speed   1:  0.17/turn   （超低速）
+//     speed  33:  1.0/turn
+//     speed 100:  1.73        speed 300:  3.0
+//     speed 500:  3.87        speed 999:  5.48
 //   100 超は維持コストが指数的に増加（短命）。500 超は数十ターンで餓死。
-export const GENE_SPEED_MIN = 1;
+export const GENE_SPEED_MIN = 0;
 export const GENE_SPEED_MAX = 999;
 // 観察 UI で「通常」と呼ぶしきい値
 export const GENE_SPEED_NORMAL_CAP = 100;

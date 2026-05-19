@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useLocale } from "./LocaleProvider";
-import { useDraggablePanel } from "./useDraggablePanel";
+import { useDraggablePanel, type DragOffset } from "./useDraggablePanel";
 import type { Locale } from "@/lib/i18n";
 
 type Section = {
@@ -733,6 +733,9 @@ const SECTIONS_EN: Section[] = [
 
 type Props = {
   onClose: () => void;
+  // v1.20: モーダル位置記録
+  initialOffset?: DragOffset;
+  onOffsetChange?: (o: DragOffset) => void;
 };
 
 /** 全セクションを平坦化（カテゴリ自体も含み、子も追加）。 */
@@ -751,14 +754,21 @@ function sectionsFor(locale: Locale): Section[] {
   return locale === "en" ? SECTIONS_EN : SECTIONS_JA;
 }
 
-export default function RulesScreen({ onClose }: Props) {
+export default function RulesScreen({
+  onClose,
+  initialOffset,
+  onOffsetChange,
+}: Props) {
   const { t, locale } = useLocale();
   const sections = sectionsFor(locale);
   const flat = flatten(sections);
   const [active, setActive] = useState<string>(sections[0].key);
   const section = flat.find((s) => s.key === active) ?? sections[0];
-  // v1.11: モーダルドラッグ
-  const { offset, dragging, dragHandlers } = useDraggablePanel();
+  // v1.11/v1.20: モーダルドラッグ + 位置記録
+  const { offset, dragging, dragHandlers } = useDraggablePanel(
+    initialOffset,
+    onOffsetChange
+  );
 
   return (
     <div className="modal-backdrop" onClick={onClose}>

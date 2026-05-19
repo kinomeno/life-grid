@@ -22,7 +22,7 @@ import {
 } from "@/lib/constants";
 import { useLocale } from "./LocaleProvider";
 import TimeToggle from "./TimeToggle";
-import { useDraggablePanel } from "./useDraggablePanel";
+import { useDraggablePanel, type DragOffset } from "./useDraggablePanel";
 
 export type GraphSeriesState = {
   lifeCount: boolean;
@@ -76,6 +76,9 @@ type Props = {
   onTabChange: (t: StatsTab) => void;
   geneKey: GeneKey;
   onGeneKeyChange: (k: GeneKey) => void;
+  // v1.20: モーダル位置記録（×で閉じても再オープン時に復元）
+  initialOffset?: DragOffset;
+  onOffsetChange?: (o: DragOffset) => void;
 };
 
 type Series = {
@@ -181,14 +184,19 @@ export default function StatsGraphModal({
   onTabChange,
   geneKey,
   onGeneKeyChange,
+  initialOffset,
+  onOffsetChange,
 }: Props) {
   const { t } = useLocale();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   // v1.10: tab・geneKey は親が保持。setter は親へ通知する形に。
   const setTab = onTabChange;
   const setGeneKey = onGeneKeyChange;
-  // v1.11: モーダルドラッグ
-  const { offset, dragging, dragHandlers } = useDraggablePanel();
+  // v1.11/v1.20: モーダルドラッグ + 位置記録
+  const { offset, dragging, dragHandlers } = useDraggablePanel(
+    initialOffset,
+    onOffsetChange
+  );
   // v1.10: 時系列グラフのホバー情報。マウス位置と該当サンプル。
   const [hoverInfo, setHoverInfo] = useState<{
     px: number;

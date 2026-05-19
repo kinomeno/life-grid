@@ -504,18 +504,44 @@ function drawCombatFlashes(
       cy = f.fallbackY * cellSize + half;
     }
 
+    // v1.20: 被食者の「吸込みアニメ」
+    //   - t < 0.15 (最初の 1-2 turn): 被食者の元位置と捕食者位置の中間に描画（吸込み中）
+    //   - t >= 0.15: 捕食者位置に到達 → 縮小消滅
+    const ax = attacker?.alive ? attacker.x : f.fallbackX;
+    const ay = attacker?.alive ? attacker.y : f.fallbackY;
+    const vx = f.fallbackX;
+    const vy = f.fallbackY;
+    let drawX: number;
+    let drawY: number;
+    if (t < 0.15) {
+      // 中間地点（トーラス対応：被食者→捕食者の最短経路）
+      let dx = ax - vx;
+      let dy = ay - vy;
+      if (dx > world.width / 2) dx -= world.width;
+      else if (dx < -world.width / 2) dx += world.width;
+      if (dy > world.height / 2) dy -= world.height;
+      else if (dy < -world.height / 2) dy += world.height;
+      const mx = (vx + dx * 0.5 + world.width) % world.width;
+      const my = (vy + dy * 0.5 + world.height) % world.height;
+      drawX = mx * cellSize + half;
+      drawY = my * cellSize + half;
+    } else {
+      drawX = cx;
+      drawY = cy;
+    }
+
     // 被食者を手前に重ね、縮小しながら消滅
     const victimR = baseRadius * (1 - t);
     if (victimR > 0.4) {
       ctx.fillStyle = `rgb(${f.victimR}, ${f.victimG}, ${f.victimB})`;
       ctx.beginPath();
-      ctx.arc(cx, cy, victimR, 0, TWO_PI);
+      ctx.arc(drawX, drawY, victimR, 0, TWO_PI);
       ctx.fill();
       // 黒い縁で「重なっている」感を出す
       ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
       ctx.lineWidth = 0.75;
       ctx.beginPath();
-      ctx.arc(cx, cy, victimR, 0, TWO_PI);
+      ctx.arc(drawX, drawY, victimR, 0, TWO_PI);
       ctx.stroke();
     }
   }

@@ -1933,8 +1933,14 @@ function reproduceLife(
   // 余り（あぶれた子の分）は親に戻る仕様 = 親が他にエネルギーを保つ自然な式
   const share = parent.energy / (wanted + 1);
   const childEnergy = share;
-  const parentRemain = parent.energy - share * actual;
-  parent.energy = parentRemain;
+  // v1.20: 案 X1 - 出産疲労コスト。多産個体は親も消耗する。
+  //   N=1: log(2) ≈ 0.69 → 親追加消耗 = 0.069 × share
+  //   N=5: log(6) ≈ 1.79 → 0.179 × share
+  //   N=10: log(11) ≈ 2.40 → 0.240 × share
+  // multi-birth の暴走を構造的に抑制し、r/K 戦略の多様性を保つ。
+  const fatigueCost = share * 0.1 * Math.log(wanted + 1);
+  const parentRemain = parent.energy - share * actual - fatigueCost;
+  parent.energy = parentRemain > 0 ? parentRemain : 0;
 
   for (let i = 0; i < actual; i++) {
     const childPos = emptyPositions[i];

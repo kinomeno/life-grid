@@ -119,6 +119,11 @@ export default function SimulationView({
   const [seedInput, setSeedInput] = useState("");
 
   const [selectedLifeId, setSelectedLifeId] = useState<number | null>(null);
+  // v1.20: 矢印キー処理で最新の selectedLifeId を参照するための ref
+  const selectedLifeIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    selectedLifeIdRef.current = selectedLifeId;
+  }, [selectedLifeId]);
   const [trackedSpeciesId, setTrackedSpeciesId] = useState<string | null>(null);
 
   // G1/G2: マップクリック時の特殊モード
@@ -154,6 +159,13 @@ export default function SimulationView({
   const [statsTab, setStatsTab] = useState<StatsTab>("timeseries");
   const [statsGeneKey, setStatsGeneKey] =
     useState<StatsGeneKey>("intelligence");
+  // v1.20: モーダルの位置をセッション内で記録（× で閉じて再オープン時も同じ位置）
+  const [statsModalOffset, setStatsModalOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [logModalOffset, setLogModalOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [rulesModalOffset, setRulesModalOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  // v1.20: 個体詳細パネルのタブ状態
+  type LifePanelTab = "basic" | "genes" | "personality";
+  const [lifePanelTab, setLifePanelTab] = useState<LifePanelTab>("basic");
   // ロック解除状態（x100 速度に必要）
   const [unlocked, setUnlocked] = useState(false);
   const [pwTarget, setPwTarget] = useState<{
@@ -185,6 +197,12 @@ export default function SimulationView({
     setSeed(initialSeed);
     refreshDerived(w);
     setVersion((v) => v + 1);
+    // v1.20: 初回起動時にもランダムで生命を 1 体選択
+    const alive = w.lives.filter((l) => l.alive);
+    if (alive.length > 0) {
+      const idx = Math.floor(Math.random() * alive.length);
+      setSelectedLifeId(alive[idx].id);
+    }
     // 共有可能な URL に更新（履歴を汚さず replaceState）
     if (typeof window !== "undefined") {
       const sp = new URLSearchParams();
@@ -332,7 +350,14 @@ export default function SimulationView({
       setWorldState(w);
       setSeed(newSeed);
       setVersion((v) => v + 1);
-      setSelectedLifeId(null);
+      // v1.20: 開始時に生命をランダムで自動選択（観察体験の即開始）
+      const alive = w.lives.filter((l) => l.alive);
+      if (alive.length > 0) {
+        const idx = Math.floor(Math.random() * alive.length);
+        setSelectedLifeId(alive[idx].id);
+      } else {
+        setSelectedLifeId(null);
+      }
       setTrackedSpeciesId(null);
       refreshDerived(w);
     },
@@ -667,6 +692,8 @@ export default function SimulationView({
   // v1.11: 真の全画面モード（Fullscreen API）。ブラウザ・タスクバーも消える。
   // Shift+F または専用ボタンで起動、ESC で解除。fullscreenchange でユーザー操作を捕捉。
   const [trueFullscreen, setTrueFullscreen] = useState(false);
+  // v1.20: 真の全画面時のマップ拡大倍率（整数倍、画面いっぱいフィット）
+  const [fullscreenScale, setFullscreenScale] = useState(1);
   const enterTrueFullscreen = useCallback(async () => {
     try {
       await document.documentElement.requestFullscreen();
@@ -694,6 +721,28 @@ export default function SimulationView({
     return () =>
       document.removeEventListener("fullscreenchange", onFsChange);
   }, []);
+  // v1.20: 真の全画面時、画面サイズに合わせて整数倍スケールを計算
+  useEffect(() => {
+    if (!trueFullscreen) {
+      setFullscreenScale(1);
+      return;
+    }
+    const calcScale = () => {
+      const baseW = cellSize * width;
+      const baseH = cellSize * height;
+      if (baseW <= 0 || baseH <= 0) return;
+      const scale = Math.max(
+        1,
+        Math.floor(
+          Math.min(window.innerWidth / baseW, window.innerHeight / baseH)
+        )
+      );
+      setFullscreenScale(scale);
+    };
+    calcScale();
+    window.addEventListener("resize", calcScale);
+    return () => window.removeEventListener("resize", calcScale);
+  }, [trueFullscreen, cellSize, width, height]);
 
   // v1.02: 選択中の生命の移動軌跡。最近 60 ターンの座標を保持。
   // SimulationCanvas で薄い線として描画される。選択切替・死亡でリセット。
@@ -864,10 +913,39 @@ export default function SimulationView({
         setParams((p) => ({ ...p, smoothAnimation: !p.smoothAnimation }));
         return;
       }
+      // v1.20: 矢印キーで選択生命を切替（ID 順、生存個体のみ）
+      // 左/右: 全体の前/次、上/下: 同系統の前/次
+      if (
+        (e.code === "ArrowLeft" || e.code === "ArrowRight" ||
+         e.code === "ArrowUp" || e.code === "ArrowDown") &&
+        !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey
+      ) {
+        const w = worldRef.current;
+        if (!w) return;
+        e.preventDefault();
+        const dir =
+          e.code === "ArrowLeft" || e.code === "ArrowUp" ? -1 : +1;
+        const sameSpecies = e.code === "ArrowUp" || e.code === "ArrowDown";
+        const cur = w.livesById.get(selectedLifeIdRef.current ?? -1);
+        const list = w.lives.filter(
+          (l) => l.alive && (!sameSpecies || !cur || l.speciesId === cur.speciesId)
+        );
+        if (list.length === 0) return;
+        // ID 昇順でソート
+        list.sort((a, b) => a.id - b.id);
+        let idx = 0;
+        if (cur) {
+          idx = list.findIndex((l) => l.id === cur.id);
+          if (idx === -1) idx = 0;
+          else idx = (idx + dir + list.length) % list.length;
+        }
+        setSelectedLifeId(list[idx].id);
+        return;
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setSpeed]);
+  }, [setSpeed, enterTrueFullscreen, exitTrueFullscreen]);
 
   // 描画スムージング用：最後にステップが完了した時刻と、目標ターン間隔。
   // 描画毎に animPhase = (now - lastStepAt) / stepDuration を計算してキャンバスへ渡す。
@@ -1193,10 +1271,19 @@ export default function SimulationView({
           ref={viewportRef}
           className="canvas-viewport"
           style={{
-            width: `${cellSize * width}px`,
-            height: `${cellSize * height}px`,
+            // v1.20: 真の全画面時は画面いっぱい（中央配置）。それ以外は元サイズ。
+            width: trueFullscreen ? "100vw" : `${cellSize * width}px`,
+            height: trueFullscreen ? "100vh" : `${cellSize * height}px`,
+            display: trueFullscreen ? "flex" : undefined,
+            alignItems: trueFullscreen ? "center" : undefined,
+            justifyContent: trueFullscreen ? "center" : undefined,
+            background: trueFullscreen ? "#000" : undefined,
             // ズーム時のみスクロールバー出現。等倍はバー無し。
-            overflow: zoom > 1 ? "auto" : "hidden",
+            overflow: trueFullscreen
+              ? "hidden"
+              : zoom > 1
+                ? "auto"
+                : "hidden",
           }}
           onWheel={(e) => {
             // Q1: マウスホイールでズーム（Ctrl/Shift 不要、viewport 上で直接）
@@ -1235,17 +1322,19 @@ export default function SimulationView({
           <div
             className="canvas-wrap"
             style={{
-              width: `${cellSize * width * zoom}px`,
-              height: `${cellSize * height * zoom}px`,
+              // v1.20: 真の全画面時は整数倍スケールでフィット（fullscreenScale 使用）
+              width: `${cellSize * width * (trueFullscreen ? fullscreenScale : zoom)}px`,
+              height: `${cellSize * height * (trueFullscreen ? fullscreenScale : zoom)}px`,
             }}
           >
             {world && (
               <div
                 style={{
-                  transform: `scale(${zoom})`,
+                  transform: `scale(${trueFullscreen ? fullscreenScale : zoom})`,
                   transformOrigin: "top left",
                   width: `${cellSize * width}px`,
                   height: `${cellSize * height}px`,
+                  imageRendering: "pixelated",
                 }}
               >
                 <SimulationCanvas
@@ -1457,112 +1546,139 @@ export default function SimulationView({
                   />
                   <span>{t("info.protect")}</span>
                 </label>
-                {/* 状態（2 カラム） */}
-                {world && (
+                {/* v1.20: タブナビゲーション（基本 / 遺伝 / 性格） */}
+                <div className="life-tabs">
+                  <button
+                    type="button"
+                    className={`life-tab ${lifePanelTab === "basic" ? "active" : ""}`}
+                    onClick={() => setLifePanelTab("basic")}
+                  >
+                    {t("panel.tab.basic")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`life-tab ${lifePanelTab === "genes" ? "active" : ""}`}
+                    onClick={() => setLifePanelTab("genes")}
+                  >
+                    {t("panel.tab.genes")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`life-tab ${lifePanelTab === "personality" ? "active" : ""}`}
+                    onClick={() => setLifePanelTab("personality")}
+                  >
+                    {t("panel.tab.personality")}
+                  </button>
+                </div>
+                {/* 「基本」タブ：状態と系統情報 */}
+                {lifePanelTab === "basic" && (
+                  <>
+                    {world && (
+                      <div className="info-grid-2 info-compact">
+                        <InfoRow
+                          label={t("info.species")}
+                          value={speciesLabel(selectedLife.speciesId)}
+                        />
+                        <InfoRow
+                          label={t("info.rgb")}
+                          value={`(${selectedLife.genes.r},${selectedLife.genes.g},${selectedLife.genes.b})`}
+                        />
+                        <InfoRow
+                          label={t("info.position")}
+                          value={`(${selectedLife.x}, ${selectedLife.y})`}
+                        />
+                        <InfoRow
+                          label={t("info.energy_owned")}
+                          value={selectedLife.energy.toFixed(1)}
+                        />
+                        <InfoRow
+                          label={t("info.age")}
+                          value={`${selectedLife.age} / ${selectedLife.genes.lifespan.toFixed(0)}`}
+                        />
+                        <InfoRow
+                          label={t("info.behavior_mode")}
+                          value={t(`mode.${getBehaviorMode(world, selectedLife)}`)}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+                {/* 「遺伝」タブ：8 つの基本遺伝子 */}
+                {lifePanelTab === "genes" && (
                   <div className="info-grid-2 info-compact">
                     <InfoRow
-                      label={t("info.position")}
-                      value={`(${selectedLife.x}, ${selectedLife.y})`}
+                      label={t("info.vision")}
+                      value={selectedLife.genes.vision}
                     />
                     <InfoRow
-                      label={t("info.energy_owned")}
-                      value={selectedLife.energy.toFixed(1)}
+                      label={t("info.move_speed")}
+                      value={`${selectedLife.genes.speed} / 999${
+                        selectedLife.genes.speed > 100 ? "  ⚠" : ""
+                      }`}
                     />
                     <InfoRow
-                      label={t("info.age")}
-                      value={`${selectedLife.age} / ${selectedLife.genes.lifespan.toFixed(0)}`}
+                      label={t("info.size")}
+                      value={selectedLife.genes.size.toFixed(0)}
                     />
                     <InfoRow
-                      label={t("info.behavior_mode")}
-                      value={t(`mode.${getBehaviorMode(world, selectedLife)}`)}
+                      label={t("info.strength")}
+                      value={`${selectedLife.genes.strength.toFixed(0)} / 999${
+                        selectedLife.genes.strength > 100 ? "  ⚠" : ""
+                      }`}
+                    />
+                    <InfoRow
+                      label={t("info.intelligence")}
+                      value={`${selectedLife.genes.intelligence} / 999${
+                        selectedLife.genes.intelligence > 100 ? "  ⚠" : ""
+                      }`}
+                    />
+                    <InfoRow
+                      label={t("info.reproduction_rate")}
+                      value={selectedLife.genes.reproductionRate.toFixed(2)}
+                    />
+                    <InfoRow
+                      label={t("info.lifespan")}
+                      value={selectedLife.genes.lifespan.toFixed(0)}
+                    />
+                    <InfoRow
+                      label={t("info.offspring_count")}
+                      value={`${selectedLife.genes.offspringCount} / 10`}
                     />
                   </div>
                 )}
-                {/* 遺伝子パラメータ（2 カラム） */}
-                <h3 className="panel-subtitle">{t("panel.gene_params")}</h3>
-                <div className="info-grid-2 info-compact">
-                  <InfoRow
-                    label={t("info.species")}
-                    value={speciesLabel(selectedLife.speciesId)}
-                  />
-                  <InfoRow
-                    label={t("info.rgb")}
-                    value={`(${selectedLife.genes.r},${selectedLife.genes.g},${selectedLife.genes.b})`}
-                  />
-                  <InfoRow
-                    label={t("info.vision")}
-                    value={selectedLife.genes.vision}
-                  />
-                  <InfoRow
-                    label={t("info.move_speed")}
-                    value={`${selectedLife.genes.speed} / 999${
-                      selectedLife.genes.speed > 100 ? "  ⚠" : ""
-                    }`}
-                  />
-                  <InfoRow
-                    label={t("info.size")}
-                    value={selectedLife.genes.size.toFixed(0)}
-                  />
-                  <InfoRow
-                    label={t("info.strength")}
-                    value={`${selectedLife.genes.strength.toFixed(0)} / 999${
-                      selectedLife.genes.strength > 100 ? "  ⚠" : ""
-                    }`}
-                  />
-                  <InfoRow
-                    label={t("info.intelligence")}
-                    value={`${selectedLife.genes.intelligence} / 999${
-                      selectedLife.genes.intelligence > 100 ? "  ⚠" : ""
-                    }`}
-                  />
-                  {/* v1.11b: reproductionRate は「繁殖頻度」として機能。
-                      高 rate = 頻繁に繁殖（r 戦略）、低 rate = 滅多にしない（K 戦略）。
-                      閾値スケールにより、暗黙のコストは「子の低エネルギー化」。 */}
-                  <InfoRow
-                    label={t("info.reproduction_rate")}
-                    value={selectedLife.genes.reproductionRate.toFixed(2)}
-                  />
-                  <InfoRow
-                    label={t("info.lifespan")}
-                    value={selectedLife.genes.lifespan.toFixed(0)}
-                  />
-                  {/* v1.11: 出産数 */}
-                  <InfoRow
-                    label={t("info.offspring_count")}
-                    value={`${selectedLife.genes.offspringCount} / 10`}
-                  />
-                </div>
-                {/* v1.10: 行動判断の重み遺伝子（性格） */}
-                <div className="info-grid-2 info-compact">
-                  <InfoRow
-                    label={t("info.w_appetite")}
-                    value={selectedLife.genes.wAppetite.toFixed(0)}
-                  />
-                  <InfoRow
-                    label={t("info.w_predation")}
-                    value={selectedLife.genes.wPredation.toFixed(0)}
-                  />
-                  <InfoRow
-                    label={t("info.w_caution")}
-                    value={selectedLife.genes.wCaution.toFixed(0)}
-                  />
-                  <InfoRow
-                    label={t("info.w_gregarious")}
-                    value={selectedLife.genes.wGregarious.toFixed(0)}
-                  />
-                  <InfoRow
-                    label={t("info.w_loyalty")}
-                    value={selectedLife.genes.wLoyalty.toFixed(0)}
-                  />
-                  <InfoRow
-                    label={t("info.w_repro")}
-                    value={selectedLife.genes.wRepro.toFixed(0)}
-                  />
-                  <InfoRow
-                    label={t("info.w_starv_sensitive")}
-                    value={selectedLife.genes.wStarvSensitive.toFixed(0)}
-                  />
-                </div>
+                {/* 「性格」タブ：7 つの行動判断重み遺伝子 */}
+                {lifePanelTab === "personality" && (
+                  <div className="info-grid-2 info-compact">
+                    <InfoRow
+                      label={t("info.w_appetite")}
+                      value={selectedLife.genes.wAppetite.toFixed(0)}
+                    />
+                    <InfoRow
+                      label={t("info.w_predation")}
+                      value={selectedLife.genes.wPredation.toFixed(0)}
+                    />
+                    <InfoRow
+                      label={t("info.w_caution")}
+                      value={selectedLife.genes.wCaution.toFixed(0)}
+                    />
+                    <InfoRow
+                      label={t("info.w_gregarious")}
+                      value={selectedLife.genes.wGregarious.toFixed(0)}
+                    />
+                    <InfoRow
+                      label={t("info.w_loyalty")}
+                      value={selectedLife.genes.wLoyalty.toFixed(0)}
+                    />
+                    <InfoRow
+                      label={t("info.w_repro")}
+                      value={selectedLife.genes.wRepro.toFixed(0)}
+                    />
+                    <InfoRow
+                      label={t("info.w_starv_sensitive")}
+                      value={selectedLife.genes.wStarvSensitive.toFixed(0)}
+                    />
+                  </div>
+                )}
               </>
             ) : (
               <>
@@ -1907,6 +2023,8 @@ export default function SimulationView({
           onTabChange={setStatsTab}
           geneKey={statsGeneKey}
           onGeneKeyChange={setStatsGeneKey}
+          initialOffset={statsModalOffset}
+          onOffsetChange={setStatsModalOffset}
         />
       )}
 
@@ -1920,10 +2038,18 @@ export default function SimulationView({
           }}
           timeRunning={logKeepRunning}
           onToggleTime={() => setLogKeepRunning((v) => !v)}
+          initialOffset={logModalOffset}
+          onOffsetChange={setLogModalOffset}
         />
       )}
 
-      {showRules && <RulesScreen onClose={() => setShowRules(false)} />}
+      {showRules && (
+        <RulesScreen
+          onClose={() => setShowRules(false)}
+          initialOffset={rulesModalOffset}
+          onOffsetChange={setRulesModalOffset}
+        />
+      )}
 
       <ShareXButton
         text={

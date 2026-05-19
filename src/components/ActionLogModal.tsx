@@ -3,7 +3,7 @@
 import type { WorldEvent } from "@/lib/types";
 import { useLocale } from "./LocaleProvider";
 import TimeToggle from "./TimeToggle";
-import { useDraggablePanel } from "./useDraggablePanel";
+import { useDraggablePanel, type DragOffset } from "./useDraggablePanel";
 
 type Props = {
   events: WorldEvent[];
@@ -12,6 +12,9 @@ type Props = {
   /** 時間進行 ON/OFF（true なら世界の時間が進む）。 */
   timeRunning?: boolean;
   onToggleTime?: () => void;
+  // v1.20: モーダル位置記録
+  initialOffset?: DragOffset;
+  onOffsetChange?: (o: DragOffset) => void;
 };
 
 export default function ActionLogModal({
@@ -20,10 +23,15 @@ export default function ActionLogModal({
   onSpeciesClick,
   timeRunning = false,
   onToggleTime,
+  initialOffset,
+  onOffsetChange,
 }: Props) {
   const { t, locale } = useLocale();
-  // v1.11: モーダルドラッグ
-  const { offset, dragging, dragHandlers } = useDraggablePanel();
+  // v1.11/v1.20: モーダルドラッグ + 位置記録
+  const { offset, dragging, dragHandlers } = useDraggablePanel(
+    initialOffset,
+    onOffsetChange
+  );
   // 新しい順
   const ordered = [...events].reverse();
   return (
