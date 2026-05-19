@@ -318,14 +318,16 @@ function drawLives(
     fadeMap.set(f.lifeId, alpha);
   }
 
-  // 捕食エフェクト中の攻撃者は少し拡大表示する（lifeId → radius 倍率）
+  // v1.11: 捕食エフェクト中の攻撃者は「パクっと」一瞬大きくなる
+  //   開始直後に 1.7x（peak）→ 指数減衰で 1.0x へ
+  //   exp(-t*5) なら t=0.2 で約 1.26x、t=0.6 で約 1.03x まで戻る
   const expandMap = new Map<number, number>();
   for (const f of world.combatFlashes) {
     const elapsed = world.turn - f.startTurn;
     if (elapsed >= f.durationTurns) continue;
     const t = elapsed / f.durationTurns;
-    // 開始直後に最大、徐々に通常サイズへ戻る
-    const expansion = 1.0 + 0.25 * (1 - t);
+    // パクっと: 最大 1.7 倍 → 指数減衰
+    const expansion = 1.0 + 0.7 * Math.exp(-t * 5);
     const prev = expandMap.get(f.attackerLifeId) ?? 1.0;
     if (expansion > prev) expandMap.set(f.attackerLifeId, expansion);
   }

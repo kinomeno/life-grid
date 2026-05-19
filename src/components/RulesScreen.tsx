@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useLocale } from "./LocaleProvider";
+import { useDraggablePanel } from "./useDraggablePanel";
 import type { Locale } from "@/lib/i18n";
 
 type Section = {
@@ -756,14 +757,21 @@ export default function RulesScreen({ onClose }: Props) {
   const flat = flatten(sections);
   const [active, setActive] = useState<string>(sections[0].key);
   const section = flat.find((s) => s.key === active) ?? sections[0];
+  // v1.11: モーダルドラッグ
+  const { offset, dragging, dragHandlers } = useDraggablePanel();
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
         className="modal-panel modal-wide rules-panel"
         onClick={(e) => e.stopPropagation()}
+        style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}
       >
-        <div className="modal-head">
+        <div
+          className="modal-head modal-draggable"
+          data-dragging={dragging}
+          {...dragHandlers}
+        >
           <h2 className="modal-title">{t("start.button.rules")}</h2>
           <button className="btn modal-close" onClick={onClose}>
             ✕

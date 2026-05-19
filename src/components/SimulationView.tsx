@@ -664,6 +664,37 @@ export default function SimulationView({
   // F キーまたは右上ボタンでトグル、ESC で解除。
   const [fullscreenMap, setFullscreenMap] = useState(false);
 
+  // v1.11: 真の全画面モード（Fullscreen API）。ブラウザ・タスクバーも消える。
+  // Shift+F または専用ボタンで起動、ESC で解除。fullscreenchange でユーザー操作を捕捉。
+  const [trueFullscreen, setTrueFullscreen] = useState(false);
+  const enterTrueFullscreen = useCallback(async () => {
+    try {
+      await document.documentElement.requestFullscreen();
+      setFullscreenMap(true); // 同時に擬似全画面（HUD 隠し）も有効に
+    } catch (e) {
+      // ユーザー操作 がトリガーでない場合は失敗（セキュリティ仕様）
+      // eslint-disable-next-line no-console
+      console.warn("True fullscreen request failed:", e);
+    }
+  }, []);
+  const exitTrueFullscreen = useCallback(async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn("Exit fullscreen failed:", e);
+    }
+  }, []);
+  // ブラウザの fullscreenchange を監視して state を同期（ESC で抜けた場合も拾える）
+  useEffect(() => {
+    const onFsChange = () => {
+      setTrueFullscreen(document.fullscreenElement !== null);
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
   // v1.02: 選択中の生命の移動軌跡。最近 60 ターンの座標を保持。
   // SimulationCanvas で薄い線として描画される。選択切替・死亡でリセット。
   const [selectedLifePath, setSelectedLifePath] = useState<
@@ -807,8 +838,18 @@ export default function SimulationView({
         setSpeed(cur === 0 ? 1 : 0);
         return;
       }
-      // v1.02: F キーでマップ全画面トグル、ESC で解除
-      if (e.code === "KeyF" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // v1.11: Shift+F で真の全画面（Fullscreen API、ブラウザ越え）
+      if (e.code === "KeyF" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        if (document.fullscreenElement) {
+          exitTrueFullscreen();
+        } else {
+          enterTrueFullscreen();
+        }
+        return;
+      }
+      // v1.02: F キーでマップ全画面トグル（擬似全画面、HUD のみ隠す）、ESC で解除
+      if (e.code === "KeyF" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
         e.preventDefault();
         setFullscreenMap((v) => !v);
         return;
@@ -1321,6 +1362,20 @@ export default function SimulationView({
             aria-pressed={fullscreenMap}
           >
             {fullscreenMap ? "⛶✕" : "⛶"}
+          </button>
+          {/* v1.11: 真の全画面（Fullscreen API・Shift+F でも切替可） */}
+          <button
+            type="button"
+            className="mini-btn"
+            onClick={() => {
+              if (trueFullscreen) exitTrueFullscreen();
+              else enterTrueFullscreen();
+            }}
+            title={trueFullscreen ? t("ctrl.exit_true_fullscreen") : t("ctrl.enter_true_fullscreen")}
+            aria-label={trueFullscreen ? t("ctrl.exit_true_fullscreen") : t("ctrl.enter_true_fullscreen")}
+            aria-pressed={trueFullscreen}
+          >
+            {trueFullscreen ? "⛶⛶✕" : "⛶⛶"}
           </button>
           {/* ズーム */}
           <div className="zoom-mini">

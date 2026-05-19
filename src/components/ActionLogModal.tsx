@@ -2,6 +2,8 @@
 
 import type { WorldEvent } from "@/lib/types";
 import { useLocale } from "./LocaleProvider";
+import TimeToggle from "./TimeToggle";
+import { useDraggablePanel } from "./useDraggablePanel";
 
 type Props = {
   events: WorldEvent[];
@@ -20,6 +22,8 @@ export default function ActionLogModal({
   onToggleTime,
 }: Props) {
   const { t, locale } = useLocale();
+  // v1.11: モーダルドラッグ
+  const { offset, dragging, dragHandlers } = useDraggablePanel();
   // 新しい順
   const ordered = [...events].reverse();
   return (
@@ -27,19 +31,16 @@ export default function ActionLogModal({
       <div
         className="modal-panel modal-wide"
         onClick={(e) => e.stopPropagation()}
+        style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}
       >
-        <div className="modal-head">
+        <div
+          className="modal-head modal-draggable"
+          data-dragging={dragging}
+          {...dragHandlers}
+        >
           <h2 className="modal-title">{t("log.title")}</h2>
           {onToggleTime && (
-            <button
-              className={`btn modal-time-toggle ${
-                timeRunning ? "modal-time-on" : ""
-              }`}
-              onClick={onToggleTime}
-              title={t("modal.time_hint")}
-            >
-              {timeRunning ? t("modal.time_on") : t("modal.time_off")}
-            </button>
+            <TimeToggle running={timeRunning} onToggle={onToggleTime} />
           )}
           <button className="btn modal-close" onClick={onClose}>
             {t("common.close")}

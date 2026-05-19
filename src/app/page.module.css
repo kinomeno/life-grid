@@ -270,6 +270,96 @@
   /* 100% のときは灰色化せず通常表示 */
 }
 
+/* v1.11: 時間進行トグルスイッチ（iOS Switch 風）。
+   StatsGraphModal / ActionLogModal でグラフを見ながら一目で状態を判別できる UI。 */
+:global(.time-switch) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  background: var(--bg-1);
+  border-radius: 14px;
+  font-size: 12px;
+  color: var(--text-soft);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+:global(.time-switch:hover) {
+  background: var(--bg-2);
+}
+
+:global(.time-switch.on) {
+  border-color: #2f9b53;
+  background: rgba(78, 196, 110, 0.08);
+}
+
+:global(.time-switch-track) {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  flex-shrink: 0;
+}
+
+:global(.time-switch-track.on) {
+  background: #4ec46e;
+  border-color: #2f9b53;
+}
+
+:global(.time-switch-knob) {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  border-radius: 50%;
+  transition: left 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+:global(.time-switch-track.on .time-switch-knob) {
+  left: 15px;
+}
+
+:global(.time-switch-label) {
+  font-variant-numeric: tabular-nums;
+  min-width: 56px;
+  text-align: left;
+}
+
+:global(.time-switch-label.on) {
+  color: #2f9b53;
+  font-weight: 600;
+}
+
+/* 時間進行中のパルス表示（脈動する緑のドット） */
+:global(.time-switch-pulse) {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4ec46e;
+  box-shadow: 0 0 0 0 rgba(78, 196, 110, 0.7);
+  animation: time-switch-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes time-switch-pulse {
+  0%, 100% {
+    transform: scale(0.7);
+    box-shadow: 0 0 0 0 rgba(78, 196, 110, 0.5);
+  }
+  50% {
+    transform: scale(1);
+    box-shadow: 0 0 0 4px rgba(78, 196, 110, 0);
+  }
+}
+
 :global(.panel) {
   padding: 12px 14px;
   border-bottom: 1px solid var(--line-soft);
@@ -689,6 +779,34 @@
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
   background: var(--bg-2);
+}
+
+/* v1.11: モーダルドラッグハンドル。modal-head 全体をハンドルとし、
+   カーソル + ハンドルアイコンで「掴める」ことを明示する。 */
+:global(.modal-head.modal-draggable) {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  position: relative;
+}
+
+:global(.modal-head.modal-draggable[data-dragging="true"]) {
+  cursor: grabbing;
+}
+
+/* ハンドルアイコン（::before で「⋮⋮」を表示） */
+:global(.modal-head.modal-draggable::before) {
+  content: "⠿";
+  margin-right: 8px;
+  color: var(--text-soft);
+  font-size: 16px;
+  letter-spacing: -2px;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+:global(.modal-head.modal-draggable:hover::before) {
+  opacity: 1;
 }
 
 :global(.modal-title) {

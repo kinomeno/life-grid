@@ -21,6 +21,8 @@ import {
   GENE_VISION_MIN,
 } from "@/lib/constants";
 import { useLocale } from "./LocaleProvider";
+import TimeToggle from "./TimeToggle";
+import { useDraggablePanel } from "./useDraggablePanel";
 
 export type GraphSeriesState = {
   lifeCount: boolean;
@@ -185,6 +187,8 @@ export default function StatsGraphModal({
   // v1.10: tab・geneKey は親が保持。setter は親へ通知する形に。
   const setTab = onTabChange;
   const setGeneKey = onGeneKeyChange;
+  // v1.11: モーダルドラッグ
+  const { offset, dragging, dragHandlers } = useDraggablePanel();
   // v1.10: 時系列グラフのホバー情報。マウス位置と該当サンプル。
   const [hoverInfo, setHoverInfo] = useState<{
     px: number;
@@ -273,19 +277,16 @@ export default function StatsGraphModal({
       <div
         className="modal-panel modal-wide"
         onClick={(e) => e.stopPropagation()}
+        style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}
       >
-        <div className="modal-head">
+        <div
+          className="modal-head modal-draggable"
+          data-dragging={dragging}
+          {...dragHandlers}
+        >
           <h2 className="modal-title">{t("graph.title")}</h2>
           {onToggleTime && (
-            <button
-              className={`btn modal-time-toggle ${
-                timeRunning ? "modal-time-on" : ""
-              }`}
-              onClick={onToggleTime}
-              title={t("modal.time_hint")}
-            >
-              {timeRunning ? t("modal.time_on") : t("modal.time_off")}
-            </button>
+            <TimeToggle running={timeRunning} onToggle={onToggleTime} />
           )}
           <button className="btn modal-close" onClick={onClose}>
             {t("common.close")}

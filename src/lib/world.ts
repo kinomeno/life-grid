@@ -2070,6 +2070,7 @@ function handleCombat(world: World, life: Life): void {
         energy[i4] = v4 > ENERGY_MAX ? ENERGY_MAX : v4;
       }
       // 捕食エフェクト：捕食者の位置に被食者が重なって縮小・消滅する演出
+      // v1.11: durationTurns 5→8 に延長。パクっとアニメ（exp 減衰）が十分に見える時間を確保。
       world.combatFlashes.push({
         attackerLifeId: life.id,
         fallbackX: life.x,
@@ -2078,7 +2079,7 @@ function handleCombat(world: World, life: Life): void {
         victimG: opponent.genes.g,
         victimB: opponent.genes.b,
         startTurn: world.turn,
-        durationTurns: 5,
+        durationTurns: 8,
       });
       opponent.alive = false;
       opponent.energy = 0;
