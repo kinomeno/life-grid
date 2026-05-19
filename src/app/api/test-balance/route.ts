@@ -64,6 +64,9 @@ export async function GET(req: NextRequest) {
   const speeds = alive.map((l) => l.genes.speed);
   const sizes = alive.map((l) => l.genes.size);
   const reproductionRates = alive.map((l) => l.genes.reproductionRate);
+  // v1.11b: 観察のため追加
+  const offspringCounts = alive.map((l) => l.genes.offspringCount);
+  const lifespans = alive.map((l) => l.genes.lifespan);
   const ages = alive.map((l) => l.age);
   const energies = alive.map((l) => l.energy);
 
@@ -106,6 +109,15 @@ export async function GET(req: NextRequest) {
       over10: reproductionRates.filter((r) => r > 1.0).length,
       over15: reproductionRates.filter((r) => r > 1.5).length,
     },
+    // v1.11b: 出産数（機能確認用）
+    offspringCount: {
+      ...stats(offspringCounts),
+      eq1: offspringCounts.filter((c) => c === 1).length,
+      ge3: offspringCounts.filter((c) => c >= 3).length,
+      ge5: offspringCounts.filter((c) => c >= 5).length,
+      ge8: offspringCounts.filter((c) => c >= 8).length,
+    },
+    lifespan: stats(lifespans),
     age: stats(ages),
     energy: stats(energies),
     deadSample: {
