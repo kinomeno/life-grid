@@ -5,7 +5,7 @@ export const ENERGY_REGEN_PER_TURN = 0.12;
 export const ENERGY_DIFFUSION = 0.02;
 
 export const ENERGY_WAVE_AMPLITUDE = 15;
-export const ENERGY_WAVE_PERIOD_TURNS = 400;
+// v1.20: ENERGY_WAVE_PERIOD_TURNS は v1.10 以降未使用のため削除済み。
 export const ENERGY_WAVE_SPATIAL_FREQ = 0.04;
 
 export const GENE_VISION_MIN = 1;
@@ -137,7 +137,7 @@ export const ENERGY_DISPLAY_LEVELS = 8;
 
 export const REPRODUCTION_ENERGY_THRESHOLD_RATIO = 0.6;
 export const MIN_REPRODUCTIVE_AGE_RATIO = 0.2;
-export const MUTATION_STD_DEV = 0.15;
+// v1.20: MUTATION_STD_DEV は v1.10 以降未使用のため削除済み（BASE_MUTATION_RATE に統合）。
 // 戦闘略奪率：勝者が敗者から奪うエネルギー比。
 // 確率戦闘では期待値が減るため、元の 0.6 に戻して維持可能性を確保。
 export const COMBAT_ENERGY_LOSS_RATIO = 0.6;

@@ -1517,6 +1517,12 @@ const _eStrength = new Float32Array(ENEMY_CAP);
 const _eDx = new Int8Array(ENEMY_CAP);
 const _eDy = new Int8Array(ENEMY_CAP);
 const _eWinnable = new Uint8Array(ENEMY_CAP);
+// v1.20: 仲間情報も同様に SoA で保持。wGregarious / wLoyalty / wRepro の
+// 「候補セル依存」化のため、位置とエネルギーを記録する。
+const ALLY_CAP = 256;
+const _aX = new Int16Array(ALLY_CAP);
+const _aY = new Int16Array(ALLY_CAP);
+const _aEnergy = new Float32Array(ALLY_CAP);
 
 function findBestNeighborCell(
   world: World,
@@ -1572,7 +1578,6 @@ function findBestNeighborCell(
   const speciesId = life.speciesId;
   const myStrength = g.strength;
   let allyCount = 0;
-  let allyEnergySum = 0;
   let enemyCount = 0;
   const halfW = width / 2;
   const halfH = height / 2;
@@ -1594,8 +1599,13 @@ function findBestNeighborCell(
       const other = livesById.get(occId);
       if (!other || !other.alive) continue;
       if (other.speciesId === speciesId) {
-        allyCount++;
-        allyEnergySum += other.energy;
+        // v1.20: 仲間も位置を記録（wG/wL/wR の候補セル依存化のため）
+        if (allyCount < ALLY_CAP) {
+          _aX[allyCount] = nx;
+          _aY[allyCount] = ny;
+          _aEnergy[allyCount] = other.energy;
+          allyCount++;
+        }
       } else if (enemyCount < ENEMY_CAP) {
         const og = other.genes;
         const enemyDef = og.strength + og.size * 0.05;
@@ -1609,12 +1619,6 @@ function findBestNeighborCell(
         enemyCount++;
       }
     }
-  }
-  const fAllyCount = allyCount > 10 ? 1.0 : allyCount * 0.1;
-  let fAllyEnergy = 0;
-  if (allyCount > 0) {
-    const v = allyEnergySum / allyCount * 0.01;
-    fAllyEnergy = v > 1 ? 1 : v;
   }
 
   // 各セルのスコアを計算して最大を求める
@@ -1641,6 +1645,48 @@ function findBestNeighborCell(
       const dist = distSq > 0 ? Math.sqrt(distSq) : 0;
       const f_dist = dist * invDepth;
       const f_starvHunger = f_energy * selfHunger;
+
+      // v1.20: 候補セルから「最も近い仲間」までの距離を計算（wG/wL の候補セル依存化）
+      let f_allyNear = 0;
+      let f_strongAllyNear = 0;
+      if (allyCount > 0) {
+        let nearestAllySq = Infinity;
+        let nearestAllyEnergy = 0;
+        for (let k = 0; k < allyCount; k++) {
+          let adx = _aX[k] - nx;
+          let ady = _aY[k] - ny;
+          if (adx > halfW) adx -= width;
+          else if (adx < -halfW) adx += width;
+          if (ady > halfH) ady -= height;
+          else if (ady < -halfH) ady += height;
+          const aDistSq = adx * adx + ady * ady;
+          if (aDistSq < nearestAllySq) {
+            nearestAllySq = aDistSq;
+            nearestAllyEnergy = _aEnergy[k];
+          }
+        }
+        if (nearestAllySq !== Infinity) {
+          const d = Math.sqrt(nearestAllySq);
+          const proximity = 1 - d * invDepth;
+          if (proximity > 0) {
+            f_allyNear = proximity;
+            const eClamp = nearestAllyEnergy > 100 ? 1 : nearestAllyEnergy * 0.01;
+            f_strongAllyNear = proximity * eClamp;
+          }
+        }
+      }
+      // v1.20: 候補セル周囲 8 セルの空き数（wRepro の候補セル依存化＝繁殖余地）
+      let emptyAround = 0;
+      for (let k = 0; k < 8; k++) {
+        let ax = nx + NEIGHBOR_DX[k];
+        if (ax < 0) ax += width;
+        else if (ax >= width) ax -= width;
+        let ay = ny + NEIGHBOR_DY[k];
+        if (ay < 0) ay += height;
+        else if (ay >= height) ay -= height;
+        if (occupancy[ay * width + ax] === -1) emptyAround++;
+      }
+      const f_emptyAround = emptyAround * 0.125; // /8
 
       // 敵との関係（最も近い「倒せる敵」「倒せない敵」を探す）
       // perf: 二乗距離で比較し、最後だけ sqrt
@@ -1697,13 +1743,17 @@ function findBestNeighborCell(
       }
 
       // === 重み × 特徴の線形和 ===
+      // v1.20: wG/wL/wR が候補セル依存の特徴になり、行動に正しく作用する。
+      //   wG * f_allyNear       : 候補セルが仲間に近いか（群居性）
+      //   wL * f_strongAllyNear : 強い仲間に近いか（強者追従）
+      //   wR * f_emptyAround    : 候補セル周囲の空きセル数（繁殖余地）
       const weightedSum =
         wA * f_energy +
         wP * f_prey -
         wC * (f_threat + 0.5 * f_approach) +
-        wG * fAllyCount +
-        wL * fAllyEnergy +
-        wR + // f_empty = 1 (空きセルしか通っていない)
+        wG * f_allyNear +
+        wL * f_strongAllyNear +
+        wR * f_emptyAround +
         wS * f_starvHunger;
 
       // accuracy で重み係数の有効度を制御。知能低い分はランダムノイズ
