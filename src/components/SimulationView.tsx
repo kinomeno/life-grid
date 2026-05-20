@@ -716,7 +716,14 @@ export default function SimulationView({
   // ブラウザの fullscreenchange を監視して state を同期（ESC で抜けた場合も拾える）
   useEffect(() => {
     const onFsChange = () => {
-      setTrueFullscreen(document.fullscreenElement !== null);
+      const isFs = document.fullscreenElement !== null;
+      setTrueFullscreen(isFs);
+      // v1.20 fix: 真の全画面を抜けたら、連動して有効化した擬似全画面（HUD 隠し）も
+      // 必ず解除する。これをしないと ESC/Shift+F で抜けても左右パネル・下部バーが
+      // 隠れたまま残り、マップだけの画面になってしまう。
+      if (!isFs) {
+        setFullscreenMap(false);
+      }
     };
     document.addEventListener("fullscreenchange", onFsChange);
     return () =>
