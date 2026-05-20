@@ -13,7 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createWorld, currentEra, getBehaviorMode, stepWorld } from "@/lib/world";
+import { createWorld, currentEra, defaultSimulationParams, getBehaviorMode, stepWorld } from "@/lib/world";
 
 function pct(values: number[], p: number): number {
   if (values.length === 0) return 0;
@@ -44,12 +44,15 @@ export async function GET(req: NextRequest) {
   const turns = Math.min(20000, Math.max(1, Number(sp.get("turns") ?? 1000)));
   const w = Math.min(200, Math.max(10, Number(sp.get("w") ?? 100)));
   const n = Math.min(1000, Math.max(1, Number(sp.get("n") ?? 100)));
+  // v1.20: totalEnergy をクエリで検証可能に（マップサイズ別デフォルトの調整用）
+  const te = Math.min(3, Math.max(0.1, Number(sp.get("te") ?? 1.2)));
 
   const world = createWorld({
     width: w,
     height: w,
     initialLifeCount: n,
     seed,
+    params: { ...defaultSimulationParams(), totalEnergy: te },
   });
 
   // 進化を進める

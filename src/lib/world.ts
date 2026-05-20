@@ -70,8 +70,9 @@ const MAX_HISTORY = 240;
 
 export function defaultSimulationParams(): SimulationParams {
   return {
-    // 初期はやや楽な世界に：初心者が「すぐ全滅」を経験しないように
-    // 確率戦闘 + size 防御で戦闘成功率が下がり食料獲得が減るため 1.20 に増量。
+    // 初期はやや楽な世界に：初心者が「すぐ全滅」を経験しないように。
+    // v1.20: 1.35 に上げると 100×100 で知能進化圧が失われた（賢くなくても生きられる）ため
+    // 1.2 に据え置き。小世界の安定化は初期個体数側で対処する。
     totalEnergy: 1.2,
     mutationRateMultiplier: 1.0,
     waveSpeed: 1.0,

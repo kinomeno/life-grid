@@ -114,9 +114,18 @@ export default function SimulationView({
   const [speed, setSpeedState] = useState<Speed>(0);
   const speedRef = useRef<Speed>(0);
   const [currentTps, setCurrentTps] = useState(0);
-  const [params, setParams] = useState<SimulationParams>(() =>
-    defaultSimulationParams()
-  );
+  const [params, setParams] = useState<SimulationParams>(() => {
+    const p = defaultSimulationParams();
+    // v1.20: マップサイズ依存の初期エネルギー量。
+    // 小世界は局所的な変動で共倒れ・絶滅しやすいため、エネルギーを潤沢にして安定化。
+    // 大世界はエネルギーを希少なまま保ち、知能の進化圧（賢くないと生き残れない）を維持。
+    //   ・50×50 以下: 1.5（小世界の絶滅抑制を優先）
+    //   ・75 以下:    1.35（中間）
+    //   ・100 以上:   1.2（知能進化を促す標準値）
+    if (width <= 50) p.totalEnergy = 1.5;
+    else if (width <= 75) p.totalEnergy = 1.35;
+    return p;
+  });
   // RAF ループ内で常に最新の params を参照するための ref
   const paramsRef = useRef(params);
   useEffect(() => {
