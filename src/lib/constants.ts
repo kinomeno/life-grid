@@ -63,10 +63,10 @@ export const GENE_BIRTH_THRESHOLD_MAX = 300;
 //   8-10: 多産（昆虫・魚的、r 戦略）
 // 親 + 子 N 体に均等分割 = 各個体が parent.energy / (N+1)。
 export const GENE_OFFSPRING_MIN = 1;
-// v0.21 検証: 出産数の上限を 10 → 4 に抑制。
-// 多産による「同系統の空間独占 → 種数収束」を緩和しつつ、
-// 「単産 vs 小規模多産」の戦略多様性は残す（1固定 と 上限10 の中間）。
-export const GENE_OFFSPRING_MAX = 4;
+// v0.21 検証: 出産数の上限を 4 → 3 に抑制。
+// 上限 4 では多様性がやや低かったため、さらに多産を抑えて
+// 「単産 vs 少数多産」の戦略性は残しつつ空間独占を緩和。
+export const GENE_OFFSPRING_MAX = 3;
 // v0.21: 出産数遺伝子の進化を有効化（上限 4 で）。
 // false にすると全個体 1 固定（出産数進化なし）。
 export const OFFSPRING_GENE_ENABLED = true;

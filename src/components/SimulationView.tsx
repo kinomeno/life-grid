@@ -1712,7 +1712,7 @@ export default function SimulationView({
                     />
                     <InfoRow
                       label={t("info.offspring_count")}
-                      value={`${selectedLife.genes.offspringCount} / 4`}
+                      value={`${selectedLife.genes.offspringCount} / 3`}
                     />
                   </div>
                 )}
