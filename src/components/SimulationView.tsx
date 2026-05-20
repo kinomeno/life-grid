@@ -61,26 +61,39 @@ export default function SimulationView({
   onBackToTitle,
 }: Props) {
   const { t, locale } = useLocale();
-  // 画面幅を追跡し、モバイルでマップが overflow しないようにする
+  // 画面サイズを追跡し、マップが overflow（スクロールバー）しないよう自動拡縮する
   const [screenWidth, setScreenWidth] = useState<number>(() =>
     typeof window !== "undefined" ? window.innerWidth : 1280
   );
+  const [screenHeight, setScreenHeight] = useState<number>(() =>
+    typeof window !== "undefined" ? window.innerHeight : 800
+  );
   useEffect(() => {
-    const onResize = () => setScreenWidth(window.innerWidth);
+    const onResize = () => {
+      setScreenWidth(window.innerWidth);
+      setScreenHeight(window.innerHeight);
+    };
     window.addEventListener("resize", onResize);
     onResize();
     return () => window.removeEventListener("resize", onResize);
   }, []);
   const cellSize = useMemo(() => {
-    // 画面幅から余白を引いた値とデスクトップ時の上限 720px のうち小さい方。
-    // モバイル縦画面では左右パネルを畳むため画面幅の大半が使えるが、
-    // .sim-center / .canvas-wrap の左右 padding + border ぶんを差し引かないと
-    // Canvas が親 wrap より大きくなり右端がはみ出るので余裕をもって 40px 引く。
-    const padding = 40;
-    const maxPx = Math.min(720, Math.max(160, screenWidth - padding));
-    const fit = Math.floor(maxPx / Math.max(width, height));
-    return Math.max(2, Math.min(8, fit));
-  }, [width, height, screenWidth]);
+    // v1.20: 開始時のマップ自動拡縮。
+    // 画面の「幅」と「高さ」の両方でフィットさせ、ブラウザにスクロールバーが
+    // 出ないサイズを選ぶ。従来は幅しか見ておらず、縦長マップで縦スクロールが
+    // 出ていた。
+    //   - 幅: 左右パネル(240px×2) + 余白を差し引いた残り
+    //     （モバイル縦画面ではパネルを畳むので画面幅の大半が使える）
+    //   - 高さ: ヘッダー・操作バー・上下余白を差し引いた残り
+    const sidePanels = screenWidth >= 900 ? 240 * 2 + 60 : 40;
+    const availW = Math.max(160, screenWidth - sidePanels);
+    const availH = Math.max(160, screenHeight - 180); // ヘッダー+操作バー+余白
+    const fitW = availW / Math.max(width, height);
+    const fitH = availH / Math.max(width, height);
+    const fit = Math.floor(Math.min(fitW, fitH));
+    // 上限は 12 まで緩和（大画面で全体が小さくなりすぎないように）
+    return Math.max(2, Math.min(12, fit));
+  }, [width, height, screenWidth, screenHeight]);
 
   const [seed, setSeed] = useState<number | null>(null);
   const worldRef = useRef<World | null>(null);

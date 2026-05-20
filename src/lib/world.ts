@@ -1925,10 +1925,6 @@ function cullDead(world: World): void {
   }
 }
 
-function findLifeById(world: World, id: number): Life | null {
-  return world.livesById.get(id) ?? null;
-}
-
 function shouldReproduce(life: Life): boolean {
   const g = life.genes;
   const minAge = g.lifespan * MIN_REPRODUCTIVE_AGE_RATIO;
