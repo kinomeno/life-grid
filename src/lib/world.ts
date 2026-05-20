@@ -28,6 +28,7 @@ import {
   ENERGY_INITIAL_VARIANCE,
   ENERGY_MAX,
   ENERGY_REGEN_PER_TURN,
+  ENERGY_REGEN_FLOOR_RATIO,
   ENERGY_WAVE_AMPLITUDE,
   ENERGY_WAVE_SPATIAL_FREQ,
   FIXED_GENE_VALUES,
@@ -50,6 +51,7 @@ import {
   GENE_VISION_MIN,
   INITIAL_ENERGY_RATIO,
   MIN_REPRODUCTIVE_AGE_RATIO,
+  OFFSPRING_GENE_ENABLED,
 } from "./constants";
 import { mulberry32, randomInt, randomRange, type RNG } from "./random";
 import { speciesIdFromGenes, speciesLabel } from "./species";
@@ -367,9 +369,14 @@ export function mutatGenes(parentGenes: Genes, mutationRate: number, rng: RNG): 
   genes.lifespan = mutate(genes.lifespan, GENE_LIFESPAN_MIN, GENE_LIFESPAN_MAX);
   // v1.11: 出産数（1〜10）：factor 0.05 で範囲 9 に対し ±0.45 程度
   // 整数値だが mutate（連続値）→ round で離散化。たまに ±1 が起きる程度。
-  genes.offspringCount = Math.round(
-    mutate(genes.offspringCount, GENE_OFFSPRING_MIN, GENE_OFFSPRING_MAX, 0.05)
-  );
+  // v0.21 実験: OFFSPRING_GENE_ENABLED が false の間は変異させず 1 固定のまま。
+  if (OFFSPRING_GENE_ENABLED) {
+    genes.offspringCount = Math.round(
+      mutate(genes.offspringCount, GENE_OFFSPRING_MIN, GENE_OFFSPRING_MAX, 0.05)
+    );
+  } else {
+    genes.offspringCount = 1;
+  }
   // v1.10: 行動判断の重み遺伝子（factor 0.05 で範囲 100 に対し ±5）
   genes.wAppetite = Math.round(mutate(genes.wAppetite, GENE_WEIGHT_MIN, GENE_WEIGHT_MAX, 0.05));
   genes.wPredation = Math.round(mutate(genes.wPredation, GENE_WEIGHT_MIN, GENE_WEIGHT_MAX, 0.05));
@@ -1273,6 +1280,9 @@ function updateEnergy(world: World): void {
   // 振幅係数 0.04（旧 0.025）：背景エネルギー揺れを視覚的に分かりやすく
   const waveAmp = ENERGY_WAVE_AMPLITUDE * 0.04 * energyScale * env.ampScale;
   const regenPerTurn = ENERGY_REGEN_PER_TURN * energyScale * env.regenScale;
+  // v0.21: 再生の下限。波が負のピークでも regenFloor は必ず供給され、
+  // マップ全体が同時に枯渇する環境絶滅を防ぐ。
+  const regenFloor = regenPerTurn * ENERGY_REGEN_FLOOR_RATIO;
   const SF = ENERGY_WAVE_SPATIAL_FREQ;
 
   // 時代によるパターン切替（最後20%でフェード）
@@ -1322,7 +1332,9 @@ function updateEnergy(world: World): void {
         energy[rowYp + x];
       const diffused = cur + (neighborSum * 0.25 - cur) * ENERGY_DIFFUSION;
 
-      const regen = regenPerTurn * (1 + terrainBias[idx] * 0.6) + waveBuf[idx];
+      // v0.21: 再生に下限 regenFloor を保証（波が負でも完全停止しない）
+      const rawRegen = regenPerTurn * (1 + terrainBias[idx] * 0.6) + waveBuf[idx];
+      const regen = rawRegen > regenFloor ? rawRegen : regenFloor;
       let v = diffused + regen;
       if (v < 0) v = 0;
       else if (v > ENERGY_MAX) v = ENERGY_MAX;
