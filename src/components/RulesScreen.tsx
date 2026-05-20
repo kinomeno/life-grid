@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useLocale } from "./LocaleProvider";
 import { useDraggablePanel, type DragOffset } from "./useDraggablePanel";
 import type { Locale } from "@/lib/i18n";
@@ -835,6 +835,30 @@ function flatten(sections: Section[]): Section[] {
   return out;
 }
 
+/**
+ * v1.20: 行内の URL を検出してクリック可能なリンクに変換する。
+ * ご挨拶セクションの note URL などを強調表示。
+ */
+function renderLine(line: string): ReactNode {
+  // http(s) URL を区切りとして分割（全角/半角スペースまで）
+  const parts = line.split(/(https?:\/\/[^\s　]+)/g);
+  return parts.map((part, i) =>
+    /^https?:\/\//.test(part) ? (
+      <a
+        key={i}
+        href={part}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="rules-link"
+      >
+        {part}
+      </a>
+    ) : (
+      part
+    )
+  );
+}
+
 function sectionsFor(locale: Locale): Section[] {
   return locale === "en" ? SECTIONS_EN : SECTIONS_JA;
 }
@@ -912,7 +936,7 @@ export default function RulesScreen({
                 )}
                 {b.lines.map((line, j) => (
                   <p key={j} className="rules-content-line">
-                    {line}
+                    {renderLine(line)}
                   </p>
                 ))}
               </div>

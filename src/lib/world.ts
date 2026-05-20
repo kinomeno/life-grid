@@ -1823,6 +1823,53 @@ export function getBehaviorMode(world: World, life: Life): BehaviorMode {
   return topMode;
 }
 
+/**
+ * v1.20: 個体の「行動の特徴」を分かりやすく文章化するためのデータを返す。
+ *
+ * 「同じ距離・同じ条件で複数の対象（餌・天敵・仲間など）がいたら何を優先するか」を、
+ * 重み遺伝子の大小から導出。性格タグより具体的で観察しやすい。
+ *
+ * 戻り値は i18n キーと重み値のペア配列（重み降順、上位のみ）。
+ * UI 側でローカライズして「餌を追う(85) / 強敵から逃げる(70) …」のように表示する。
+ */
+export type BehaviorTrait = { key: string; weight: number };
+
+export function describeBehavior(life: Life): BehaviorTrait[] {
+  if (!life.alive) return [];
+  const g = life.genes;
+  const intel = Math.max(0, g.intelligence);
+  // 知能 0：完全ランダム
+  if (intel <= 0) return [{ key: "behavior_desc.random", weight: 0 }];
+
+  const traits: BehaviorTrait[] = [
+    { key: "behavior_desc.chase_prey", weight: g.wPredation },
+    { key: "behavior_desc.flee_threat", weight: g.wCaution },
+    { key: "behavior_desc.follow_strong", weight: g.wLoyalty },
+    { key: "behavior_desc.gather", weight: g.wGregarious },
+    { key: "behavior_desc.forage", weight: g.wAppetite },
+    { key: "behavior_desc.seek_breeding", weight: g.wRepro },
+  ];
+  traits.sort((a, b) => b.weight - a.weight);
+  // 重み 40 以上の「ある程度反応する」傾向を上位 3 つまで
+  const top = traits.filter((t) => t.weight >= 40).slice(0, 3);
+  if (top.length === 0) {
+    // すべての重みが低い＝消極的（食べて繁殖する以外あまり動かない）
+    return [{ key: "behavior_desc.passive", weight: 0 }];
+  }
+  return top;
+}
+
+/**
+ * v1.20: その個体の判断が「正確か / 気まぐれか」を accuracy から判定。
+ * UI で行動特徴に注釈を添えるのに使う。
+ */
+export function behaviorAccuracyNote(life: Life): "precise" | "unstable" | "random" {
+  const intel = Math.max(0, life.genes.intelligence);
+  if (intel <= 0) return "random";
+  const accuracy = intel >= ACCURACY_FULL_INTEL ? 1 : Math.sqrt(intel / ACCURACY_FULL_INTEL);
+  return accuracy < 0.5 ? "unstable" : "precise";
+}
+
 /** 隣接 8 セルからランダムな空きセルを返す。なければ自身位置。 */
 function randomNeighborOrStay(
   world: World,

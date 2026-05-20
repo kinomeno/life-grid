@@ -344,6 +344,47 @@
   border-bottom: 1px solid var(--line-soft);
 }
 
+/* v1.20: 行動の特徴リスト（基本タブ） */
+:global(.behavior-traits) {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--bg-1);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+}
+
+:global(.behavior-traits-label) {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-soft);
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+}
+
+:global(.behavior-traits-list) {
+  margin: 0;
+  padding-left: 16px;
+  list-style: disc;
+}
+
+:global(.behavior-traits-list li) {
+  font-size: 12px;
+  color: var(--text-strong);
+  line-height: 1.6;
+}
+
+:global(.behavior-traits-weight) {
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+}
+
+:global(.behavior-traits-note) {
+  margin-top: 4px;
+  font-size: 10px;
+  color: #b07a2e;
+}
+
 /* v1.20: 個体詳細パネルのタブナビゲーション */
 :global(.life-tabs) {
   display: flex;
@@ -1500,6 +1541,25 @@
   color: var(--text-strong);
   line-height: 1.6;
   margin: 0 0 4px;
+}
+
+/* v1.20: ルール文中の URL リンク（ご挨拶の note 記事など）を強調表示 */
+:global(.rules-link) {
+  display: inline-block;
+  color: #1a6fd4;
+  font-weight: 700;
+  text-decoration: underline;
+  word-break: break-all;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(26, 111, 212, 0.08);
+  transition: background 0.15s, color 0.15s;
+}
+
+:global(.rules-link:hover) {
+  color: #fff;
+  background: #1a6fd4;
+  text-decoration: none;
 }
 
 /* ロック対象ボタン（200×200, x100 など） */

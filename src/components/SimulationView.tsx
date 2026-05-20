@@ -18,7 +18,8 @@ import {
   defaultDisabledGenes,
   defaultSimulationParams,
   findHeir,
-  getBehaviorMode,
+  describeBehavior,
+  behaviorAccuracyNote,
   stepWorld,
 } from "@/lib/world";
 import type { DisabledGeneFlags, WorldEvent } from "@/lib/types";
@@ -1570,7 +1571,7 @@ export default function SimulationView({
                     {t("panel.tab.personality")}
                   </button>
                 </div>
-                {/* 「基本」タブ：状態と系統情報 */}
+                {/* 「基本」タブ：状態と系統情報 + 行動の特徴 */}
                 {lifePanelTab === "basic" && (
                   <>
                     {world && (
@@ -1595,12 +1596,32 @@ export default function SimulationView({
                           label={t("info.age")}
                           value={`${selectedLife.age} / ${selectedLife.genes.lifespan.toFixed(0)}`}
                         />
-                        <InfoRow
-                          label={t("info.behavior_mode")}
-                          value={t(`mode.${getBehaviorMode(world, selectedLife)}`)}
-                        />
                       </div>
                     )}
+                    {/* v1.20: 行動の特徴を文章で表示（性格タグより具体的） */}
+                    <div className="behavior-traits">
+                      <div className="behavior-traits-label">
+                        {t("info.behavior_traits")}
+                      </div>
+                      <ul className="behavior-traits-list">
+                        {describeBehavior(selectedLife).map((tr, i) => (
+                          <li key={i}>
+                            {t(tr.key)}
+                            {tr.weight > 0 && (
+                              <span className="behavior-traits-weight">
+                                {" "}
+                                {tr.weight.toFixed(0)}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                      {behaviorAccuracyNote(selectedLife) === "unstable" && (
+                        <div className="behavior-traits-note">
+                          {t("behavior_desc.note_unstable")}
+                        </div>
+                      )}
+                    </div>
                   </>
                 )}
                 {/* 「遺伝」タブ：8 つの基本遺伝子 */}
