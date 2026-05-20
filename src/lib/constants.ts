@@ -37,10 +37,13 @@ export const GENE_INTELLIGENCE_MIN = 0;
 // v1.01: 知能は 0〜999 の連続スケール。100 超は維持コストが指数的に増加。
 export const GENE_INTELLIGENCE_MAX = 999;
 export const GENE_INTELLIGENCE_NORMAL_CAP = 100;
-// v1.01: 繁殖率は 0.1〜2.0 に拡張。0.4 超では分裂エネルギーコストが急増。
-export const GENE_REPRODUCTION_MIN = 0.1;
-export const GENE_REPRODUCTION_MAX = 2.0;
-export const GENE_REPRODUCTION_NORMAL_CAP = 0.4;
+// v1.20: 繁殖率（reproductionRate）を廃止し「出産閾値」遺伝子に置き換え。
+// 所持エネルギーが実効閾値 min(birthThreshold, size*0.9) を上回ると出産する。
+//   低い（30〜）= 早く頻繁に産む（r 戦略）
+//   高い（〜300）= じっくり蓄えてから産む（K 戦略）
+// 実効閾値が体格（タンク容量）を超えないようクランプ（超えると永遠に出産不可になるため）。
+export const GENE_BIRTH_THRESHOLD_MIN = 30;
+export const GENE_BIRTH_THRESHOLD_MAX = 300;
 // v1.11: 出産数遺伝子。1 回の繁殖で生まれる子の数。
 //   1: 単独出産（哺乳類的）
 //   3-5: 中程度（鳥・爬虫類的）
@@ -135,7 +138,7 @@ export const SPECIES_RGB_BIN = 48;
 
 export const ENERGY_DISPLAY_LEVELS = 8;
 
-export const REPRODUCTION_ENERGY_THRESHOLD_RATIO = 0.6;
+// v1.20: REPRODUCTION_ENERGY_THRESHOLD_RATIO は出産閾値方式への移行で廃止。
 export const MIN_REPRODUCTIVE_AGE_RATIO = 0.2;
 // v1.20: MUTATION_STD_DEV は v1.10 以降未使用のため削除済み（BASE_MUTATION_RATE に統合）。
 // 戦闘略奪率：勝者が敗者から奪うエネルギー比。
@@ -155,7 +158,7 @@ export const FIXED_GENE_VALUES = {
   size: 100,
   strength: 50,
   intelligence: 50,
-  reproductionRate: 0.25,
+  birthThreshold: 80,
   lifespan: 400,
   // v1.11: 出産数の固定値は 1（単独出産が無効化時のデフォルト）
   offspringCount: 1,

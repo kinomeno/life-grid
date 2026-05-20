@@ -377,7 +377,7 @@ export default function SimulationView({
       "averageSpeed",
       "averageStrength",
       "averageLifespan",
-      "averageReproductionRate",
+      "averageBirthThreshold",
       "averageSize",
       "avgR",
       "avgG",
@@ -394,7 +394,7 @@ export default function SimulationView({
           s.averageSpeed.toFixed(3),
           s.averageStrength.toFixed(3),
           s.averageLifespan.toFixed(3),
-          s.averageReproductionRate.toFixed(4),
+          s.averageBirthThreshold.toFixed(3),
           s.averageSize.toFixed(3),
           s.avgR.toFixed(1),
           s.avgG.toFixed(1),
@@ -1671,8 +1671,8 @@ export default function SimulationView({
                       }`}
                     />
                     <InfoRow
-                      label={t("info.reproduction_rate")}
-                      value={selectedLife.genes.reproductionRate.toFixed(2)}
+                      label={t("info.birth_threshold")}
+                      value={`${selectedLife.genes.birthThreshold.toFixed(0)} / 300`}
                     />
                     <InfoRow
                       label={t("info.lifespan")}
@@ -2209,7 +2209,7 @@ function allDisabledGenes(): DisabledGeneFlags {
     size: true,
     strength: true,
     intelligence: true,
-    reproductionRate: true,
+    birthThreshold: true,
     lifespan: true,
   };
 }
@@ -2221,7 +2221,7 @@ const GENE_TOGGLE_ITEMS: { key: keyof DisabledGeneFlags; tKey: string }[] = [
   { key: "size", tKey: "gene.size" },
   { key: "strength", tKey: "gene.strength" },
   { key: "intelligence", tKey: "gene.intelligence" },
-  { key: "reproductionRate", tKey: "gene.reproduction_rate" },
+  { key: "birthThreshold", tKey: "gene.birth_threshold" },
   { key: "lifespan", tKey: "gene.lifespan" },
 ];
 

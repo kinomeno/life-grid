@@ -9,8 +9,8 @@ import {
   GENE_LIFESPAN_MIN,
   GENE_OFFSPRING_MAX,
   GENE_OFFSPRING_MIN,
-  GENE_REPRODUCTION_MAX,
-  GENE_REPRODUCTION_MIN,
+  GENE_BIRTH_THRESHOLD_MAX,
+  GENE_BIRTH_THRESHOLD_MIN,
   GENE_SIZE_MAX,
   GENE_SIZE_MIN,
   GENE_SPEED_MAX,
@@ -31,7 +31,7 @@ export type GraphSeriesState = {
   avgSpeed: boolean;
   avgStrength: boolean;
   avgLifespan: boolean;
-  avgReproductionRate: boolean;
+  avgBirthThreshold: boolean;
   avgSize: boolean;
   // v1.20: 視野・出産数の時系列を追加
   avgVision: boolean;
@@ -46,7 +46,7 @@ export const DEFAULT_GRAPH_SERIES: GraphSeriesState = {
   avgSpeed: false,
   avgStrength: false,
   avgLifespan: false,
-  avgReproductionRate: false,
+  avgBirthThreshold: false,
   avgSize: false,
   avgVision: false,
   avgOffspringCount: false,
@@ -64,7 +64,7 @@ export type GeneKey =
   | "speed"
   | "size"
   | "lifespan"
-  | "reproductionRate"
+  | "birthThreshold"
   | "offspringCount";
 
 type Props = {
@@ -101,7 +101,7 @@ const SERIES: Series[] = [
   { key: "avgSpeed", tKey: "graph.avg_speed", color: "#5d9b4f", pick: (s) => s.averageSpeed },
   { key: "avgStrength", tKey: "graph.avg_strength", color: "#b04050", pick: (s) => s.averageStrength },
   { key: "avgLifespan", tKey: "graph.avg_lifespan", color: "#8a6a2e", pick: (s) => s.averageLifespan },
-  { key: "avgReproductionRate", tKey: "graph.avg_reproduction_rate", color: "#9f6a3e", pick: (s) => s.averageReproductionRate },
+  { key: "avgBirthThreshold", tKey: "graph.avg_birth_threshold", color: "#9f6a3e", pick: (s) => s.averageBirthThreshold },
   { key: "avgSize", tKey: "graph.avg_size", color: "#6a3e9f", pick: (s) => s.averageSize },
   // v1.20: 視野・出産数の時系列
   { key: "avgVision", tKey: "graph.avg_vision", color: "#3a9f8e", pick: (s) => s.averageVision },
@@ -172,12 +172,12 @@ const GENES: GeneSpec[] = [
     pick: (l) => l.genes.lifespan,
   },
   {
-    key: "reproductionRate",
-    tKey: "info.reproduction_rate",
-    min: GENE_REPRODUCTION_MIN,
-    max: GENE_REPRODUCTION_MAX,
-    bins: 12,
-    pick: (l) => l.genes.reproductionRate,
+    key: "birthThreshold",
+    tKey: "info.birth_threshold",
+    min: GENE_BIRTH_THRESHOLD_MIN,
+    max: GENE_BIRTH_THRESHOLD_MAX,
+    bins: 16,
+    pick: (l) => l.genes.birthThreshold,
   },
   // v1.20: 出産数の分布（mutationRate は遺伝子廃止のため削除）
   {
@@ -347,7 +347,7 @@ export default function StatsGraphModal({
                     avgSpeed: true,
                     avgStrength: true,
                     avgLifespan: true,
-                    avgReproductionRate: true,
+                    avgBirthThreshold: true,
                     avgSize: true,
                     avgVision: true,
                     avgOffspringCount: true,
@@ -367,7 +367,7 @@ export default function StatsGraphModal({
                     avgSpeed: false,
                     avgStrength: false,
                     avgLifespan: false,
-                    avgReproductionRate: false,
+                    avgBirthThreshold: false,
                     avgSize: false,
                     avgVision: false,
                     avgOffspringCount: false,
@@ -718,6 +718,7 @@ function drawHistogram(
 }
 
 function formatVal(v: number, key: GeneKey): string {
-  if (key === "reproductionRate") return v.toFixed(2);
+  // v1.20: 出産閾値・その他はすべて整数表示
+  void key;
   return `${Math.round(v)}`;
 }

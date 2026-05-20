@@ -4,8 +4,8 @@ import {
   GENE_LIFESPAN_MIN,
   GENE_OFFSPRING_MAX,
   GENE_OFFSPRING_MIN,
-  GENE_REPRODUCTION_MAX,
-  GENE_REPRODUCTION_MIN,
+  GENE_BIRTH_THRESHOLD_MAX,
+  GENE_BIRTH_THRESHOLD_MIN,
   GENE_SIZE_MAX,
   GENE_SIZE_MIN,
   GENE_SPEED_MAX,
@@ -29,7 +29,7 @@ import type { Genes } from "./types";
  *  - size: 3桁 (030-200)          = 3   (v1.11: 60-140→30-200 範囲変更)
  *  - strength: 3桁 (001-999)      = 3
  *  - intelligence: 3桁 (000-999)  = 3
- *  - reproductionRate: 3桁 (010-200, 100 倍値)= 3
+ *  - birthThreshold: 3桁 (030-300)= 3   (v1.20: 繁殖率廃止→出産閾値)
  *  - lifespan: 4桁                = 4
  *  - offspringCount: 1桁 (1-9 → 1-10 範囲、0=10 にマップ) = 1   (v1.11 追加)
  *  - wAppetite～wStarvSensitive: 1桁 ×7（10刻みで精度を犠牲に短縮） = 7
@@ -48,7 +48,7 @@ export function encodeGeneId(genes: Genes): string {
   const size = pad(Math.round(genes.size), 3);
   const strength = pad(Math.round(genes.strength), 3);
   const intel = pad(Math.round(genes.intelligence), 3);
-  const repro = pad(Math.round(genes.reproductionRate * 100), 3);
+  const repro = pad(Math.round(genes.birthThreshold), 3);
   const life = pad(Math.round(genes.lifespan), 4);
   // v1.11: 出産数 1-10 を 1-9 + (10→0) として 1 桁に圧縮
   const ocRaw = Math.max(GENE_OFFSPRING_MIN, Math.min(GENE_OFFSPRING_MAX, Math.round(genes.offspringCount)));
@@ -98,10 +98,10 @@ export function decodeGeneId(id: string): Genes | null {
     0,
     GENE_INTELLIGENCE_MAX
   );
-  const reproductionRate = clamp(
-    parseInt(trimmed.slice(p, (p += 3)), 10) / 100,
-    GENE_REPRODUCTION_MIN,
-    GENE_REPRODUCTION_MAX
+  const birthThreshold = clamp(
+    parseInt(trimmed.slice(p, (p += 3)), 10),
+    GENE_BIRTH_THRESHOLD_MIN,
+    GENE_BIRTH_THRESHOLD_MAX
   );
   const lifespan = clamp(
     parseInt(trimmed.slice(p, (p += 4)), 10),
@@ -127,7 +127,7 @@ export function decodeGeneId(id: string): Genes | null {
     size,
     strength,
     intelligence,
-    reproductionRate,
+    birthThreshold,
     lifespan,
     offspringCount,
     wAppetite,

@@ -7,7 +7,9 @@ export type Genes = {
   size: number;
   strength: number;
   intelligence: number;
-  reproductionRate: number;
+  // v1.20: reproductionRate（繁殖率）を廃止し birthThreshold（出産閾値）に置換。
+  // 所持エネルギーが実効閾値 min(birthThreshold, size*0.9) を超えると出産。
+  birthThreshold: number;
   // v1.10: mutationRate 遺伝子は廃止（環境設定の全体倍率のみで制御）
   lifespan: number;
   // v1.11: 1 回の出産で生まれる子の数（1〜10）。
@@ -88,7 +90,7 @@ export type DisabledGeneFlags = {
   size: boolean;
   strength: boolean;
   intelligence: boolean;
-  reproductionRate: boolean;
+  birthThreshold: boolean;
   // v1.10: mutationRate は遺伝子から廃止された（環境設定の倍率で制御）
   lifespan: boolean;
 };
@@ -130,8 +132,8 @@ export type StatsSample = {
   averageStrength: number;
   /** 平均寿命。 */
   averageLifespan: number;
-  /** 平均繁殖率。 */
-  averageReproductionRate: number;
+  /** v1.20: 平均出産閾値。 */
+  averageBirthThreshold: number;
   /** 平均体格。 */
   averageSize: number;
   /** v1.20: 平均視野。 */

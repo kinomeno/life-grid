@@ -8,7 +8,7 @@
  *   seed, turns, alive, species_count, era,
  *   strength: {avg, min, max, p50, p90, p99, over100, over200, over300},
  *   intelligence: 同上,
- *   reproductionRate: 同上 (over04, over10, over15),
+ *   birthThreshold: 同上 (lt50, gt150, gt250),
  *   recent_deaths: 最近死んだ個体のサンプル（強さの値だけ）
  */
 
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
   const visions = alive.map((l) => l.genes.vision);
   const speeds = alive.map((l) => l.genes.speed);
   const sizes = alive.map((l) => l.genes.size);
-  const reproductionRates = alive.map((l) => l.genes.reproductionRate);
+  const birthThresholds = alive.map((l) => l.genes.birthThreshold);
   // v1.11b: 観察のため追加
   const offspringCounts = alive.map((l) => l.genes.offspringCount);
   const lifespans = alive.map((l) => l.genes.lifespan);
@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
     .map((l) => ({
       s: l.genes.strength,
       i: l.genes.intelligence,
-      r: Number(l.genes.reproductionRate.toFixed(2)),
+      r: Number(l.genes.birthThreshold.toFixed(0)),
       age: l.age,
     }));
   const deadStrengths = dead.map((d) => d.s);
@@ -103,11 +103,11 @@ export async function GET(req: NextRequest) {
     vision: stats(visions),
     speed: stats(speeds),
     size: stats(sizes),
-    reproductionRate: {
-      ...stats(reproductionRates),
-      over04: reproductionRates.filter((r) => r > 0.4).length,
-      over10: reproductionRates.filter((r) => r > 1.0).length,
-      over15: reproductionRates.filter((r) => r > 1.5).length,
+    birthThreshold: {
+      ...stats(birthThresholds),
+      lt50: birthThresholds.filter((b) => b < 50).length,
+      gt150: birthThresholds.filter((b) => b > 150).length,
+      gt250: birthThresholds.filter((b) => b > 250).length,
     },
     // v1.11b: 出産数（機能確認用）
     offspringCount: {

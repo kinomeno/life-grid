@@ -60,7 +60,7 @@ export function makeStatsSample(world: World): StatsSample {
   let speedSum = 0;
   let strSum = 0;
   let lifespanSum = 0;
-  let reproSum = 0;
+  let birthThresholdSum = 0;
   let sizeSum = 0;
   let visionSum = 0;
   let offspringSum = 0;
@@ -75,7 +75,7 @@ export function makeStatsSample(world: World): StatsSample {
     speedSum += l.genes.speed;
     strSum += l.genes.strength;
     lifespanSum += l.genes.lifespan;
-    reproSum += l.genes.reproductionRate;
+    birthThresholdSum += l.genes.birthThreshold;
     sizeSum += l.genes.size;
     visionSum += l.genes.vision;
     offspringSum += l.genes.offspringCount;
@@ -93,7 +93,7 @@ export function makeStatsSample(world: World): StatsSample {
       averageSpeed: 0,
       averageStrength: 0,
       averageLifespan: 0,
-      averageReproductionRate: 0,
+      averageBirthThreshold: 0,
       averageSize: 0,
       averageVision: 0,
       averageOffspringCount: 0,
@@ -110,7 +110,7 @@ export function makeStatsSample(world: World): StatsSample {
     averageSpeed: speedSum / aliveCount,
     averageStrength: strSum / aliveCount,
     averageLifespan: lifespanSum / aliveCount,
-    averageReproductionRate: reproSum / aliveCount,
+    averageBirthThreshold: birthThresholdSum / aliveCount,
     averageSize: sizeSum / aliveCount,
     averageVision: visionSum / aliveCount,
     averageOffspringCount: offspringSum / aliveCount,

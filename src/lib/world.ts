@@ -14,7 +14,8 @@ import {
   COST_STRENGTH_EXP,
   COST_VISION,
   GENE_INTELLIGENCE_NORMAL_CAP,
-  GENE_REPRODUCTION_NORMAL_CAP,
+  GENE_BIRTH_THRESHOLD_MAX,
+  GENE_BIRTH_THRESHOLD_MIN,
   GENE_STRENGTH_NORMAL_CAP,
   GENE_WEIGHT_INIT_MEAN,
   GENE_WEIGHT_INIT_RANGE,
@@ -38,8 +39,6 @@ import {
   GENE_MUTATION_MIN,
   GENE_OFFSPRING_MAX,
   GENE_OFFSPRING_MIN,
-  GENE_REPRODUCTION_MAX,
-  GENE_REPRODUCTION_MIN,
   GENE_SIZE_MAX,
   GENE_SIZE_MIN,
   GENE_SPEED_MAX,
@@ -51,7 +50,6 @@ import {
   GENE_VISION_MIN,
   INITIAL_ENERGY_RATIO,
   MIN_REPRODUCTIVE_AGE_RATIO,
-  REPRODUCTION_ENERGY_THRESHOLD_RATIO,
 } from "./constants";
 import { mulberry32, randomInt, randomRange, type RNG } from "./random";
 import { speciesIdFromGenes, speciesLabel } from "./species";
@@ -94,7 +92,7 @@ export function defaultDisabledGenes(): DisabledGeneFlags {
     size: false,
     strength: false,
     intelligence: false,
-    reproductionRate: false,
+    birthThreshold: false,
     lifespan: false,
   };
 }
@@ -118,8 +116,8 @@ export function applyDisabledGenes(
   if (disabled.size) out.size = FIXED_GENE_VALUES.size;
   if (disabled.strength) out.strength = FIXED_GENE_VALUES.strength;
   if (disabled.intelligence) out.intelligence = FIXED_GENE_VALUES.intelligence;
-  if (disabled.reproductionRate)
-    out.reproductionRate = FIXED_GENE_VALUES.reproductionRate;
+  if (disabled.birthThreshold)
+    out.birthThreshold = FIXED_GENE_VALUES.birthThreshold;
   if (disabled.lifespan) out.lifespan = FIXED_GENE_VALUES.lifespan;
   return out;
 }
@@ -293,9 +291,8 @@ function randomGenes(rng: RNG): Genes {
     // v1.01: 初期分布は通常レンジ（1〜100）のみ。突然変異で 100 超に達する。
     strength: randomInt(rng, GENE_STRENGTH_MIN, GENE_STRENGTH_NORMAL_CAP + 1),
     intelligence: randomInt(rng, GENE_INTELLIGENCE_MIN, GENE_INTELLIGENCE_NORMAL_CAP + 1),
-    // v1.11b: reproductionRate を「繁殖頻度」として機能化したため、初期分布を 1.0 中心に。
-    // rate=1.0 で標準閾値（baseThreshold そのまま）。0.6〜1.4 から進化開始。
-    reproductionRate: randomRange(rng, 0.6, 1.4),
+    // v1.20: 出産閾値。初期 50〜120 から進化開始（30〜300 の範囲）。
+    birthThreshold: randomRange(rng, 50, 120),
     lifespan: randomRange(rng, GENE_LIFESPAN_MIN, GENE_LIFESPAN_MAX),
     // v1.11: 初期出産数は 1（単独出産）。突然変異で多産個体が稀に発生。
     offspringCount: 1,
@@ -358,12 +355,12 @@ export function mutatGenes(parentGenes: Genes, mutationRate: number, rng: RNG): 
       0.003
     )
   );
-  // v1.01: 繁殖率（0.1〜2.0）：factor 0.05 で範囲 1.9 に対し ±0.095
-  genes.reproductionRate = mutate(
-    genes.reproductionRate,
-    GENE_REPRODUCTION_MIN,
-    GENE_REPRODUCTION_MAX,
-    0.05
+  // v1.20: 出産閾値（30〜300）：factor 0.04 で範囲 270 に対し ±10 程度
+  genes.birthThreshold = mutate(
+    genes.birthThreshold,
+    GENE_BIRTH_THRESHOLD_MIN,
+    GENE_BIRTH_THRESHOLD_MAX,
+    0.04
   );
   // v1.10: mutationRate 遺伝子は廃止（環境設定の倍率で制御）
   genes.lifespan = mutate(genes.lifespan, GENE_LIFESPAN_MIN, GENE_LIFESPAN_MAX);
@@ -1158,8 +1155,8 @@ function geneDist2(a: Genes, b: Genes): number {
   d += (a.speed - b.speed) ** 2;
   // 視野（1〜4）はスケール拡大
   d += ((a.vision - b.vision) * 25) ** 2;
-  // 0〜2.0 の繁殖率は 50 倍してスケール合わせ
-  d += ((a.reproductionRate - b.reproductionRate) * 50) ** 2;
+  // v1.20: 出産閾値 30〜300。寿命と同様にスケールを抑える（0.3 倍）
+  d += ((a.birthThreshold - b.birthThreshold) * 0.3) ** 2;
   // 寿命 200〜600 → そのまま比較すると支配的になるので 0.2 倍
   d += ((a.lifespan - b.lifespan) * 0.2) ** 2;
   // v1.10: 重み遺伝子の差も遺伝子距離に含める（性格の近さを反映）
@@ -1933,41 +1930,18 @@ function findLifeById(world: World, id: number): Life | null {
 }
 
 function shouldReproduce(life: Life): boolean {
-  const minAge = life.genes.lifespan * MIN_REPRODUCTIVE_AGE_RATIO;
-  // v1.11: 繁殖閾値の基準値（小型多産の暴走抑制で下限 40）。
-  //   size  30: 0.6*30 = 18 → 40（下限で抑制）
-  //   size  67: 0.6*67 = 40 → 40（境界）
-  //   size 100: 0.6*100 = 60 → 60（通常レンジ）
-  //   size 200: 0.6*200 = 120 → 120（大型は不変）
-  const baseThreshold = Math.max(
-    40,
-    life.genes.size * REPRODUCTION_ENERGY_THRESHOLD_RATIO
-  );
-  // v1.11b: reproductionRate を「繁殖頻度」遺伝子として正式機能化。
-  // 高 rate ほど閾値が下がり、頻繁に繁殖できる。
-  // 制約:
-  //   - offspringCount との組合せ暴走を sqrt で減衰
-  //   - 上限 1.5 でキャップ（rate 2.0 でも閾値は基準の 67% 以下にならない）
-  //   - 下限 0.2 でクランプ（極端な K 戦略の即死防止）
+  const g = life.genes;
+  const minAge = g.lifespan * MIN_REPRODUCTIVE_AGE_RATIO;
+  // v1.20: 出産閾値（birthThreshold）方式。所持エネルギーが実効閾値を超えたら出産。
+  //   実効閾値 = min(birthThreshold, size * 0.9)
+  //   - birthThreshold が体格（タンク容量 size）を超えると永遠に出産不可になるため、
+  //     size*0.9 でクランプ（タンクの 9 割まで貯めれば必ず出産可能）。
+  //   低い閾値 = 早く頻繁に産む（r 戦略）／高い閾値 = じっくり育てて産む（K 戦略）
   //
-  // 例（baseThreshold = 60 想定）:
-  //   rate=1.0, count=1  → effective=1.00, 閾値=60   （標準）
-  //   rate=2.0, count=1  → effective=1.50, 閾値=40   （高頻度上限）
-  //   rate=2.0, count=10 → effective=1.32, 閾値=45   （減衰）
-  //   rate=0.5, count=1  → effective=0.50, 閾値=120  （低頻度・K 寄り）
-  //   rate=0.1, count=1  → effective=0.20, 閾値=300  （超 K 戦略）
-  //
-  // 暗黙のコスト: 高 rate は閾値が下がる → 親エネルギー少ない → 子も低エネルギー
-  // で生まれる（reproduceLife の均等分割により）→ 子の生存が厳しくなる。
-  // 上限 1.5 により r 戦略偏重を防ぎ、K 戦略との二極化が成立しやすくなる。
-  // v1.20: 上限 1.5 → 1.4 に微調整（r 戦略偏重抑制と小世界生存の両立）
-  const oc = Math.max(1, Math.round(life.genes.offspringCount));
-  const effectiveRate = Math.min(
-    1.4,
-    Math.max(0.2, 1 + (life.genes.reproductionRate - 1) / Math.sqrt(oc))
-  );
-  const reproThreshold = baseThreshold / effectiveRate;
-  return life.age >= minAge && life.energy >= reproThreshold;
+  // 暗黙のトレードオフ: 閾値が低い → 親エネルギー少ない → 子も低エネルギーで
+  // 生まれる（reproduceLife の均等分割により）→ 子の生存が厳しくなる。
+  const effectiveThreshold = Math.min(g.birthThreshold, g.size * 0.9);
+  return life.age >= minAge && life.energy >= effectiveThreshold;
 }
 
 /**

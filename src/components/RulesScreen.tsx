@@ -39,7 +39,7 @@ const SECTIONS_JA: Section[] = [
         heading: "遺伝形質（17 種）",
         lines: [
           "▼ 基本形質（10 種）",
-          "色（R/G/B）／視野／移動速度／体格／強さ／知能／繁殖率／寿命／出産数。",
+          "色（R/G/B）／視野／移動速度／体格／強さ／知能／出産閾値／寿命／出産数。",
           "高性能ほど維持コスト増。完全な万能化は不可。",
           "",
           "▼ 行動判断の重み遺伝子（7 種、性格）",
@@ -54,8 +54,8 @@ const SECTIONS_JA: Section[] = [
           "・移動速度：0〜999。0 = 完全静止（光合成型植物的生物）。",
           "  100 超は維持コスト + 移動コスト両方で短命確定。",
           "・体格：30〜200。v1.20 で維持コストは無く、エネルギー貯蔵タンク専用。",
-          "  大型ほど繁殖閾値が上がる（自然なトレードオフ）。",
-          "・繁殖率：0.1〜2.0。「繁殖頻度」を表す（v1.11 で機能追加）。",
+          "・出産閾値：30〜300。所持エネルギーが実効閾値 min(閾値, 体格×0.9) を",
+          "  超えると出産。低い=多産な r 戦略、高い=じっくり育てる K 戦略（v1.20）。",
           "・出産数：1〜10。1 回の出産で生まれる子の数（v1.11 追加）。",
           "  多産個体は子のエネルギーが薄くなる + 出産疲労コスト（v1.20）。",
           "・寿命：200〜600 ターン。",
@@ -381,6 +381,23 @@ const SECTIONS_JA: Section[] = [
     ],
   },
   {
+    key: "changelog",
+    label: "更新履歴",
+    body: [
+      {
+        heading: "バージョンごとの新機能",
+        lines: [
+          "v1.20: 植物的生物・出産数遺伝子・真の全画面・行動の特徴表示",
+          "v1.11: 戦闘で死骸が残る・速度/体格の上限拡張",
+          "v1.10: 性格遺伝子(7種)・知能=判断精度モデルに刷新",
+          "v1.02: マップ全画面・移動軌跡・選択の自動継承",
+          "v1.01: 強さ・知能の上限を 999 に拡張",
+          "v1.00: 公開",
+        ],
+      },
+    ],
+  },
+  {
     key: "greeting",
     label: "ごあいさつ",
     body: [
@@ -440,8 +457,8 @@ const SECTIONS_EN: Section[] = [
       {
         heading: "Genetic traits (16)",
         lines: [
-          "▼ Basic traits (8)",
-          "Color (R/G/B) / Vision / Speed / Size / Strength / Intelligence / Reproduction / Lifespan.",
+          "▼ Basic traits (10)",
+          "Color (R/G/B) / Vision / Speed / Size / Strength / Intelligence / Birth Threshold / Lifespan / Offspring.",
           "Higher traits cost more energy. Complete generalization is impossible.",
           "",
           "▼ v1.10: Behavior weight genes (7) — personality",
@@ -776,6 +793,23 @@ const SECTIONS_EN: Section[] = [
           "・Map mode buttons (⚡☄🌵🌸) hidden",
           "・Only ×1 and ×100 speeds shown",
           "・Hover popup disabled (touch environment)",
+        ],
+      },
+    ],
+  },
+  {
+    key: "changelog",
+    label: "Changelog",
+    body: [
+      {
+        heading: "New features by version",
+        lines: [
+          "v1.20: Plant-like life, offspring gene, true fullscreen, behavior view",
+          "v1.11: Carcasses remain after combat, speed/size cap raised",
+          "v1.10: Personality genes (7), intelligence = decision accuracy",
+          "v1.02: Fullscreen map, movement trail, auto-inherit selection",
+          "v1.01: Strength / intelligence cap raised to 999",
+          "v1.00: Public launch",
         ],
       },
     ],
