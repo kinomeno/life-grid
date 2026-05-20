@@ -496,7 +496,12 @@ function createWaveTimeScale(
 
 
 export function stepWorld(world: World): void {
-  updateEnergy(world);
+  // v0.21 軽量化 B1: 大マップ（辺 200 以上）はエネルギー場を 2 ターンに 1 回だけ
+  // 更新して updateEnergy（40000 セル）のコストを半減。エネルギー場はゆっくり
+  // 変化するため、見た目への影響は小さい（波がわずかにカクつく程度）。
+  if (world.width < 200 || world.turn % 2 === 0) {
+    updateEnergy(world);
+  }
   // 天変地異の進行・発生処理
   updateCataclysm(world);
   // 描画スムージング用：このターン開始時点の位置を記録

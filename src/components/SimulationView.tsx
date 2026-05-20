@@ -338,10 +338,17 @@ export default function SimulationView({
       ) {
         // 補間フェーズ：直近ステップからの経過時間 / ステップ間隔。
         // v1.02: smoothAnimation=false なら補間を行わず常に 1（ステップ完了状態）に固定。
+        // v0.21 軽量化 A1: 大マップ高速時は補間を強制オフ（描画負荷を下げる）。
+        //   200マップ: x10/x100、100マップ: x100 で補間オフ。
+        const sp = speedRef.current;
+        const simplified =
+          (width >= 200 && sp >= 10) || (width >= 100 && sp >= 100);
+        setSimplifiedRender(simplified);
         const sinceStep = now - lastStepAtRef.current;
-        const phase = paramsRef.current.smoothAnimation
-          ? Math.min(1, sinceStep / stepDurationMsRef.current)
-          : 1;
+        const phase =
+          paramsRef.current.smoothAnimation && !simplified
+            ? Math.min(1, sinceStep / stepDurationMsRef.current)
+            : 1;
         setAnimPhase(phase);
         setVersion((v) => v + 1);
         if (didStep) refreshDerived(world);
@@ -982,6 +989,8 @@ export default function SimulationView({
   const lastStepAtRef = useRef(performance.now());
   const stepDurationMsRef = useRef(250); // ×1 既定
   const [animPhase, setAnimPhase] = useState(1);
+  // v0.21 軽量化 A2: 大マップ高速時は描画を簡易化（形状→円）するフラグ。
+  const [simplifiedRender, setSimplifiedRender] = useState(false);
 
   // v1.02: 選択生命が変わったら移動軌跡をリセット
   // 一時停止中の選択解除でも確実にキャンバスから古い軌跡を消すため version も増やして再描画を強制
@@ -1382,6 +1391,7 @@ export default function SimulationView({
                   cellSize={cellSize}
                   version={version}
                   animPhase={animPhase}
+                  simplifiedRender={simplifiedRender}
                   selectedLifeId={selectedLifeId}
                   selectedLifePath={selectedLifePath}
                   trackedSpeciesId={trackedSpeciesId}

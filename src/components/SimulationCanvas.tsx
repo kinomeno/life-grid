@@ -10,6 +10,8 @@ type Props = {
   version: number;
   /** 移動補間フェーズ（0=直前位置, 1=現在位置）。未指定なら 1。 */
   animPhase?: number;
+  /** v0.21 軽量化: true なら描画を簡易化（形状→円）。大マップ高速時に有効。 */
+  simplifiedRender?: boolean;
   selectedLifeId?: number | null;
   /** v1.02: 選択生命の最近の移動座標列（古い順、最大 60 点）。空配列なら描画しない。 */
   selectedLifePath?: { x: number; y: number }[];
@@ -24,6 +26,7 @@ export default function SimulationCanvas({
   cellSize,
   version,
   animPhase = 1,
+  simplifiedRender = false,
   selectedLifeId = null,
   selectedLifePath = [],
   trackedSpeciesId = null,
@@ -68,7 +71,7 @@ export default function SimulationCanvas({
 
     drawEnergyField(ctx, world, cellSize, off, imgRef.current);
     drawSelectedPath(ctx, selectedLifePath, cellSize, world.width, world.height);
-    drawLives(ctx, world, cellSize, trackedSpeciesId, selectedLifeId, animPhase);
+    drawLives(ctx, world, cellSize, trackedSpeciesId, selectedLifeId, animPhase, simplifiedRender);
     drawCombatFlashes(ctx, world, cellSize, animPhase);
     drawCataclysm(ctx, world, cellSize);
     drawBirthFlashes(ctx, world, cellSize);
@@ -77,6 +80,7 @@ export default function SimulationCanvas({
     cellSize,
     version,
     animPhase,
+    simplifiedRender,
     selectedLifeId,
     selectedLifePath,
     trackedSpeciesId,
@@ -296,7 +300,8 @@ function drawLives(
   cellSize: number,
   trackedSpeciesId: string | null,
   selectedLifeId: number | null,
-  animPhase: number
+  animPhase: number,
+  simplifiedRender = false
 ) {
   const inset = Math.max(0, Math.floor(cellSize * 0.15));
   const drawSize = Math.max(1, cellSize - inset * 2);
@@ -304,7 +309,8 @@ function drawLives(
   const half = cellSize / 2;
   const TWO_PI = Math.PI * 2;
   // セルサイズが小さすぎる場合は形状差を無視して全て丸（視認性優先）
-  const useShapes = cellSize >= 4;
+  // v0.21 軽量化 A2: simplifiedRender 時も形状判定をスキップして全て丸に。
+  const useShapes = cellSize >= 4 && !simplifiedRender;
 
   // 系統追跡時は非該当系統を薄く表示
   const isTracking = trackedSpeciesId !== null;
