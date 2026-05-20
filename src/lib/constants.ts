@@ -11,13 +11,15 @@ export const ENERGY_REGEN_FLOOR_RATIO = 0.25;
 
 export const ENERGY_WAVE_AMPLITUDE = 15;
 // v1.20: ENERGY_WAVE_PERIOD_TURNS は v1.10 以降未使用のため削除済み。
-// v0.21 実験: 空間周波数を 0.04 → 0.12 に上げて波長を短縮（波長 ≈ 157→52 セル）。
-// 旧 0.04 では波長がマップ（特に 50×50）より大きく、全マップが同位相で同時に
-// 暗くなり「進化で対応できない環境絶滅」が起きていた。0.12 にすると小世界でも
-// 空間的に明暗が分かれ、明るい場所へ移動する進化（視野・速度・知能）が報われる。
-// 戻す場合は 0.04 に。
-export const ENERGY_WAVE_SPATIAL_FREQ = 0.12;
-// 旧値（戻す用）: export const ENERGY_WAVE_SPATIAL_FREQ = 0.04;
+// v0.21: 波の空間周波数（= 波長）をマップサイズ可変に。
+//   小世界（50 以下）: 0.12（波長 ≈ 52 セル）
+//     → 波長 < マップなので空間的に明暗が分かれ、全マップ同時枯渇の環境絶滅を防ぐ。
+//   大世界（200 以上）: 0.04（波長 ≈ 157 セル、v1.20 相当）
+//     → マップに対し波長が大きく、ゆったりダイナミックなうねりになる。
+//   中間（100 など）は線形補間（≈ 0.093）。
+// waveSpatialFreq(size) で算出。両端を入れ替えると挙動が変わる。
+export const WAVE_SF_SMALL = 0.12; // マップ辺 50 以下
+export const WAVE_SF_LARGE = 0.04; // マップ辺 200 以上
 
 export const GENE_VISION_MIN = 1;
 export const GENE_VISION_MAX = 4;
@@ -61,11 +63,13 @@ export const GENE_BIRTH_THRESHOLD_MAX = 300;
 //   8-10: 多産（昆虫・魚的、r 戦略）
 // 親 + 子 N 体に均等分割 = 各個体が parent.energy / (N+1)。
 export const GENE_OFFSPRING_MIN = 1;
-export const GENE_OFFSPRING_MAX = 10;
-// v0.21 実験: 出産数遺伝子の進化を停止し全個体 1 固定にして、種数・絶滅率を観察する。
-// 多産による「同系統の空間独占 → 種数収束」が起きるかの検証用。
-// true に戻すと従来の多産進化（offspringCount が突然変異で 1〜10 に進化）が復活。
-export const OFFSPRING_GENE_ENABLED = false;
+// v0.21 検証: 出産数の上限を 10 → 4 に抑制。
+// 多産による「同系統の空間独占 → 種数収束」を緩和しつつ、
+// 「単産 vs 小規模多産」の戦略多様性は残す（1固定 と 上限10 の中間）。
+export const GENE_OFFSPRING_MAX = 4;
+// v0.21: 出産数遺伝子の進化を有効化（上限 4 で）。
+// false にすると全個体 1 固定（出産数進化なし）。
+export const OFFSPRING_GENE_ENABLED = true;
 // v1.10: mutationRate 遺伝子は廃止。全個体共通の固定突然変異率を使う。
 // 環境設定の mutationRateMultiplier（0 まで設定可）で全体倍率を制御。
 export const BASE_MUTATION_RATE = 0.08;

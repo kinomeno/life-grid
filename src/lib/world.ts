@@ -30,7 +30,8 @@ import {
   ENERGY_REGEN_PER_TURN,
   ENERGY_REGEN_FLOOR_RATIO,
   ENERGY_WAVE_AMPLITUDE,
-  ENERGY_WAVE_SPATIAL_FREQ,
+  WAVE_SF_SMALL,
+  WAVE_SF_LARGE,
   FIXED_GENE_VALUES,
   GENE_INTELLIGENCE_MAX,
   GENE_INTELLIGENCE_MIN,
@@ -229,6 +230,19 @@ export function createWorld(config: WorldConfig): World {
 }
 
 const WAVE_PATTERN_COUNT = 6;
+
+/**
+ * v0.21: マップサイズ依存の波の空間周波数（= 波長）。
+ *   辺 50 以下 → WAVE_SF_SMALL（短波長、小世界の全体同期枯渇を防ぐ）
+ *   辺 200 以上 → WAVE_SF_LARGE（長波長、v1.20 相当のダイナミックなうねり）
+ *   中間（100 など）は線形補間。
+ */
+function waveSpatialFreq(size: number): number {
+  if (size <= 50) return WAVE_SF_SMALL;
+  if (size >= 200) return WAVE_SF_LARGE;
+  const t = (size - 50) / (200 - 50);
+  return WAVE_SF_SMALL + t * (WAVE_SF_LARGE - WAVE_SF_SMALL);
+}
 
 /** 6種類の波パターン。time-phase は呼び出し側で計算済み。 */
 function wavePattern(
@@ -1283,7 +1297,8 @@ function updateEnergy(world: World): void {
   // v0.21: 再生の下限。波が負のピークでも regenFloor は必ず供給され、
   // マップ全体が同時に枯渇する環境絶滅を防ぐ。
   const regenFloor = regenPerTurn * ENERGY_REGEN_FLOOR_RATIO;
-  const SF = ENERGY_WAVE_SPATIAL_FREQ;
+  // v0.21: 波長をマップサイズ可変に（小世界=短波長、大世界=長波長）
+  const SF = waveSpatialFreq(width);
 
   // 時代によるパターン切替（最後20%でフェード）
   const patternA = (wavePatternId + era.index) % WAVE_PATTERN_COUNT;
