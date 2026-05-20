@@ -17,6 +17,44 @@ type Section = {
 
 const SECTIONS_JA: Section[] = [
   {
+    key: "greeting",
+    label: "ごあいさつ",
+    body: [
+      {
+        heading: "ようこそ LIFE GRID へ",
+        lines: [
+          "この度は LIFE GRID をプレイしていただき、ありがとうございます。",
+          "",
+          "このゲームは、単純なルールから生命進化と生態系の変化が",
+          "自然に立ち現れる様子を、ただ眺めて楽しむシミュレーションです。",
+          "勝ち負けはありません。環境を少しずつ調整しながら、",
+          "あなただけの進化の物語をのんびり観察してください。",
+        ],
+      },
+      {
+        heading: "ご意見・フィードバック",
+        lines: [
+          "ご感想・ご要望・バグ報告などは、こちらのブログ記事の",
+          "コメント欄までお気軽にお寄せください。",
+          "　▶ https://example.com/blog/life-grid",
+          "（↑ 後で実際の URL に差し替えてください）",
+        ],
+      },
+      {
+        heading: "応援していただけると嬉しいです",
+        lines: [
+          "もし気に入っていただけたら、SNS でのシェアが何より励みになります。",
+          "また、note のチップ（投げ銭）で開発を応援していただけると、",
+          "今後のアップデートの大きな力になります。",
+          "　▶ https://note.com/your-note-article",
+          "（↑ 後で実際の URL に差し替えてください）",
+          "",
+          "今後ともどうぞよろしくお願いいたします。",
+        ],
+      },
+    ],
+  },
+  {
     key: "overview",
     label: "概要",
     body: [
@@ -383,6 +421,43 @@ const SECTIONS_JA: Section[] = [
 ];
 
 const SECTIONS_EN: Section[] = [
+  {
+    key: "greeting",
+    label: "Welcome",
+    body: [
+      {
+        heading: "Welcome to LIFE GRID",
+        lines: [
+          "Thank you for playing LIFE GRID!",
+          "",
+          "This is a simulation where life evolution and ecosystem change",
+          "emerge naturally from simple rules — just sit back and watch.",
+          "There is no winning or losing. Tune the environment little by little",
+          "and enjoy observing your own unique story of evolution.",
+        ],
+      },
+      {
+        heading: "Feedback",
+        lines: [
+          "Thoughts, requests, and bug reports are very welcome —",
+          "please leave a comment on this blog post:",
+          "　▶ https://example.com/blog/life-grid",
+          "(↑ replace with the real URL later)",
+        ],
+      },
+      {
+        heading: "Support",
+        lines: [
+          "If you enjoy it, sharing on social media means a lot.",
+          "A tip on note also greatly helps future development:",
+          "　▶ https://note.com/your-note-article",
+          "(↑ replace with the real URL later)",
+          "",
+          "Thank you, and enjoy!",
+        ],
+      },
+    ],
+  },
   {
     key: "overview",
     label: "Overview",
