@@ -3,7 +3,7 @@ export const ENERGY_INITIAL_MEAN = 35;
 export const ENERGY_INITIAL_VARIANCE = 25;
 export const ENERGY_REGEN_PER_TURN = 0.12;
 export const ENERGY_DIFFUSION = 0.02;
-// v0.21 実験: 波が負のピークでもエネルギー再生が完全停止しないよう下限を保証。
+// v1.21 実験: 波が負のピークでもエネルギー再生が完全停止しないよう下限を保証。
 // 基礎再生 regenPerTurn の何割を最低保証するか。
 // マップ全体が同時に「真っ白（低エネルギー）」になって全滅する環境絶滅を防ぐ。
 // 0 にすると従来挙動（下限なし）に戻る。
@@ -11,7 +11,7 @@ export const ENERGY_REGEN_FLOOR_RATIO = 0.25;
 
 export const ENERGY_WAVE_AMPLITUDE = 15;
 // v1.20: ENERGY_WAVE_PERIOD_TURNS は v1.10 以降未使用のため削除済み。
-// v0.21: 波の空間周波数（= 波長）をマップサイズ可変に。
+// v1.21: 波の空間周波数（= 波長）をマップサイズ可変に。
 //   小世界（50 以下）: 0.12（波長 ≈ 52 セル）
 //     → 波長 < マップなので空間的に明暗が分かれ、全マップ同時枯渇の環境絶滅を防ぐ。
 //   大世界（200 以上）: 0.04（波長 ≈ 157 セル、v1.20 相当）
@@ -63,11 +63,11 @@ export const GENE_BIRTH_THRESHOLD_MAX = 300;
 //   8-10: 多産（昆虫・魚的、r 戦略）
 // 親 + 子 N 体に均等分割 = 各個体が parent.energy / (N+1)。
 export const GENE_OFFSPRING_MIN = 1;
-// v0.21 検証: 出産数の上限を 4 → 3 に抑制。
+// v1.21 検証: 出産数の上限を 4 → 3 に抑制。
 // 上限 4 では多様性がやや低かったため、さらに多産を抑えて
 // 「単産 vs 少数多産」の戦略性は残しつつ空間独占を緩和。
 export const GENE_OFFSPRING_MAX = 3;
-// v0.21: 出産数遺伝子の進化を有効化（上限 4 で）。
+// v1.21: 出産数遺伝子の進化を有効化（上限 4 で）。
 // false にすると全個体 1 固定（出産数進化なし）。
 export const OFFSPRING_GENE_ENABLED = true;
 // v1.10: mutationRate 遺伝子は廃止。全個体共通の固定突然変異率を使う。

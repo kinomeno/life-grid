@@ -232,7 +232,7 @@ export function createWorld(config: WorldConfig): World {
 const WAVE_PATTERN_COUNT = 6;
 
 /**
- * v0.21: マップサイズ依存の波の空間周波数（= 波長）。
+ * v1.21: マップサイズ依存の波の空間周波数（= 波長）。
  *   辺 50 以下 → WAVE_SF_SMALL（短波長、小世界の全体同期枯渇を防ぐ）
  *   辺 200 以上 → WAVE_SF_LARGE（長波長、v1.20 相当のダイナミックなうねり）
  *   中間（100 など）は線形補間。
@@ -383,7 +383,7 @@ export function mutatGenes(parentGenes: Genes, mutationRate: number, rng: RNG): 
   genes.lifespan = mutate(genes.lifespan, GENE_LIFESPAN_MIN, GENE_LIFESPAN_MAX);
   // v1.11: 出産数（1〜10）：factor 0.05 で範囲 9 に対し ±0.45 程度
   // 整数値だが mutate（連続値）→ round で離散化。たまに ±1 が起きる程度。
-  // v0.21 実験: OFFSPRING_GENE_ENABLED が false の間は変異させず 1 固定のまま。
+  // v1.21 実験: OFFSPRING_GENE_ENABLED が false の間は変異させず 1 固定のまま。
   if (OFFSPRING_GENE_ENABLED) {
     genes.offspringCount = Math.round(
       mutate(genes.offspringCount, GENE_OFFSPRING_MIN, GENE_OFFSPRING_MAX, 0.05)
@@ -496,7 +496,7 @@ function createWaveTimeScale(
 
 
 export function stepWorld(world: World): void {
-  // v0.21 軽量化 B1: 全マップでエネルギー場を 2 ターンに 1 回だけ更新し、
+  // v1.21 軽量化 B1: 全マップでエネルギー場を 2 ターンに 1 回だけ更新し、
   // updateEnergy のコストを半減。マップサイズによらず挙動を一貫させる
   // （マップサイズで更新頻度が変わると同じ生態でも結果が変わってしまうため）。
   // エネルギー場はゆっくり変化するので見た目への影響は小さい。
@@ -1300,10 +1300,10 @@ function updateEnergy(world: World): void {
   // 振幅係数 0.04（旧 0.025）：背景エネルギー揺れを視覚的に分かりやすく
   const waveAmp = ENERGY_WAVE_AMPLITUDE * 0.04 * energyScale * env.ampScale;
   const regenPerTurn = ENERGY_REGEN_PER_TURN * energyScale * env.regenScale;
-  // v0.21: 再生の下限。波が負のピークでも regenFloor は必ず供給され、
+  // v1.21: 再生の下限。波が負のピークでも regenFloor は必ず供給され、
   // マップ全体が同時に枯渇する環境絶滅を防ぐ。
   const regenFloor = regenPerTurn * ENERGY_REGEN_FLOOR_RATIO;
-  // v0.21: 波長をマップサイズ可変に（小世界=短波長、大世界=長波長）
+  // v1.21: 波長をマップサイズ可変に（小世界=短波長、大世界=長波長）
   const SF = waveSpatialFreq(width);
 
   // 時代によるパターン切替（最後20%でフェード）
@@ -1353,7 +1353,7 @@ function updateEnergy(world: World): void {
         energy[rowYp + x];
       const diffused = cur + (neighborSum * 0.25 - cur) * ENERGY_DIFFUSION;
 
-      // v0.21: 再生に下限 regenFloor を保証（波が負でも完全停止しない）
+      // v1.21: 再生に下限 regenFloor を保証（波が負でも完全停止しない）
       const rawRegen = regenPerTurn * (1 + terrainBias[idx] * 0.6) + waveBuf[idx];
       const regen = rawRegen > regenFloor ? rawRegen : regenFloor;
       let v = diffused + regen;

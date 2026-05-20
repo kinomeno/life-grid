@@ -10,7 +10,7 @@ type Props = {
   version: number;
   /** 移動補間フェーズ（0=直前位置, 1=現在位置）。未指定なら 1。 */
   animPhase?: number;
-  /** v0.21 軽量化: true なら描画を簡易化（形状→円）。大マップ高速時に有効。 */
+  /** v1.21 軽量化: true なら描画を簡易化（形状→円）。大マップ高速時に有効。 */
   simplifiedRender?: boolean;
   selectedLifeId?: number | null;
   /** v1.02: 選択生命の最近の移動座標列（古い順、最大 60 点）。空配列なら描画しない。 */
@@ -309,7 +309,7 @@ function drawLives(
   const half = cellSize / 2;
   const TWO_PI = Math.PI * 2;
   // セルサイズが小さすぎる場合は形状差を無視して全て丸（視認性優先）
-  // v0.21 軽量化 A2: simplifiedRender 時も形状判定をスキップして全て丸に。
+  // v1.21 軽量化 A2: simplifiedRender 時も形状判定をスキップして全て丸に。
   const useShapes = cellSize >= 4 && !simplifiedRender;
 
   // 系統追跡時は非該当系統を薄く表示
