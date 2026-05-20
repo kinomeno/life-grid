@@ -1278,21 +1278,31 @@ export default function SimulationView({
         <div
           ref={viewportRef}
           className="canvas-viewport"
-          style={{
-            // v1.20: 真の全画面時は画面いっぱい（中央配置）。それ以外は元サイズ。
-            width: trueFullscreen ? "100vw" : `${cellSize * width}px`,
-            height: trueFullscreen ? "100vh" : `${cellSize * height}px`,
-            display: trueFullscreen ? "flex" : undefined,
-            alignItems: trueFullscreen ? "center" : undefined,
-            justifyContent: trueFullscreen ? "center" : undefined,
-            background: trueFullscreen ? "#000" : undefined,
-            // ズーム時のみスクロールバー出現。等倍はバー無し。
-            overflow: trueFullscreen
-              ? "hidden"
-              : zoom > 1
-                ? "auto"
-                : "hidden",
-          }}
+          style={
+            // v1.20: 真の全画面時は「画面全体を覆う固定オーバーレイ」にして、
+            // マップ以外（ヘッダー・パネル・操作バー・スクロールバー・枠）を完全に隠す。
+            // スクリーンセーバー的な観賞専用モード。
+            trueFullscreen
+              ? {
+                  position: "fixed",
+                  inset: 0,
+                  width: "100vw",
+                  height: "100vh",
+                  zIndex: 9999,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "#000",
+                  overflow: "hidden",
+                  border: "none",
+                }
+              : {
+                  width: `${cellSize * width}px`,
+                  height: `${cellSize * height}px`,
+                  // ズーム時のみスクロールバー出現。等倍はバー無し。
+                  overflow: zoom > 1 ? "auto" : "hidden",
+                }
+          }
           onWheel={(e) => {
             // Q1: マウスホイールでズーム（Ctrl/Shift 不要、viewport 上で直接）
             // v1.10: ボタンと同じ ZOOM_LEVELS 配列で動くようにし、100% を必ず踏むよう保証。
