@@ -274,6 +274,16 @@ export default function SimulationView({
     if (!showLog) setLogKeepRunning(false);
   }, [showLog]);
 
+  // v1.21 バグ修正: RAF 由来の React 更新が未コミットかどうかを示すフラグ。
+  // x100＋大マップでは 1 フレームの描画が重く、RAF がコミット速度を追い越して
+  // setState を積み上げ "Maximum update depth exceeded" を起こしていた。
+  // 直前の更新がコミットされるまで次の setState を出さないことで追い越しを防ぐ。
+  const renderPendingRef = useRef(false);
+  // version が変化＝React が RAF 由来更新をコミットした、とみなしてフラグ解除。
+  useEffect(() => {
+    renderPendingRef.current = false;
+  }, [version]);
+
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
@@ -334,11 +344,16 @@ export default function SimulationView({
       if (
         (didStep || shouldRender) &&
         world &&
+        // v1.21 バグ修正: 直前の RAF 由来更新が未コミットなら新たな setState を
+        // 発行しない。RAF が React のコミットを追い越して更新を積み上げるのを防ぎ、
+        // x100＋大マップでの "Maximum update depth exceeded" を解消する。
+        !renderPendingRef.current &&
         now - lastRenderTime >= RENDER_INTERVAL_MS
       ) {
+        renderPendingRef.current = true;
         // 補間フェーズ：直近ステップからの経過時間 / ステップ間隔。
         // v1.02: smoothAnimation=false なら補間を行わず常に 1（ステップ完了状態）に固定。
-        // v0.21 軽量化 A1: 大マップ高速時は補間を強制オフ（描画負荷を下げる）。
+        // v1.21 軽量化 A1: 大マップ高速時は補間を強制オフ（描画負荷を下げる）。
         //   200マップ: x10/x100、100マップ: x100 で補間オフ。
         const sp = speedRef.current;
         const simplified =
@@ -989,14 +1004,17 @@ export default function SimulationView({
   const lastStepAtRef = useRef(performance.now());
   const stepDurationMsRef = useRef(250); // ×1 既定
   const [animPhase, setAnimPhase] = useState(1);
-  // v0.21 軽量化 A2: 大マップ高速時は描画を簡易化（形状→円）するフラグ。
+  // v1.21 軽量化 A2: 大マップ高速時は描画を簡易化（形状→円）するフラグ。
   const [simplifiedRender, setSimplifiedRender] = useState(false);
 
   // v1.02: 選択生命が変わったら移動軌跡をリセット
-  // 一時停止中の選択解除でも確実にキャンバスから古い軌跡を消すため version も増やして再描画を強制
+  // selectedLifePath を空にすると SimulationCanvas が prop 変化で再描画するため、
+  // 一時停止中の選択解除でも古い軌跡は確実に消える。
+  // v1.21 バグ修正: ここで version を増やすと、x100＋自動継承で選択が毎フレーム
+  // 変わるたびに version が跳ね、version 依存 effect 群（軌跡・継承・ニュース）が
+  // 連鎖再発火して "Maximum update depth exceeded" の一因になっていた。version 加算は廃止。
   useEffect(() => {
     setSelectedLifePath([]);
-    setVersion((v) => v + 1);
   }, [selectedLifeId]);
 
   // v1.02: ターン進行で選択生命の現在位置を移動軌跡に追加
@@ -1018,6 +1036,11 @@ export default function SimulationView({
       speciesId: life.speciesId,
       genes: life.genes,
     };
+    // v1.21 バグ修正: x100 では 1 フレームごとに setSelectedLifePath が走り、
+    // version 依存の本 effect と相まって React の更新が積み上がり
+    // "Maximum update depth exceeded" を誘発していた。高速時は軌跡が視認できない
+    // ため記録自体を省略する（スナップショットは上で更新済み＝継承には影響なし）。
+    if (speedRef.current >= 100) return;
     setSelectedLifePath((prev) => {
       const last = prev[prev.length - 1];
       if (last && last.x === life.x && last.y === life.y) return prev;
