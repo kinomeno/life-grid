@@ -62,6 +62,8 @@ export function makeStatsSample(world: World): StatsSample {
   let lifespanSum = 0;
   let reproSum = 0;
   let sizeSum = 0;
+  let visionSum = 0;
+  let offspringSum = 0;
   let rSum = 0;
   let gSum = 0;
   let bSum = 0;
@@ -75,6 +77,8 @@ export function makeStatsSample(world: World): StatsSample {
     lifespanSum += l.genes.lifespan;
     reproSum += l.genes.reproductionRate;
     sizeSum += l.genes.size;
+    visionSum += l.genes.vision;
+    offspringSum += l.genes.offspringCount;
     rSum += l.genes.r;
     gSum += l.genes.g;
     bSum += l.genes.b;
@@ -91,6 +95,8 @@ export function makeStatsSample(world: World): StatsSample {
       averageLifespan: 0,
       averageReproductionRate: 0,
       averageSize: 0,
+      averageVision: 0,
+      averageOffspringCount: 0,
       avgR: 0,
       avgG: 0,
       avgB: 0,
@@ -106,6 +112,8 @@ export function makeStatsSample(world: World): StatsSample {
     averageLifespan: lifespanSum / aliveCount,
     averageReproductionRate: reproSum / aliveCount,
     averageSize: sizeSum / aliveCount,
+    averageVision: visionSum / aliveCount,
+    averageOffspringCount: offspringSum / aliveCount,
     avgR: rSum / aliveCount,
     avgG: gSum / aliveCount,
     avgB: bSum / aliveCount,

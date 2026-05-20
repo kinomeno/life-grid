@@ -134,6 +134,10 @@ export type StatsSample = {
   averageReproductionRate: number;
   /** 平均体格。 */
   averageSize: number;
+  /** v1.20: 平均視野。 */
+  averageVision: number;
+  /** v1.20: 平均出産数。 */
+  averageOffspringCount: number;
   /** 平均RGB（0〜255）。 */
   avgR: number;
   avgG: number;

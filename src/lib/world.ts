@@ -1449,9 +1449,10 @@ function actLife(world: World, life: Life): void {
       // 保護中：餓死しない代わりにエネルギーを最低限維持
       life.energy = 1;
     } else {
+      // 餓死：所持エネルギーは 0 なので、体の分解分（size*0.3）のみ場に還元
       life.alive = false;
       life.energy = 0;
-      energy[idx] = Math.min(ENERGY_MAX, energy[idx] + g.size * 0.3);
+      depositCarcassEnergy(world, life.x, life.y, g.size * 0.3);
       occupancy[idx] = -1;
     }
   }
@@ -1460,8 +1461,12 @@ function actLife(world: World, life: Life): void {
     if (life.protected) {
       // 保護中：寿命無視
     } else {
+      // v1.20: 寿命死。残った所持エネルギー + 体の分解分（size*0.3）を分配方式で還元。
+      // 戦闘死と同じく上限超過分は上下左右 4 セルに均等分配。
       life.alive = false;
-      energy[idx] = Math.min(ENERGY_MAX, energy[idx] + g.size * 0.3);
+      const remain = life.energy > 0 ? life.energy : 0;
+      life.energy = 0;
+      depositCarcassEnergy(world, life.x, life.y, remain + g.size * 0.3);
       occupancy[idx] = -1;
     }
   }
@@ -2028,6 +2033,47 @@ function reproduceLife(
 const NEIGHBOR_DX = new Int8Array([-1, 0, 1, -1, 1, -1, 0, 1]);
 const NEIGHBOR_DY = new Int8Array([-1, -1, -1, 0, 0, 1, 1, 1]);
 
+/**
+ * v1.20: 死骸エネルギーを (x,y) セルに付与する共通処理。
+ * セル上限 ENERGY_MAX を超えた分は上下左右 4 セルに均等分配（あふれは消滅）。
+ *
+ * 戦闘死・寿命死・餓死すべてで使用。死んだ生命のエネルギーが場に還元され、
+ * 「死骸ホットスポット」を作って捕食連鎖や採餌を誘発する。
+ */
+function depositCarcassEnergy(
+  world: World,
+  x: number,
+  y: number,
+  amount: number
+): void {
+  if (amount <= 0) return;
+  const { width, height, energy } = world;
+  const idx = y * width + x;
+  const total = energy[idx] + amount;
+  if (total <= ENERGY_MAX) {
+    energy[idx] = total;
+    return;
+  }
+  energy[idx] = ENERGY_MAX;
+  const share = (total - ENERGY_MAX) * 0.25;
+  const xN = (x + 1) % width;
+  const xP = (x - 1 + width) % width;
+  const yN = (y + 1) % height;
+  const yP = (y - 1 + height) % height;
+  const i1 = y * width + xN;
+  const i2 = y * width + xP;
+  const i3 = yN * width + x;
+  const i4 = yP * width + x;
+  const v1 = energy[i1] + share;
+  const v2 = energy[i2] + share;
+  const v3 = energy[i3] + share;
+  const v4 = energy[i4] + share;
+  energy[i1] = v1 > ENERGY_MAX ? ENERGY_MAX : v1;
+  energy[i2] = v2 > ENERGY_MAX ? ENERGY_MAX : v2;
+  energy[i3] = v3 > ENERGY_MAX ? ENERGY_MAX : v3;
+  energy[i4] = v4 > ENERGY_MAX ? ENERGY_MAX : v4;
+}
+
 function handleCombat(world: World, life: Life): void {
   const { width, height, occupancy, energy, livesById } = world;
   const x = life.x;
@@ -2128,39 +2174,14 @@ function handleCombat(world: World, life: Life): void {
         COMBAT_ENERGY_LOSS_RATIO *
         era.environment.combatScale;
       life.energy += lootEnergy;
-      // v1.11: 残り 40% は「死骸」としてその場のセルに付与。
-      // セル上限 ENERGY_MAX を超えた分は上下左右 4 セルに均等分配（あふれは消滅）。
-      // 「死骸ホットスポット」で他個体の捕食連鎖を誘発する emergent 戦略の素地に。
+      // v1.11/v1.20: 残り 40% は「死骸」としてその場のセルに付与。
+      // depositCarcassEnergy で上限超過分は上下左右 4 セルに均等分配。
       const carcassEnergy =
         opponent.energy *
         (1 - COMBAT_ENERGY_LOSS_RATIO) *
         era.environment.combatScale
         + opponent.genes.size * 0.3;
-      const totalAtCell = energy[nidx] + carcassEnergy;
-      if (totalAtCell <= ENERGY_MAX) {
-        energy[nidx] = totalAtCell;
-      } else {
-        energy[nidx] = ENERGY_MAX;
-        const overflow = totalAtCell - ENERGY_MAX;
-        // 上下左右 4 セルに均等分配（斜めは含めない：影響範囲が広がりすぎる）
-        const share = overflow * 0.25;
-        const xN = (nx + 1) % width;
-        const xP = (nx - 1 + width) % width;
-        const yN = (ny + 1) % height;
-        const yP = (ny - 1 + height) % height;
-        const i1 = ny * width + xN;
-        const i2 = ny * width + xP;
-        const i3 = yN * width + nx;
-        const i4 = yP * width + nx;
-        const v1 = energy[i1] + share;
-        const v2 = energy[i2] + share;
-        const v3 = energy[i3] + share;
-        const v4 = energy[i4] + share;
-        energy[i1] = v1 > ENERGY_MAX ? ENERGY_MAX : v1;
-        energy[i2] = v2 > ENERGY_MAX ? ENERGY_MAX : v2;
-        energy[i3] = v3 > ENERGY_MAX ? ENERGY_MAX : v3;
-        energy[i4] = v4 > ENERGY_MAX ? ENERGY_MAX : v4;
-      }
+      depositCarcassEnergy(world, nx, ny, carcassEnergy);
       // 捕食エフェクト：捕食者の位置に被食者が重なって縮小・消滅する演出
       // v1.11: durationTurns 5→8 に延長。パクっとアニメ（exp 減衰）が十分に見える時間を確保。
       world.combatFlashes.push({

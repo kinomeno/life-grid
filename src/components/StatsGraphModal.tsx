@@ -7,8 +7,8 @@ import {
   GENE_INTELLIGENCE_MIN,
   GENE_LIFESPAN_MAX,
   GENE_LIFESPAN_MIN,
-  GENE_MUTATION_MAX,
-  GENE_MUTATION_MIN,
+  GENE_OFFSPRING_MAX,
+  GENE_OFFSPRING_MIN,
   GENE_REPRODUCTION_MAX,
   GENE_REPRODUCTION_MIN,
   GENE_SIZE_MAX,
@@ -33,6 +33,9 @@ export type GraphSeriesState = {
   avgLifespan: boolean;
   avgReproductionRate: boolean;
   avgSize: boolean;
+  // v1.20: 視野・出産数の時系列を追加
+  avgVision: boolean;
+  avgOffspringCount: boolean;
   rgb: boolean;
 };
 
@@ -45,12 +48,15 @@ export const DEFAULT_GRAPH_SERIES: GraphSeriesState = {
   avgLifespan: false,
   avgReproductionRate: false,
   avgSize: false,
+  avgVision: false,
+  avgOffspringCount: false,
   rgb: false,
 };
 
 export type StatsTab = "timeseries" | "distribution";
 
 /** 分布タブで選べる遺伝子。 */
+// v1.20: mutationRate は遺伝子廃止のため削除。offspringCount を追加。
 export type GeneKey =
   | "intelligence"
   | "strength"
@@ -59,7 +65,7 @@ export type GeneKey =
   | "size"
   | "lifespan"
   | "reproductionRate"
-  | "mutationRate";
+  | "offspringCount";
 
 type Props = {
   history: StatsSample[];
@@ -97,6 +103,9 @@ const SERIES: Series[] = [
   { key: "avgLifespan", tKey: "graph.avg_lifespan", color: "#8a6a2e", pick: (s) => s.averageLifespan },
   { key: "avgReproductionRate", tKey: "graph.avg_reproduction_rate", color: "#9f6a3e", pick: (s) => s.averageReproductionRate },
   { key: "avgSize", tKey: "graph.avg_size", color: "#6a3e9f", pick: (s) => s.averageSize },
+  // v1.20: 視野・出産数の時系列
+  { key: "avgVision", tKey: "graph.avg_vision", color: "#3a9f8e", pick: (s) => s.averageVision },
+  { key: "avgOffspringCount", tKey: "graph.avg_offspring_count", color: "#b07ec0", pick: (s) => s.averageOffspringCount },
 ];
 
 type GeneSpec = {
@@ -169,6 +178,15 @@ const GENES: GeneSpec[] = [
     max: GENE_REPRODUCTION_MAX,
     bins: 12,
     pick: (l) => l.genes.reproductionRate,
+  },
+  // v1.20: 出産数の分布（mutationRate は遺伝子廃止のため削除）
+  {
+    key: "offspringCount",
+    tKey: "info.offspring_count",
+    min: GENE_OFFSPRING_MIN,
+    max: GENE_OFFSPRING_MAX,
+    bins: GENE_OFFSPRING_MAX - GENE_OFFSPRING_MIN + 1,
+    pick: (l) => l.genes.offspringCount,
   },
 ];
 
@@ -331,6 +349,8 @@ export default function StatsGraphModal({
                     avgLifespan: true,
                     avgReproductionRate: true,
                     avgSize: true,
+                    avgVision: true,
+                    avgOffspringCount: true,
                     rgb: true,
                   })
                 }
@@ -349,6 +369,8 @@ export default function StatsGraphModal({
                     avgLifespan: false,
                     avgReproductionRate: false,
                     avgSize: false,
+                    avgVision: false,
+                    avgOffspringCount: false,
                     rgb: false,
                   })
                 }
@@ -697,6 +719,5 @@ function drawHistogram(
 
 function formatVal(v: number, key: GeneKey): string {
   if (key === "reproductionRate") return v.toFixed(2);
-  if (key === "mutationRate") return v.toFixed(3);
   return `${Math.round(v)}`;
 }
