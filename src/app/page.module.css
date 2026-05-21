@@ -46,6 +46,14 @@
   letter-spacing: 0.05em;
 }
 
+/* v1.21.1: バージョン表記を独立要素に。モバイルで subtitle を隠してもこれは残す。 */
+.version {
+  font-size: 11px;
+  color: var(--text-soft);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
 .headerSpacer {
   flex: 1;
 }
@@ -1025,9 +1033,11 @@
 :global(.graph-canvas-wrap) {
   background: #fff;
   border: 1px solid var(--line-soft);
-  display: inline-block;
+  /* v1.21.1: block にして利用可能幅いっぱいに広げ、canvas を実測してフィット
+     （モバイルでのはみ出し・横スクロールを解消） */
+  display: block;
   line-height: 0;
-  overflow-x: auto;
+  overflow: hidden;
   max-width: 100%;
 }
 
@@ -1562,6 +1572,38 @@
   text-decoration: none;
 }
 
+/* v1.21.1: モバイルではルール画面を縦積みに。左メニューを上部の横スクロール帯にして、
+   本文（右カラム）を全幅で読みやすくする（細長すぎる問題の解消）。 */
+@media (max-width: 640px) {
+  :global(.rules-layout) {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  :global(.rules-menu) {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+  :global(.rules-menu-group) {
+    flex-direction: row;
+  }
+  :global(.rules-menu-item) {
+    white-space: nowrap;
+    border-bottom: none;
+    border-right: 1px solid var(--line-soft);
+    padding: 8px 12px;
+  }
+  :global(.rules-menu-child) {
+    padding-left: 12px;
+  }
+  :global(.rules-menu-child::before) {
+    content: "";
+    margin: 0;
+  }
+}
+
 /* ロック対象ボタン（200×200, x100 など） */
 :global(.btn-locked) {
   color: var(--text-soft);
@@ -1976,6 +2018,9 @@
     font-size: 15px;
   }
   .subtitle {
+    font-size: 10px;
+  }
+  .version {
     font-size: 10px;
   }
   :global(.ctrl-bar) {

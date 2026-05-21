@@ -35,9 +35,8 @@ export default function AppHeader({ onTitleClick }: Props) {
       >
         {t("app.title")}
       </h1>
-      <span className={styles.subtitle}>
-        {t("app.subtitle")} — {t("app.version")}
-      </span>
+      <span className={styles.subtitle}>{t("app.subtitle")}</span>
+      <span className={styles.version}>{t("app.version")}</span>
       <span className={styles.headerSpacer} />
       <LanguageToggle />
     </header>

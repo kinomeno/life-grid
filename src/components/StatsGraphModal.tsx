@@ -207,6 +207,9 @@ export default function StatsGraphModal({
 }: Props) {
   const { t } = useLocale();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // v1.21.1: グラフ canvas をコンテナ幅にフィットさせ、モバイルでのはみ出しを防ぐ。
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [cssW, setCssW] = useState(600);
   // v1.10: tab・geneKey は親が保持。setter は親へ通知する形に。
   const setTab = onTabChange;
   const setGeneKey = onGeneKeyChange;
@@ -222,11 +225,23 @@ export default function StatsGraphModal({
     sample: StatsSample;
   } | null>(null);
 
+  // v1.21.1: 描画幅をコンテナに合わせて測定（260〜600px）。リサイズ追従。
+  useEffect(() => {
+    const measure = () => {
+      const el = wrapRef.current;
+      if (!el) return;
+      const w = el.clientWidth - 2; // border 1px×2 ぶん
+      setCssW(Math.max(260, Math.min(600, w)));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
-    const cssW = 600;
     const cssH = 280;
     canvas.width = cssW * dpr;
     canvas.height = cssH * dpr;
@@ -241,7 +256,7 @@ export default function StatsGraphModal({
       const gene = GENES.find((g) => g.key === geneKey) ?? GENES[0];
       drawHistogram(ctx, cssW, cssH, lives, gene);
     }
-  }, [tab, history, enabled, lives, geneKey, hoverInfo]);
+  }, [tab, history, enabled, lives, geneKey, hoverInfo, cssW]);
 
   // タブ切替・分布時はホバーをクリア
   useEffect(() => {
@@ -440,7 +455,11 @@ export default function StatsGraphModal({
             </div>
           )}
 
-          <div className="graph-canvas-wrap" style={{ position: "relative" }}>
+          <div
+            ref={wrapRef}
+            className="graph-canvas-wrap"
+            style={{ position: "relative" }}
+          >
             <canvas
               ref={canvasRef}
               className="graph-canvas"
@@ -452,7 +471,7 @@ export default function StatsGraphModal({
                 className="graph-tooltip"
                 style={{
                   position: "absolute",
-                  left: Math.min(hoverInfo.px + 12, 600 - 200),
+                  left: Math.max(8, Math.min(hoverInfo.px + 12, cssW - 200)),
                   top: Math.max(8, hoverInfo.py - 100),
                   pointerEvents: "none",
                 }}
