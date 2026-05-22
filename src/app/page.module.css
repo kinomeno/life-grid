@@ -87,6 +87,13 @@
 :global(.sim-root.sim-observe) {
   grid-template-rows: auto auto;
 }
+/* 観察モード：系統(上位)欄は長ければスクロール可（max-height で行への寄与を抑え、
+   全体高さは選択生命パネルが決めるのを優先）。選択生命(.sim-right)は無制限＝スクロールなし。 */
+:global(.sim-root.sim-observe) :global(.sim-left) {
+  overflow-y: auto;
+  min-height: 0;
+  max-height: 80vh;
+}
 
 :global(.sim-cell) {
   display: flex;
