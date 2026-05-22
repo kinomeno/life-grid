@@ -1,9 +1,24 @@
 "use client";
 
-import type { WorldEvent } from "@/lib/types";
+import { useState } from "react";
+import type { WorldEvent, WorldEventType } from "@/lib/types";
 import { useLocale } from "./LocaleProvider";
 import TimeToggle from "./TimeToggle";
 import { useDraggablePanel, type DragOffset } from "./useDraggablePanel";
+
+// v1.30 (H7): 「年表」タブに出す主要イベント（物語性の高いもの）。
+const CHRONICLE_TYPES = new Set<WorldEventType>([
+  "epoch",
+  "cataclysm",
+  "massExtinction",
+  "survival",
+  "totalExtinction",
+  "predatorRise",
+  "intelligentRise",
+  "milestone",
+  "longevity",
+  "topSpecies",
+]);
 
 type Props = {
   events: WorldEvent[];
@@ -32,8 +47,11 @@ export default function ActionLogModal({
     initialOffset,
     onOffsetChange
   );
-  // 新しい順
+  // v1.30 (H7): ログ（全件・新しい順）／年表（主要イベント・古い順＝時系列）。
+  const [tab, setTab] = useState<"log" | "chronicle">("log");
   const ordered = [...events].reverse();
+  const chronicle = events.filter((e) => CHRONICLE_TYPES.has(e.type));
+  const shown = tab === "chronicle" ? chronicle : ordered;
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
@@ -56,11 +74,27 @@ export default function ActionLogModal({
         </div>
 
         <section className="modal-section">
-          {ordered.length === 0 ? (
-            <p className="empty-sub">{t("log.empty")}</p>
+          <div className="graph-tabs">
+            <button
+              className={`btn ${tab === "log" ? "btn-active" : ""}`}
+              onClick={() => setTab("log")}
+            >
+              {t("log.tab.log")}
+            </button>
+            <button
+              className={`btn ${tab === "chronicle" ? "btn-active" : ""}`}
+              onClick={() => setTab("chronicle")}
+            >
+              {t("log.tab.chronicle")}
+            </button>
+          </div>
+          {shown.length === 0 ? (
+            <p className="empty-sub">
+              {tab === "chronicle" ? t("log.chronicle_empty") : t("log.empty")}
+            </p>
           ) : (
             <ul className="log-list">
-              {ordered.map((ev, i) => {
+              {shown.map((ev, i) => {
                 const isClickable =
                   ev.speciesId &&
                   onSpeciesClick &&

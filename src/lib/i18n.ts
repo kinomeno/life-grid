@@ -288,6 +288,9 @@ const ja: Dictionary = {
   // 行動ログ
   "log.title": "行動ログ",
   "log.empty": "まだイベントが発生していません。",
+  "log.tab.log": "ログ",
+  "log.tab.chronicle": "年表",
+  "log.chronicle_empty": "まだ大きな出来事が記録されていません。",
 };
 
 const en: Dictionary = {
@@ -559,6 +562,9 @@ const en: Dictionary = {
   // Action log
   "log.title": "Action Log",
   "log.empty": "No events yet.",
+  "log.tab.log": "Log",
+  "log.tab.chronicle": "Chronicle",
+  "log.chronicle_empty": "No major events recorded yet.",
 };
 
 const dictionaries: Record<Locale, Dictionary> = { ja, en };
