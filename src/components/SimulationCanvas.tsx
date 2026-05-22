@@ -9,6 +9,8 @@ type Props = {
   world: World;
   cellSize: number;
   version: number;
+  /** v1.30 (案1/B): 現在の再生速度。エネルギー提供○演出の表示判定に使う。 */
+  speed?: number;
   /** 移動補間フェーズ（0=直前位置, 1=現在位置）。未指定なら 1。 */
   animPhase?: number;
   /** v1.21 軽量化: true なら描画を簡易化（形状→円）。大マップ高速時に有効。 */
@@ -26,6 +28,7 @@ export default function SimulationCanvas({
   world,
   cellSize,
   version,
+  speed = 1,
   animPhase = 1,
   simplifiedRender = false,
   selectedLifeId = null,
@@ -76,10 +79,12 @@ export default function SimulationCanvas({
     drawCombatFlashes(ctx, world, cellSize, animPhase);
     drawCataclysm(ctx, world, cellSize);
     drawBirthFlashes(ctx, world, cellSize);
+    drawShareFlashes(ctx, world, cellSize, animPhase, speed);
   }, [
     world,
     cellSize,
     version,
+    speed,
     animPhase,
     simplifiedRender,
     selectedLifeId,
@@ -169,6 +174,44 @@ function drawSelectedPath(
     ctx.beginPath();
     ctx.moveTo(p0.x * cellSize + half, p0.y * cellSize + half);
     ctx.lineTo(p1.x * cellSize + half, p1.y * cellSize + half);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * v1.30 (案1/B): 仲間へのエネルギー提供の演出。小○がドナー→受け手へ流れる。
+ * 表示は速度・マップサイズ依存で間引く（100画面以上は <10倍速、50画面以下は <100倍速）。
+ * サイズ・不透明度は一定（量には依存させない）。色は種代表色（フラッシュに保存済み）。
+ */
+function drawShareFlashes(
+  ctx: CanvasRenderingContext2D,
+  world: World,
+  cellSize: number,
+  animPhase: number,
+  speed: number
+) {
+  const flashes = world.shareFlashes;
+  if (!flashes || flashes.length === 0) return;
+  const show = world.width >= 100 ? speed < 10 : speed < 100;
+  if (!show) return;
+  const half = cellSize / 2;
+  const radius = Math.max(1.5, cellSize * 0.16);
+  const lineW = Math.max(0.5, cellSize * 0.05);
+  ctx.save();
+  for (const f of flashes) {
+    const t = (world.turn - f.startTurn + animPhase) / f.durationTurns;
+    if (t < 0 || t > 1) continue;
+    const ix = interp(f.fromX, f.toX, t, world.width);
+    const iy = interp(f.fromY, f.toY, t, world.height);
+    const cx = ix * cellSize + half;
+    const cy = iy * cellSize + half;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = `rgb(${f.r}, ${f.g}, ${f.b})`;
+    ctx.fill();
+    ctx.lineWidth = lineW;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
     ctx.stroke();
   }
   ctx.restore();

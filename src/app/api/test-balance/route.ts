@@ -46,13 +46,15 @@ export async function GET(req: NextRequest) {
   const n = Math.min(1000, Math.max(1, Number(sp.get("n") ?? 100)));
   // v1.20: totalEnergy をクエリで検証可能に（マップサイズ別デフォルトの調整用）
   const te = Math.min(3, Math.max(0.1, Number(sp.get("te") ?? 1.2)));
+  // v1.30 (案1/B): ?share=1 でエネルギー共有を有効化して検証。
+  const share = sp.get("share") === "1";
 
   const world = createWorld({
     width: w,
     height: w,
     initialLifeCount: n,
     seed,
-    params: { ...defaultSimulationParams(), totalEnergy: te },
+    params: { ...defaultSimulationParams(), totalEnergy: te, energyShareEnabled: share },
   });
 
   // 進化を進める
@@ -142,6 +144,7 @@ export async function GET(req: NextRequest) {
       loyalty: stats(alive.map((l) => l.genes.wLoyalty)),
       repro: stats(alive.map((l) => l.genes.wRepro)),
       starvSensitive: stats(alive.map((l) => l.genes.wStarvSensitive)),
+      share: stats(alive.map((l) => l.genes.wShare)),
     },
     // v1.10: 性格タグの分布
     behaviorTags: (() => {

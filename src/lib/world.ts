@@ -51,6 +51,14 @@ import {
   GENE_VISION_MAX,
   GENE_VISION_MIN,
   COLOR_DRIFT_SCALE,
+  SHARE_ASSORTATIVE,
+  SHARE_DONOR_RESERVE_RATIO,
+  SHARE_RECIPIENT_NEED_RATIO,
+  SHARE_FRACTION,
+  SHARE_EFF_BASE,
+  SHARE_MIN_AMOUNT,
+  MAX_SHARE_FLASHES,
+  SHARE_FLASH_DURATION,
   INITIAL_ENERGY_RATIO,
   MIN_REPRODUCTIVE_AGE_RATIO,
   OFFSPRING_GENE_ENABLED,
@@ -91,6 +99,8 @@ export function defaultSimulationParams(): SimulationParams {
     newsEnabled: true,
     inheritOnDeath: true,
     smoothAnimation: true,
+    // v1.30 (案1/B): 既定はOFF（オプトイン）。設定でONにすると分配＋wShare進化が有効。
+    energyShareEnabled: false,
   };
 }
 
@@ -113,7 +123,8 @@ export function defaultDisabledGenes(): DisabledGeneFlags {
  */
 export function applyDisabledGenes(
   genes: Genes,
-  disabled: DisabledGeneFlags
+  disabled: DisabledGeneFlags,
+  shareEnabled = true
 ): Genes {
   const out = { ...genes };
   // v1.30 (H4 再設計): 体色 r,g,b は「仲間タグ」遺伝子。能力から算出せず、継承＋微ドリフト
@@ -126,6 +137,8 @@ export function applyDisabledGenes(
   if (disabled.birthThreshold)
     out.birthThreshold = FIXED_GENE_VALUES.birthThreshold;
   if (disabled.lifespan) out.lifespan = FIXED_GENE_VALUES.lifespan;
+  // v1.30 (案1/B): エネルギー共有OFF時は利他遺伝子を中立値に固定（不活性化）。
+  if (!shareEnabled) out.wShare = FIXED_GENE_VALUES.wShare;
   return out;
 }
 
@@ -162,7 +175,7 @@ export function createWorld(config: WorldConfig): World {
     // 初期遺伝子が指定されていれば全個体に同じ遺伝子をコピー（参照ではなくクローン）。
     let genes = initialGenes ? { ...initialGenes } : randomGenes(rng);
     // 稼働遺伝子フラグに従って無効化された遺伝子は固定値で上書き
-    genes = applyDisabledGenes(genes, params.disabledGenes);
+    genes = applyDisabledGenes(genes, params.disabledGenes, params.energyShareEnabled);
     const life: Life = {
       id: nextId++,
       x,
@@ -228,6 +241,7 @@ export function createWorld(config: WorldConfig): World {
     activeCataclysm: null,
     birthFlashes: [],
     combatFlashes: [],
+    shareFlashes: [],
     params,
   };
 }
@@ -326,6 +340,8 @@ function randomGenes(rng: RNG): Genes {
     wLoyalty: initW(),
     wRepro: initW(),
     wStarvSensitive: initW(),
+    // v1.30 (案1): 利他性も中央値 50 ± 30 から進化開始。
+    wShare: initW(),
   };
 }
 
@@ -403,6 +419,8 @@ export function mutatGenes(parentGenes: Genes, mutationRate: number, rng: RNG): 
   genes.wLoyalty = Math.round(mutate(genes.wLoyalty, GENE_WEIGHT_MIN, GENE_WEIGHT_MAX, 0.05));
   genes.wRepro = Math.round(mutate(genes.wRepro, GENE_WEIGHT_MIN, GENE_WEIGHT_MAX, 0.05));
   genes.wStarvSensitive = Math.round(mutate(genes.wStarvSensitive, GENE_WEIGHT_MIN, GENE_WEIGHT_MAX, 0.05));
+  // v1.30 (案1): 利他性遺伝子の変異。
+  genes.wShare = Math.round(mutate(genes.wShare, GENE_WEIGHT_MIN, GENE_WEIGHT_MAX, 0.05));
 
   // v1.30 (H4 再設計): 体色ドリフト。
   // 能力・行動が親からどれだけ変化したか（各遺伝子を意味のあるレンジで正規化した合計）に
@@ -426,7 +444,8 @@ export function mutatGenes(parentGenes: Genes, mutationRate: number, rng: RNG): 
     dnorm(genes.wGregarious, parentGenes.wGregarious, GENE_WEIGHT_MAX - GENE_WEIGHT_MIN) +
     dnorm(genes.wLoyalty, parentGenes.wLoyalty, GENE_WEIGHT_MAX - GENE_WEIGHT_MIN) +
     dnorm(genes.wRepro, parentGenes.wRepro, GENE_WEIGHT_MAX - GENE_WEIGHT_MIN) +
-    dnorm(genes.wStarvSensitive, parentGenes.wStarvSensitive, GENE_WEIGHT_MAX - GENE_WEIGHT_MIN);
+    dnorm(genes.wStarvSensitive, parentGenes.wStarvSensitive, GENE_WEIGHT_MAX - GENE_WEIGHT_MIN) +
+    dnorm(genes.wShare, parentGenes.wShare, GENE_WEIGHT_MAX - GENE_WEIGHT_MIN);
   if (changeMag > 0) {
     const amt = changeMag * COLOR_DRIFT_SCALE;
     genes.r = clamp(Math.round(genes.r + (rng() * 2 - 1) * amt), 0, 255);
@@ -545,6 +564,9 @@ export function stepWorld(world: World): void {
     life.prevX = life.x;
     life.prevY = life.y;
   }
+  // v1.30 (案1): 仲間へのエネルギー提供フェーズ。actLife（採餌・餓死判定）の前に実行し、
+  // 余剰を持つ近縁が瀕死の仲間を救えるようにする。
+  shareEnergyPhase(world);
   const order = shuffledIndices(world.lives.length, world.turn);
   for (const i of order) {
     const life = world.lives[i];
@@ -1022,6 +1044,12 @@ function detectSpeciesEvents(world: World): void {
   // 捕食エフェクトも期限切れ削除
   if (world.combatFlashes.length > 0) {
     world.combatFlashes = world.combatFlashes.filter(
+      (f) => world.turn - f.startTurn < f.durationTurns
+    );
+  }
+  // v1.30 (案1/B): エネルギー提供エフェクトも期限切れ削除
+  if (world.shareFlashes.length > 0) {
+    world.shareFlashes = world.shareFlashes.filter(
       (f) => world.turn - f.startTurn < f.durationTurns
     );
   }
@@ -2078,7 +2106,7 @@ function reproduceLife(
   for (let i = 0; i < actual; i++) {
     const childPos = emptyPositions[i];
     let childGenes = mutatGenes(parent.genes, effectiveMutationRate, rng);
-    childGenes = applyDisabledGenes(childGenes, world.params.disabledGenes);
+    childGenes = applyDisabledGenes(childGenes, world.params.disabledGenes, world.params.energyShareEnabled);
 
     const idx = childPos.y * world.width + childPos.x;
     const childLife: Life = {
@@ -2147,6 +2175,90 @@ function depositCarcassEnergy(
   energy[i2] = v2 > ENERGY_MAX ? ENERGY_MAX : v2;
   energy[i3] = v3 > ENERGY_MAX ? ENERGY_MAX : v3;
   energy[i4] = v4 > ENERGY_MAX ? ENERGY_MAX : v4;
+}
+
+/**
+ * v1.30 (案1): 仲間へのエネルギー提供（血縁淘汰・利他の進化）。
+ * 各個体が1ターンに1回、隣接3x3の同種(=近縁)のうち最も困窮した個体へ、
+ * 自分の余剰エネルギーの一部を分け与える。
+ *  - wShare 遺伝子で利他性が進化（0=利己, 100=高利他）。
+ *  - 知能(accuracy)が高いほど転送効率が上がる（ロスが減る）。
+ *  - 転送ロスは場に還元（エネルギー保存）。
+ * actLife ループの前に呼ぶことで、瀕死の近縁が餓死判定の前に救われ得る。
+ */
+function shareEnergyPhase(world: World): void {
+  if (!world.params.energyShareEnabled) return;
+  const { width, height, occupancy, livesById } = world;
+  for (const donor of world.lives) {
+    if (!donor.alive) continue;
+    const g = donor.genes;
+    const willingness = g.wShare / GENE_WEIGHT_MAX;
+    if (willingness <= 0) continue;
+    // 自分用の確保分を超えた「余剰」だけを分配対象にする。
+    const reserve = g.size * SHARE_DONOR_RESERVE_RATIO;
+    const surplus = donor.energy - reserve;
+    if (surplus < SHARE_MIN_AMOUNT) continue;
+    const dx0 = donor.x;
+    const dy0 = donor.y;
+    // 隣接3x3の同種から受け手を選ぶ。
+    // assortment 版: 優先度 = 困窮度 × 相手の利他性（利他的な近縁を優先、タダ乗りは助けない）。
+    // 素朴版: 優先度 = 困窮度のみ。
+    let bestRecipient: Life | null = null;
+    let bestNeed = 0;
+    let bestPriority = 0;
+    for (let i = 0; i < 8; i++) {
+      let nx = dx0 + NEIGHBOR_DX[i];
+      if (nx < 0) nx += width;
+      else if (nx >= width) nx -= width;
+      let ny = dy0 + NEIGHBOR_DY[i];
+      if (ny < 0) ny += height;
+      else if (ny >= height) ny -= height;
+      const occId = occupancy[ny * width + nx];
+      if (occId === -1) continue;
+      const nb = livesById.get(occId);
+      if (!nb || !nb.alive) continue;
+      if (nb.speciesId !== donor.speciesId) continue;
+      const need = nb.genes.size * SHARE_RECIPIENT_NEED_RATIO - nb.energy;
+      if (need <= 0) continue;
+      const priority = SHARE_ASSORTATIVE
+        ? need * (nb.genes.wShare / GENE_WEIGHT_MAX)
+        : need;
+      if (priority > bestPriority) {
+        bestPriority = priority;
+        bestNeed = need;
+        bestRecipient = nb;
+      }
+    }
+    if (!bestRecipient || bestNeed < SHARE_MIN_AMOUNT) continue;
+    // 提供量 = min(余剰, 相手の不足) × 係数 × 利他性。
+    const give = Math.min(surplus, bestNeed) * SHARE_FRACTION * willingness;
+    if (give < SHARE_MIN_AMOUNT) continue;
+    // 知能(accuracy)で転送効率。低知能ほどロスが大きい。
+    const accuracy =
+      g.intelligence >= ACCURACY_FULL_INTEL
+        ? 1
+        : Math.sqrt(g.intelligence / ACCURACY_FULL_INTEL);
+    const efficiency = SHARE_EFF_BASE + (1 - SHARE_EFF_BASE) * accuracy;
+    donor.energy -= give;
+    bestRecipient.energy += give * efficiency;
+    const loss = give * (1 - efficiency);
+    if (loss > 0) depositCarcassEnergy(world, dx0, dy0, loss);
+    // 可視化用フラッシュ（小○がドナー→受け手へ流れる）。上限超過時はスキップ。
+    // 表示自体は速度・マップサイズ依存で SimulationCanvas 側が間引く。
+    if (world.shareFlashes.length < MAX_SHARE_FLASHES) {
+      world.shareFlashes.push({
+        fromX: dx0,
+        fromY: dy0,
+        toX: bestRecipient.x,
+        toY: bestRecipient.y,
+        r: binCenterColor(g.r),
+        g: binCenterColor(g.g),
+        b: binCenterColor(g.b),
+        startTurn: world.turn,
+        durationTurns: SHARE_FLASH_DURATION,
+      });
+    }
+  }
 }
 
 function handleCombat(world: World, life: Life): void {

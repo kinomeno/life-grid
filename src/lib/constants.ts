@@ -174,6 +174,31 @@ export const MIN_REPRODUCTIVE_AGE_RATIO = 0.2;
 // 確率戦闘では期待値が減るため、元の 0.6 に戻して維持可能性を確保。
 export const COMBAT_ENERGY_LOSS_RATIO = 0.6;
 
+// ──── v1.30 (案1/B): 仲間へのエネルギー提供（血縁淘汰・利他の進化）────
+// 隣接3x3の同種(speciesId一致=近縁)のうち最も困窮した個体へ、余剰エネルギーを分配する。
+// wShare 遺伝子で利他性が進化。知能(accuracy)が高いほど転送効率が上がる（ロスが減る）。
+// 転送ロスは場に還元（エネルギー保存）。
+// ON/OFF は SimulationParams.energyShareEnabled（既定OFF＝オプトイン）で制御する。
+// 利他の相手選択を「困窮度 × 相手の利他性」で行う（assortment/greenbeard）。
+// true: 利他的な近縁を優先して助け、利己的なタダ乗り個体は助けない＝利他遺伝子が
+//   自分のコピーを優先的に利するため進化的に安定（free-rider 問題を緩和）。
+// false: 困窮度のみで選ぶ素朴版（利他はタダ乗りに食われ中立化しやすい）。
+export const SHARE_ASSORTATIVE = true;
+// ドナーが自分用に確保する下限（size 比）。これを超えた分だけが「余剰」。
+export const SHARE_DONOR_RESERVE_RATIO = 0.6;
+// 受け手が「困窮」と判定される所持エネルギー（size 比）。未満なら不足分を需要とみなす。
+export const SHARE_RECIPIENT_NEED_RATIO = 0.35;
+// 1回の提供量 = min(余剰, 相手の不足) × この係数 × (wShare/100)。
+export const SHARE_FRACTION = 0.5;
+// 転送効率の下限（知能0時）。efficiency = base + (1-base)*accuracy。残りはロス。
+export const SHARE_EFF_BASE = 0.5;
+// これ未満の余剰・提供量は無視（微小転送を避ける）。
+export const SHARE_MIN_AMOUNT = 0.5;
+// 提供の可視化（小○がドナー→受け手へ流れる演出）：同時表示の上限と1粒子の寿命（ターン）。
+// 表示は速度・マップサイズ依存（100画面以上は<10倍速、50画面以下は<100倍速のときのみ）。
+export const MAX_SHARE_FLASHES = 300;
+export const SHARE_FLASH_DURATION = 6;
+
 /**
  * 稼働遺伝子をオフにしたときに全個体に適用される固定値（中央値ベース）。
  * 体色は灰色固定。
@@ -199,4 +224,6 @@ export const FIXED_GENE_VALUES = {
   wLoyalty: 50,
   wRepro: 50,
   wStarvSensitive: 50,
+  // v1.30 (案1): 利他性の固定値（中央値）。
+  wShare: 50,
 } as const;

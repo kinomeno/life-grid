@@ -1413,6 +1413,7 @@ export default function SimulationView({
                   world={world}
                   cellSize={cellSize}
                   version={version}
+                  speed={speed}
                   animPhase={animPhase}
                   simplifiedRender={simplifiedRender}
                   selectedLifeId={selectedLifeId}
@@ -1980,6 +1981,23 @@ export default function SimulationView({
                       {t("settings.gene_all_off")}
                     </button>
                   </div>
+                  {/* v1.30 (案1/B): 仲間へのエネルギー提供（利他）。既定OFFのオプトイン。 */}
+                  <label
+                    className="settings-toggle"
+                    title={t("settings.energy_share_hint")}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={params.energyShareEnabled}
+                      onChange={(e) =>
+                        setParams((p) => ({
+                          ...p,
+                          energyShareEnabled: e.target.checked,
+                        }))
+                      }
+                    />
+                    <span>{t("settings.energy_share")}</span>
+                  </label>
                 </div>
               </div>
             </section>

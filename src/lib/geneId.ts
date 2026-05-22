@@ -137,6 +137,9 @@ export function decodeGeneId(id: string): Genes | null {
     wLoyalty,
     wRepro,
     wStarvSensitive,
+    // v1.30 (案1, プロトタイプ): wShare はまだ geneID に含めない（37桁ID互換を維持）。
+    // 共有IDから生成した個体は中立値(50)で開始し、以後 mutatGenes で進化する。
+    wShare: 50,
   };
 }
 

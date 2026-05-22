@@ -33,6 +33,9 @@ export type Genes = {
   wRepro: number;
   /** 飢餓×食料の組み合わせ特徴への重み（飢餓時の食欲） */
   wStarvSensitive: number;
+  /** v1.30 (案1): 隣接する困窮した近縁にエネルギーを分け与える積極性（利他/血縁淘汰）。
+   *  0=利己的, 100=高利他。知能(accuracy)が高いほど転送効率が上がる。 */
+  wShare: number;
 };
 
 export type Life = {
@@ -76,6 +79,9 @@ export type SimulationParams = {
   inheritOnDeath: boolean;
   /** v1.02: 移動の補間アニメーション。true=滑らか（既定）/ false=厳密なターン表示（パチッと移動）。 */
   smoothAnimation: boolean;
+  /** v1.30 (案1/B): 仲間へのエネルギー提供（利他）を有効化する。既定 false（オプトイン）。
+   *  OFF時は分配フェーズを実行せず、wShare 遺伝子は中立値に固定され不活性。 */
+  energyShareEnabled: boolean;
 };
 
 /**
@@ -221,6 +227,8 @@ export type World = {
   birthFlashes: BirthFlash[];
   /** 捕食発生エフェクト（短期間表示）。 */
   combatFlashes: CombatFlash[];
+  /** v1.30 (案1/B): エネルギー提供エフェクト（小○がドナー→受け手へ流れる）。 */
+  shareFlashes: ShareFlash[];
   params: SimulationParams;
 };
 
@@ -255,6 +263,20 @@ export type CombatFlash = {
   victimR: number;
   victimG: number;
   victimB: number;
+  startTurn: number;
+  durationTurns: number;
+};
+
+/** v1.30 (案1/B): 仲間へのエネルギー提供の演出。小○がドナー→受け手へ流れる。 */
+export type ShareFlash = {
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+  /** 種代表色（ドナー＝受け手は同種）。 */
+  r: number;
+  g: number;
+  b: number;
   startTurn: number;
   durationTurns: number;
 };
