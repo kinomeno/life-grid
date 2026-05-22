@@ -81,6 +81,13 @@
   max-width: 100%;
 }
 
+/* v1.30 (あ): 25画面＝観察モード。行を内容高にして全体高さを選択生命パネルに合わせ、
+   小さなマップは中央カラム(.sim-center の 1fr 行＋.canvas-viewport の align-self:center)で
+   縦中央に。左右カラムの maxHeight 制限は JSX 側で外す（縦スクロールを出さない）。 */
+:global(.sim-root.sim-observe) {
+  grid-template-rows: auto auto;
+}
+
 :global(.sim-cell) {
   display: flex;
   flex-direction: column;

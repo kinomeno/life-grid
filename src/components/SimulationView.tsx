@@ -863,6 +863,10 @@ export default function SimulationView({
     const border = 2; // viewport 枠
     return canvasH + newsBlock + padding + border;
   }, [cellSize, height, params.newsEnabled]);
+
+  // v1.30 (あ): 25画面＝観察モード。選択生命欄を縦スクロールさせず、全体の高さをパネルに合わせ、
+  // 小さなマップは中央カラムの縦中央へ（左右カラムの高さ制限を外し、CSS .sim-observe で行を内容高に）。
+  const observeMode = !!world && world.width <= 25;
   // v1.10: ズームレベルは固定配列で管理し、1.0（100%）が常にステップに含まれるよう保証する。
   // 以前は ZOOM_STEP=0.2 で 1.0 基準にしていたが、ZOOM_MIN=0.5 がグリッド外のため、
   // 0.5 まで縮小→拡大で 0.5→0.7→0.9→1.1 となり 100% を踏まずに飛び越えてしまうバグがあった。
@@ -1126,7 +1130,7 @@ export default function SimulationView({
   return (
     <>
     <div
-      className={`sim-root${fullscreenMap ? " sim-fullscreen" : ""}`}
+      className={`sim-root${fullscreenMap ? " sim-fullscreen" : ""}${observeMode ? " sim-observe" : ""}`}
       style={{
         // 中央列幅をマップサイズ＋枠ぶん（padding+border）に固定。
         // ニュースの文字長に引きずられないようにするため。
@@ -1165,7 +1169,7 @@ export default function SimulationView({
       </div>
       <aside
         className="sim-cell sim-left"
-        style={{ maxHeight: `${columnMaxHeight}px` }}
+        style={observeMode ? undefined : { maxHeight: `${columnMaxHeight}px` }}
       >
         <section className="panel">
           <button
@@ -1578,7 +1582,7 @@ export default function SimulationView({
 
       <aside
         className="sim-cell sim-right"
-        style={{ maxHeight: `${columnMaxHeight}px` }}
+        style={observeMode ? undefined : { maxHeight: `${columnMaxHeight}px` }}
       >
         <section className="panel">
           <button
