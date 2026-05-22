@@ -51,6 +51,7 @@ import {
   GENE_VISION_MAX,
   GENE_VISION_MIN,
   COLOR_DRIFT_SCALE,
+  SPECIES_RGB_BIN,
   SHARE_ASSORTATIVE,
   SHARE_DONOR_RESERVE_RATIO,
   SHARE_RECIPIENT_NEED_RATIO,
@@ -148,9 +149,14 @@ export function createWorld(config: WorldConfig): World {
   const total = width * height;
 
   const energy = new Float32Array(total);
+  // v1.30 (あ): 25画面（観察モード）は序盤に全マップ同時枯渇で全滅しやすいので初期エネを少し増やす。
+  const initEnergyBoost = width <= 25 ? 1.4 : 1;
   for (let i = 0; i < total; i++) {
     const v = ENERGY_INITIAL_MEAN + (rng() - 0.5) * 2 * ENERGY_INITIAL_VARIANCE;
-    energy[i] = clamp(v, 0, ENERGY_MAX) * INITIAL_ENERGY_RATIO + 5;
+    energy[i] = Math.min(
+      ENERGY_MAX,
+      (clamp(v, 0, ENERGY_MAX) * INITIAL_ENERGY_RATIO + 5) * initEnergyBoost
+    );
   }
 
   const terrainBias = createTerrainBias(width, height, rng);
@@ -450,6 +456,18 @@ export function mutatGenes(parentGenes: Genes, mutationRate: number, rng: RNG): 
     genes.r = clamp(Math.round(genes.r + (rng() * 2 - 1) * amt), 0, 255);
     genes.g = clamp(Math.round(genes.g + (rng() * 2 - 1) * amt), 0, 255);
     genes.b = clamp(Math.round(genes.b + (rng() * 2 - 1) * amt), 0, 255);
+    // v1.30 (い): 種分化が起きた瞬間（親と別の色ビンへ移った）だけ、色を追加で大きくジャンプ
+    // させ、新種を視覚的にはっきり親と別色にする。方向は親ビンから離れる側へバイアス。
+    const bin = (v: number): number => Math.floor(v / SPECIES_RGB_BIN);
+    const speciationJump = (cur: number, parent: number): number => {
+      if (bin(cur) === bin(parent)) return cur; // 同じ種ビンなら据え置き
+      const dir = cur >= parent ? 1 : -1;
+      const extra = SPECIES_RGB_BIN * (0.5 + rng() * 0.5); // 0.5〜1.0 ビン分、離れる方向へ
+      return clamp(Math.round(cur + dir * extra), 0, 255);
+    };
+    genes.r = speciationJump(genes.r, parentGenes.r);
+    genes.g = speciationJump(genes.g, parentGenes.g);
+    genes.b = speciationJump(genes.b, parentGenes.b);
   }
   return genes;
 }
@@ -1939,6 +1957,52 @@ export function describeBehavior(life: Life): BehaviorTrait[] {
     return [{ key: "behavior_desc.passive", weight: 0 }];
   }
   return top;
+}
+
+/**
+ * v1.30 (う): 行動・能力を「文章」で表すための記述子キー列を返す。
+ * 例 ["trait.fast","trait.smart","trait.predatory"] → UI 側で
+ * 「俊敏で知的で獰猛な個体」/「fast, smart, predatory creature」に組み立てる。
+ * 能力（速度/知能/強さ/体格）の最も顕著な 1〜2 個 ＋ 行動の最上位 1 個。
+ */
+export function describeBehaviorPhrase(life: Life): string[] {
+  if (!life.alive) return [];
+  const g = life.genes;
+  if (Math.max(0, g.intelligence) <= 0) return ["trait.random"];
+
+  // 能力の顕著さ＝中央値からの正規化偏差。大きい順に最大2つ採用。
+  const abil: { key: string; dev: number }[] = [];
+  const consider = (
+    v: number,
+    mid: number,
+    span: number,
+    hi: string,
+    lo: string,
+    th: number
+  ): void => {
+    const d = (v - mid) / span;
+    if (Math.abs(d) >= th) abil.push({ key: d > 0 ? hi : lo, dev: Math.abs(d) });
+  };
+  consider(g.speed, 50, 50, "trait.fast", "trait.slow", 0.3);
+  consider(g.intelligence, 50, 50, "trait.smart", "trait.dull", 0.3);
+  consider(g.strength, 50, 50, "trait.strong", "trait.weak", 0.3);
+  consider(g.size, 115, 85, "trait.big", "trait.small", 0.35);
+  abil.sort((a, b) => b.dev - a.dev);
+  const abilKeys = abil.slice(0, 2).map((a) => a.key);
+
+  // 行動の最上位（重み最大・しきい値以上、なければ温厚）。
+  const beh: { key: string; w: number }[] = [
+    { key: "trait.predatory", w: g.wPredation },
+    { key: "trait.timid", w: g.wCaution },
+    { key: "trait.loyal", w: g.wLoyalty },
+    { key: "trait.social", w: g.wGregarious },
+    { key: "trait.greedy", w: g.wAppetite },
+    { key: "trait.prolific", w: g.wRepro },
+  ];
+  beh.sort((a, b) => b.w - a.w);
+  const behKey = beh[0].w >= 55 ? beh[0].key : "trait.calm";
+
+  return [...abilKeys, behKey];
 }
 
 /**

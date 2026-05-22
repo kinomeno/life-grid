@@ -19,6 +19,7 @@ import {
   defaultSimulationParams,
   findHeir,
   describeBehavior,
+  describeBehaviorPhrase,
   behaviorAccuracyNote,
   stepWorld,
 } from "@/lib/world";
@@ -1437,7 +1438,7 @@ export default function SimulationView({
           <button className="btn" onClick={stepOnce}>
             {t("ctrl.step")}
           </button>
-          {([1, 100] as const).map((s) => {
+          {((world && world.width <= 25 ? [1] : [1, 100]) as Speed[]).map((s) => {
             const locked = s === 100 && !unlocked;
             return (
               <button
@@ -1676,6 +1677,17 @@ export default function SimulationView({
                       <div className="behavior-traits-label">
                         {t("info.behavior_traits")}
                       </div>
+                      {/* v1.30 (う): 行動・能力を一文で要約「〇〇で〇〇な〇〇な個体」 */}
+                      <div className="behavior-traits-phrase">
+                        {(() => {
+                          const ks = describeBehaviorPhrase(selectedLife);
+                          if (ks.length === 0) return null;
+                          return (
+                            ks.map((k) => t(k)).join(t("behavior_phrase.sep")) +
+                            t("behavior_phrase.suffix")
+                          );
+                        })()}
+                      </div>
                       <ul className="behavior-traits-list">
                         {describeBehavior(selectedLife).map((tr, i) => (
                           <li key={i}>
@@ -1798,7 +1810,7 @@ export default function SimulationView({
             </button>
           </div>
           <div className="ctrl-group">
-            {([1, 10, 100] as const).map((s) => {
+            {((world && world.width <= 25 ? [1] : [1, 10, 100]) as Speed[]).map((s) => {
               const locked = s === 100 && !unlocked;
               return (
                 <button
