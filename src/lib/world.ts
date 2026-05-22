@@ -123,8 +123,7 @@ export function defaultDisabledGenes(): DisabledGeneFlags {
  */
 export function applyDisabledGenes(
   genes: Genes,
-  disabled: DisabledGeneFlags,
-  shareEnabled = true
+  disabled: DisabledGeneFlags
 ): Genes {
   const out = { ...genes };
   // v1.30 (H4 再設計): 体色 r,g,b は「仲間タグ」遺伝子。能力から算出せず、継承＋微ドリフト
@@ -137,8 +136,8 @@ export function applyDisabledGenes(
   if (disabled.birthThreshold)
     out.birthThreshold = FIXED_GENE_VALUES.birthThreshold;
   if (disabled.lifespan) out.lifespan = FIXED_GENE_VALUES.lifespan;
-  // v1.30 (案1/B): エネルギー共有OFF時は利他遺伝子を中立値に固定（不活性化）。
-  if (!shareEnabled) out.wShare = FIXED_GENE_VALUES.wShare;
+  // v1.30 (案1/B): wShare（利他性）は共有OFFでもリセットしない。分配フェーズを実行しないことで
+  // 不活性化されるだけで、進化した値はそのまま保持される（再ONで以前の利他性から再開）。
   return out;
 }
 
@@ -175,7 +174,7 @@ export function createWorld(config: WorldConfig): World {
     // 初期遺伝子が指定されていれば全個体に同じ遺伝子をコピー（参照ではなくクローン）。
     let genes = initialGenes ? { ...initialGenes } : randomGenes(rng);
     // 稼働遺伝子フラグに従って無効化された遺伝子は固定値で上書き
-    genes = applyDisabledGenes(genes, params.disabledGenes, params.energyShareEnabled);
+    genes = applyDisabledGenes(genes, params.disabledGenes);
     const life: Life = {
       id: nextId++,
       x,
@@ -2106,7 +2105,7 @@ function reproduceLife(
   for (let i = 0; i < actual; i++) {
     const childPos = emptyPositions[i];
     let childGenes = mutatGenes(parent.genes, effectiveMutationRate, rng);
-    childGenes = applyDisabledGenes(childGenes, world.params.disabledGenes, world.params.energyShareEnabled);
+    childGenes = applyDisabledGenes(childGenes, world.params.disabledGenes);
 
     const idx = childPos.y * world.width + childPos.x;
     const childLife: Life = {

@@ -80,7 +80,7 @@ export type SimulationParams = {
   /** v1.02: 移動の補間アニメーション。true=滑らか（既定）/ false=厳密なターン表示（パチッと移動）。 */
   smoothAnimation: boolean;
   /** v1.30 (案1/B): 仲間へのエネルギー提供（利他）を有効化する。既定 false（オプトイン）。
-   *  OFF時は分配フェーズを実行せず、wShare 遺伝子は中立値に固定され不活性。 */
+   *  OFF時は分配フェーズを実行しないだけで、wShare 遺伝子の値は保持（不活性化のみ・50に戻さない）。 */
   energyShareEnabled: boolean;
 };
 
