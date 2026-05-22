@@ -105,16 +105,29 @@ export function defaultDisabledGenes(): DisabledGeneFlags {
  * 稼働遺伝子フラグに従って、無効化された遺伝子を固定値で上書きする。
  * 子個体生成時・初期世代生成時に呼び出される。
  */
+/**
+ * v1.30 (H4): 体色を主要パラメータから決定論的に算出する（色＝戦略の可視化）。
+ *   R = 速度 / G = 知能 / B = 強さ を各「通常レンジ」で 0〜255 に正規化。
+ *   速い=赤・賢い=緑・強い=青、混合戦略は混色。種ビニング（RGB）はそのまま流用するため
+ *   「色ビン＝戦略クラスタ＝種」になる。r,g,b は遺伝子だが派生値として常に上書きし、
+ *   継承・突然変異はしない（収斂進化＝同戦略は同色に）。
+ */
+function applyPhenotypeColor(genes: Genes): void {
+  const ch = (v: number, cap: number): number => {
+    const t = v <= 0 ? 0 : v >= cap ? 1 : v / cap;
+    return Math.round(t * 255);
+  };
+  genes.r = ch(genes.speed, GENE_SPEED_NORMAL_CAP);
+  genes.g = ch(genes.intelligence, ACCURACY_FULL_INTEL);
+  genes.b = ch(genes.strength, GENE_STRENGTH_NORMAL_CAP);
+}
+
 export function applyDisabledGenes(
   genes: Genes,
   disabled: DisabledGeneFlags
 ): Genes {
   const out = { ...genes };
-  if (disabled.rgb) {
-    out.r = FIXED_GENE_VALUES.r;
-    out.g = FIXED_GENE_VALUES.g;
-    out.b = FIXED_GENE_VALUES.b;
-  }
+  // v1.30 (H4): 体色は遺伝子ではなく表現型から算出するため、旧「体色 RGB 無効化」分岐は廃止。
   if (disabled.vision) out.vision = FIXED_GENE_VALUES.vision;
   if (disabled.speed) out.speed = FIXED_GENE_VALUES.speed;
   if (disabled.size) out.size = FIXED_GENE_VALUES.size;
@@ -123,6 +136,10 @@ export function applyDisabledGenes(
   if (disabled.birthThreshold)
     out.birthThreshold = FIXED_GENE_VALUES.birthThreshold;
   if (disabled.lifespan) out.lifespan = FIXED_GENE_VALUES.lifespan;
+  // v1.30 (H4): 最終パラメータ（無効化反映後）から体色を再算出（色＝表現型）。
+  // createWorld の初期世代・reproduceLife の子個体とも本関数を通るため、ここが
+  // 全個体共通の体色決定ポイントになる。
+  applyPhenotypeColor(out);
   return out;
 }
 
@@ -298,9 +315,10 @@ function randomGenes(rng: RNG): Genes {
       )
     );
   return {
-    r: randomInt(rng, 0, 256),
-    g: randomInt(rng, 0, 256),
-    b: randomInt(rng, 0, 256),
+    // v1.30 (H4): 体色は表現型から算出。ここはプレースホルダ（applyDisabledGenes で上書き）。
+    r: 0,
+    g: 0,
+    b: 0,
     vision: randomInt(rng, GENE_VISION_MIN, GENE_VISION_MAX + 1),
     // v1.11: 初期分布は通常レンジ（1〜100）。突然変異で 100 超のミュータントが稀に発生。
     speed: randomInt(rng, GENE_SPEED_MIN, GENE_SPEED_NORMAL_CAP + 1),
@@ -348,9 +366,7 @@ export function mutatGenes(parentGenes: Genes, mutationRate: number, rng: RNG): 
     }
     return gene;
   };
-  genes.r = Math.round(mutate(genes.r, 0, 255));
-  genes.g = Math.round(mutate(genes.g, 0, 255));
-  genes.b = Math.round(mutate(genes.b, 0, 255));
+  // v1.30 (H4): r,g,b は突然変異させない（体色は applyDisabledGenes で表現型から再算出）。
   genes.vision = Math.round(mutate(genes.vision, GENE_VISION_MIN, GENE_VISION_MAX));
   // v1.11: 速度（1〜999）：strength/intelligence と同じく ±3 相当（factor 0.003 で範囲 998 に対し ±3）
   // 100 超のミュータントは稀に発生 → 数世代以内に死亡（短命）。
@@ -1438,17 +1454,11 @@ function actLife(world: World, life: Life): void {
 
   const available = energy[idx];
   const capacity = g.size - life.energy;
-  // v1.10: 知能による吸収効率ボーナス（暫定実装・のちに改修予定）
-  //   intel  50: +0%
-  //   intel 100: +11%
-  //   intel 150: +22.5%
-  //   intel 250: +45%（上限近く）
-  // 0.45：0.5 だと K 戦略過熱、0.4 だと逆に絶滅シード発生。中間で安定狙い。
-  const absorbIntelBonus = Math.max(0, (g.intelligence - 50) / 200) * 0.45;
-  const absorb = Math.max(
-    0,
-    Math.min(available * ABSORB_RATE * (1 + absorbIntelBonus), capacity)
-  );
+  // v1.30 (H11): 知能の吸収シナジー（旧 intel>50 で吸収+最大45%）を撤廃。
+  //   知能を採餌から切り離し、価値を accuracy（行動の正確さ）に集約する。
+  //   「賢い個体が採餌も得意」で他戦略を駆逐する現象を解消し、多様な戦略戦を促す
+  //   （grid 検証：吸収撤廃＋コスト1/3＋乗算なし が種数・戦略バランス最良）。
+  const absorb = Math.max(0, Math.min(available * ABSORB_RATE, capacity));
   energy[idx] = available - absorb;
   life.energy += absorb;
 

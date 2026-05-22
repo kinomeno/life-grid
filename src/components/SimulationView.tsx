@@ -2270,7 +2270,7 @@ function allDisabledGenes(): DisabledGeneFlags {
 }
 
 const GENE_TOGGLE_ITEMS: { key: keyof DisabledGeneFlags; tKey: string }[] = [
-  { key: "rgb", tKey: "gene.rgb" },
+  // v1.30 (H4): 体色は表現型から算出するため「体色(RGB)」トグルは廃止。
   { key: "vision", tKey: "gene.vision" },
   { key: "speed", tKey: "gene.speed" },
   { key: "size", tKey: "gene.size" },
