@@ -20,6 +20,7 @@ import {
   GENE_VISION_MAX,
   GENE_VISION_MIN,
 } from "@/lib/constants";
+import { binCenterColor } from "@/lib/species";
 import { useLocale } from "./LocaleProvider";
 import TimeToggle from "./TimeToggle";
 import { useDraggablePanel, type DragOffset } from "./useDraggablePanel";
@@ -53,7 +54,7 @@ export const DEFAULT_GRAPH_SERIES: GraphSeriesState = {
   rgb: false,
 };
 
-export type StatsTab = "timeseries" | "distribution";
+export type StatsTab = "timeseries" | "distribution" | "scatter";
 
 /** 分布タブで選べる遺伝子。 */
 // v1.20: mutationRate は遺伝子廃止のため削除。offspringCount を追加。
@@ -252,11 +253,13 @@ export default function StatsGraphModal({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (tab === "timeseries") {
       drawChart(ctx, cssW, cssH, history, enabled, hoverInfo?.sample.turn ?? null);
+    } else if (tab === "scatter") {
+      drawScatter(ctx, cssW, cssH, lives, t("graph.scatter_x"), t("graph.scatter_y"));
     } else {
       const gene = GENES.find((g) => g.key === geneKey) ?? GENES[0];
       drawHistogram(ctx, cssW, cssH, lives, gene);
     }
-  }, [tab, history, enabled, lives, geneKey, hoverInfo, cssW]);
+  }, [tab, history, enabled, lives, geneKey, hoverInfo, cssW, t]);
 
   // タブ切替・分布時はホバーをクリア
   useEffect(() => {
@@ -347,6 +350,12 @@ export default function StatsGraphModal({
               onClick={() => setTab("distribution")}
             >
               {t("graph.tab.distribution")}
+            </button>
+            <button
+              className={`btn ${tab === "scatter" ? "btn-active" : ""}`}
+              onClick={() => setTab("scatter")}
+            >
+              {t("graph.tab.scatter")}
             </button>
           </div>
 
@@ -549,6 +558,79 @@ function formatTooltipValue(v: number): string {
   if (Math.abs(v) >= 100) return v.toFixed(0);
   if (Math.abs(v) >= 10) return v.toFixed(1);
   return v.toFixed(2);
+}
+
+/**
+ * v1.30 (H5): 戦略空間スキャッタ図。x=速度, y=知能、点＝生存個体（色＝種代表色）。
+ * クラスタ＝ニッチ、拡散＝多様性が一目で分かる。
+ */
+function drawScatter(
+  ctx: CanvasRenderingContext2D,
+  cssW: number,
+  cssH: number,
+  lives: Life[],
+  xLabel: string,
+  yLabel: string
+) {
+  ctx.fillStyle = "#fafafa";
+  ctx.fillRect(0, 0, cssW, cssH);
+  const padL = 40;
+  const padR = 14;
+  const padT = 14;
+  const padB = 28;
+  const innerW = cssW - padL - padR;
+  const innerH = cssH - padT - padB;
+  const xMax = 120; // 速度（通常0-100＋少し）
+  const yMax = 150; // 知能（accuracy 飽和の 150）
+  // グリッド＋目盛
+  ctx.font = "10px sans-serif";
+  for (let i = 0; i <= 3; i++) {
+    const gx = padL + (i / 3) * innerW;
+    const gy = padT + innerH - (i / 3) * innerH;
+    ctx.strokeStyle = "#ececec";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(gx, padT);
+    ctx.lineTo(gx, padT + innerH);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(padL, gy);
+    ctx.lineTo(padL + innerW, gy);
+    ctx.stroke();
+    ctx.fillStyle = "#aaa";
+    ctx.fillText(String(Math.round((i / 3) * xMax)), gx - 6, padT + innerH + 13);
+    ctx.fillText(String(Math.round((i / 3) * yMax)), 6, gy + 3);
+  }
+  ctx.strokeStyle = "#ddd";
+  ctx.strokeRect(padL, padT, innerW, innerH);
+  // 点（種代表色・半透明でクラスタの密度が見える）
+  let n = 0;
+  for (const l of lives) {
+    if (!l.alive) continue;
+    n++;
+    const sx = Math.min(l.genes.speed, xMax) / xMax;
+    const sy = Math.min(l.genes.intelligence, yMax) / yMax;
+    const px = padL + sx * innerW;
+    const py = padT + innerH - sy * innerH;
+    ctx.fillStyle = `rgba(${binCenterColor(l.genes.r)},${binCenterColor(
+      l.genes.g
+    )},${binCenterColor(l.genes.b)},0.55)`;
+    ctx.beginPath();
+    ctx.arc(px, py, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // 軸ラベル
+  ctx.fillStyle = "#555";
+  ctx.font = "11px sans-serif";
+  ctx.fillText(xLabel, padL + innerW / 2 - 12, cssH - 4);
+  ctx.save();
+  ctx.translate(11, padT + innerH / 2 + 12);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText(yLabel, 0, 0);
+  ctx.restore();
+  ctx.fillStyle = "#999";
+  ctx.font = "10px sans-serif";
+  ctx.fillText(`n=${n}`, padL + innerW - 42, padT + 12);
 }
 
 function drawChart(
