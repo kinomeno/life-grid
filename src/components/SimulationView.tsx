@@ -51,6 +51,8 @@ type SpeciesEntry = {
   r: number;
   g: number;
   b: number;
+  /** v1.30 (N1): 代表個体の行動・能力アーキタイプ（trait.* キー列）。 */
+  archetype: string[];
 };
 
 export default function SimulationView({
@@ -248,6 +250,15 @@ export default function SimulationView({
     speedRef.current = s;
     setSpeedState(s);
   }, []);
+
+  // v1.30 (H10): タブが非アクティブになったら自動で一時停止（無駄計算・電池配慮）。復帰は手動。
+  useEffect(() => {
+    const onVis = () => {
+      if (document.hidden && speedRef.current !== 0) setSpeed(0);
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [setSpeed]);
 
   // モーダル表示中は基本的にシミュレーション停止。
   // 統計／ログ画面は「時間進行ON」が選ばれていれば停止しない。
@@ -550,6 +561,35 @@ export default function SimulationView({
       refreshDerived(world);
     }
   }, [setSpeed, refreshDerived]);
+
+  // v1.30 (N3): 指定軸の最上位（最強/最賢/最速/最大/最古）の生存個体を選択する。
+  const selectTopLife = useCallback(
+    (stat: "strength" | "intelligence" | "speed" | "size" | "age") => {
+      const w = worldRef.current;
+      if (!w) return;
+      let bestId = -1;
+      let bestVal = -Infinity;
+      for (const l of w.lives) {
+        if (!l.alive) continue;
+        const v =
+          stat === "age"
+            ? l.age
+            : stat === "strength"
+              ? l.genes.strength
+              : stat === "intelligence"
+                ? l.genes.intelligence
+                : stat === "speed"
+                  ? l.genes.speed
+                  : l.genes.size;
+        if (v > bestVal) {
+          bestVal = v;
+          bestId = l.id;
+        }
+      }
+      if (bestId >= 0) setSelectedLifeId(bestId);
+    },
+    [setSelectedLifeId]
+  );
 
   const handleCellClick = useCallback(
     (x: number, y: number) => {
@@ -1269,7 +1309,16 @@ export default function SimulationView({
                           backgroundColor: `rgb(${s.r}, ${s.g}, ${s.b})`,
                         }}
                       />
-                      <span className="species-label">{s.label}</span>
+                      <span className="species-text">
+                        <span className="species-label">{s.label}</span>
+                        {s.archetype.length > 0 && (
+                          <span className="species-archetype">
+                            {s.archetype
+                              .map((k) => t(k))
+                              .join(t("behavior_phrase.sep"))}
+                          </span>
+                        )}
+                      </span>
                       <span className="species-count">{s.count}</span>
                     </li>
                   );
@@ -1430,6 +1479,10 @@ export default function SimulationView({
               </div>
             )}
           </div>
+          {/* v1.30: 真の全画面時は画面隅に控えめにブランドを表示 */}
+          {trueFullscreen && (
+            <div className="fullscreen-brand">LIFE GRID</div>
+          )}
         </div>
         {/* モバイル縦画面：マップ直下に主要操作（再生／ステップ／速度） */}
         <div className="mobile-quick-controls">
@@ -1584,6 +1637,28 @@ export default function SimulationView({
         className="sim-cell sim-right"
         style={observeMode ? undefined : { maxHeight: `${columnMaxHeight}px` }}
       >
+        {/* v1.30 (N3): 最上位個体へジャンプ（最強/最賢/最速/最大/最古） */}
+        <div className="focus-top-bar">
+          <span className="focus-top-label">{t("focus.label")}</span>
+          {(
+            [
+              ["strength", "focus.strongest"],
+              ["intelligence", "focus.smartest"],
+              ["speed", "focus.fastest"],
+              ["size", "focus.biggest"],
+              ["age", "focus.oldest"],
+            ] as const
+          ).map(([k, lbl]) => (
+            <button
+              key={k}
+              type="button"
+              className="btn focus-top-btn"
+              onClick={() => selectTopLife(k)}
+            >
+              {t(lbl)}
+            </button>
+          ))}
+        </div>
         <section className="panel">
           <button
             type="button"
@@ -1718,40 +1793,48 @@ export default function SimulationView({
                   <div className="info-grid-2 info-compact">
                     <InfoRow
                       label={t("info.vision")}
+                      hint={t("info.vision_hint")}
                       value={selectedLife.genes.vision}
                     />
                     <InfoRow
                       label={t("info.move_speed")}
+                      hint={t("info.move_speed_hint")}
                       value={`${selectedLife.genes.speed} / 999${
                         selectedLife.genes.speed > 100 ? "  ⚠" : ""
                       }`}
                     />
                     <InfoRow
                       label={t("info.size")}
+                      hint={t("info.size_hint")}
                       value={selectedLife.genes.size.toFixed(0)}
                     />
                     <InfoRow
                       label={t("info.strength")}
+                      hint={t("info.strength_hint")}
                       value={`${selectedLife.genes.strength.toFixed(0)} / 999${
                         selectedLife.genes.strength > 100 ? "  ⚠" : ""
                       }`}
                     />
                     <InfoRow
                       label={t("info.intelligence")}
+                      hint={t("info.intelligence_hint")}
                       value={`${selectedLife.genes.intelligence} / 999${
                         selectedLife.genes.intelligence > 100 ? "  ⚠" : ""
                       }`}
                     />
                     <InfoRow
                       label={t("info.birth_threshold")}
+                      hint={t("info.birth_threshold_hint")}
                       value={`${selectedLife.genes.birthThreshold.toFixed(0)} / 300`}
                     />
                     <InfoRow
                       label={t("info.lifespan")}
+                      hint={t("info.lifespan_hint")}
                       value={selectedLife.genes.lifespan.toFixed(0)}
                     />
                     <InfoRow
                       label={t("info.offspring_count")}
+                      hint={t("info.offspring_count_hint")}
                       value={`${selectedLife.genes.offspringCount} / 3`}
                     />
                   </div>
@@ -2461,13 +2544,15 @@ function InfoRow({
   label,
   value,
   mono,
+  hint,
 }: {
   label: string;
   value: string | number;
   mono?: boolean;
+  hint?: string;
 }) {
   return (
-    <div className="info-row">
+    <div className="info-row" title={hint}>
       <dt>{label}</dt>
       <dd className={mono ? "mono" : undefined}>{value}</dd>
     </div>
@@ -2477,7 +2562,7 @@ function InfoRow({
 function computeTopSpecies(world: World, max = 30): SpeciesEntry[] {
   const map = new Map<
     string,
-    { count: number; r: number; g: number; b: number }
+    { count: number; r: number; g: number; b: number; archetype: string[] }
   >();
   for (const life of world.lives) {
     if (!life.alive) continue;
@@ -2490,6 +2575,8 @@ function computeTopSpecies(world: World, max = 30): SpeciesEntry[] {
         r: binCenterColor(life.genes.r),
         g: binCenterColor(life.genes.g),
         b: binCenterColor(life.genes.b),
+        // v1.30 (N1): 最初に見つかった個体を代表としてアーキタイプを算出（同種は近い性質）。
+        archetype: describeBehaviorPhrase(life),
       });
     }
   }
@@ -2502,6 +2589,7 @@ function computeTopSpecies(world: World, max = 30): SpeciesEntry[] {
       r: v.r,
       g: v.g,
       b: v.b,
+      archetype: v.archetype,
     });
   }
   entries.sort((a, b) => b.count - a.count);

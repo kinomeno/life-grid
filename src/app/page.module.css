@@ -176,6 +176,39 @@
   overflow: hidden;
 }
 
+/* v1.30 (N3): 最上位個体ジャンプのツールバー（選択生命カラム上部）。 */
+:global(.focus-top-bar) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+:global(.focus-top-label) {
+  font-size: 11px;
+  color: #777;
+  margin-right: 2px;
+}
+:global(.focus-top-btn) {
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+/* v1.30: 真の全画面時の控えめなブランド表示（画面右下隅）。 */
+:global(.fullscreen-brand) {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.4);
+  pointer-events: none;
+  user-select: none;
+  z-index: 10000;
+}
+
 :global(.simulation-canvas) {
   display: block;
   background: var(--canvas-bg);
@@ -650,6 +683,21 @@
   color: var(--text-soft);
   font-variant-numeric: tabular-nums;
   font-size: 11px;
+}
+
+/* v1.30 (N1): 系統リストの中央列＝ラベル＋アーキタイプ（2 行）。 */
+:global(.species-text) {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+:global(.species-archetype) {
+  font-size: 10px;
+  color: var(--text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 :global(.species-empty) {
