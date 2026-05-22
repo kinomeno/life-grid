@@ -2170,6 +2170,22 @@ function reproduceLife(
     const childPos = emptyPositions[i];
     let childGenes = mutatGenes(parent.genes, effectiveMutationRate, rng);
     childGenes = applyDisabledGenes(childGenes, world.params.disabledGenes);
+    const childSpeciesId = speciesIdFromGenes(childGenes);
+    // v1.30 (H8): 誕生時に変異した主要遺伝子と「新種か」を記録（観察用ハイライト）。
+    const pg = parent.genes;
+    const muts: string[] = [];
+    if (Math.abs(childGenes.vision - pg.vision) > 0.5) muts.push("info.vision");
+    if (Math.abs(childGenes.speed - pg.speed) > 0.5) muts.push("info.move_speed");
+    if (Math.abs(childGenes.size - pg.size) > 0.5) muts.push("info.size");
+    if (Math.abs(childGenes.strength - pg.strength) > 0.5) muts.push("info.strength");
+    if (Math.abs(childGenes.intelligence - pg.intelligence) > 0.5)
+      muts.push("info.intelligence");
+    if (Math.abs(childGenes.birthThreshold - pg.birthThreshold) > 0.5)
+      muts.push("info.birth_threshold");
+    if (Math.abs(childGenes.lifespan - pg.lifespan) > 0.5)
+      muts.push("info.lifespan");
+    if (Math.abs(childGenes.offspringCount - pg.offspringCount) > 0.5)
+      muts.push("info.offspring_count");
 
     const idx = childPos.y * world.width + childPos.x;
     const childLife: Life = {
@@ -2181,13 +2197,16 @@ function reproduceLife(
       prevY: parent.y,
       energy: childEnergy,
       age: 0,
-      speciesId: speciesIdFromGenes(childGenes),
+      speciesId: childSpeciesId,
       genes: childGenes,
       alive: true,
       moveAccum: 0,
       // v1.10: 向きは初期 0（静止状態）
       dx: 0,
       dy: 0,
+      // v1.30 (H8): 観察用ハイライト
+      bornMutations: muts.length ? muts : undefined,
+      bornNewSpecies: childSpeciesId !== parent.speciesId || undefined,
     };
     world.lives.push(childLife);
     world.livesById.set(childLife.id, childLife);

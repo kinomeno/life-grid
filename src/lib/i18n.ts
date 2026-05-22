@@ -150,6 +150,9 @@ const ja: Dictionary = {
   "info.birth_threshold_hint": "出産閾値。所持エネルギーがこれを超えると出産（低=多産r戦略/高=少産K戦略）。",
   "info.lifespan_hint": "寿命（ターン）。これを超えると老衰で死亡。",
   "info.offspring_count_hint": "1回の出産で生まれる子の数（親＋子で均等分割）。",
+  "info.new_species": "新種誕生",
+  "info.mutated": "変異",
+  "info.avg_share": "平均利他",
   "info.protect": "保護モード（戦闘・寿命・天変地異から守る）",
 
   "info.untracked": "未選択",
@@ -414,6 +417,9 @@ const en: Dictionary = {
   "info.birth_threshold_hint": "Gives birth when owned energy exceeds this (low=prolific r / high=K strategy).",
   "info.lifespan_hint": "Lifespan in turns; dies of old age beyond it.",
   "info.offspring_count_hint": "Offspring per birth (energy split evenly among parent + children).",
+  "info.new_species": "New species",
+  "info.mutated": "Mutated",
+  "info.avg_share": "Avg altruism",
   "info.protect": "Protect (immune to combat / aging / cataclysm)",
 
   "info.untracked": "None selected",

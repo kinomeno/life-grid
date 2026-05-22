@@ -8,6 +8,8 @@ export type WorldStats = {
   averageIntelligence: number;
   maxIntelligence: number;
   averageSpeed: number;
+  /** v1.30 (N2): 平均利他性（wShare）。エネルギー共有ONの時に意味を持つ。 */
+  averageShare: number;
 };
 
 export function computeStats(world: World): WorldStats {
@@ -22,6 +24,7 @@ export function computeStats(world: World): WorldStats {
       averageIntelligence: 0,
       maxIntelligence: 0,
       averageSpeed: 0,
+      averageShare: 0,
     };
   }
 
@@ -29,6 +32,7 @@ export function computeStats(world: World): WorldStats {
   let intSum = 0;
   let intMax = -Infinity;
   let speedSum = 0;
+  let shareSum = 0;
   const speciesSet = new Set<string>();
 
   for (let i = 0; i < n; i++) {
@@ -38,6 +42,7 @@ export function computeStats(world: World): WorldStats {
     intSum += l.genes.intelligence;
     if (l.genes.intelligence > intMax) intMax = l.genes.intelligence;
     speedSum += l.genes.speed;
+    shareSum += l.genes.wShare;
     speciesSet.add(l.speciesId);
   }
 
@@ -49,6 +54,7 @@ export function computeStats(world: World): WorldStats {
     averageIntelligence: intSum / n,
     maxIntelligence: intMax === -Infinity ? 0 : intMax,
     averageSpeed: speedSum / n,
+    averageShare: shareSum / n,
   };
 }
 

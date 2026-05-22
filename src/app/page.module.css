@@ -700,6 +700,27 @@
   white-space: nowrap;
 }
 
+/* v1.30 (H8): 誕生時の新種・変異ハイライトのチップ。 */
+:global(.born-chips) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0;
+}
+:global(.born-chip) {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+:global(.born-newspecies) {
+  background: rgba(220, 120, 40, 0.18);
+  color: #b5651d;
+}
+:global(.born-mutation) {
+  background: rgba(60, 140, 200, 0.15);
+  color: #2a6f97;
+}
+
 :global(.species-empty) {
   color: var(--text-soft);
   font-size: 11px;
