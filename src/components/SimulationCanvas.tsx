@@ -179,8 +179,20 @@ function drawSelectedPath(
   ctx.restore();
 }
 
+/** トーラスを考慮して a→b を t で内挿（最短経路）。 */
+function torusLerp(a: number, b: number, t: number, size: number): number {
+  let d = b - a;
+  if (d > size / 2) d -= size;
+  else if (d < -size / 2) d += size;
+  let v = a + d * t;
+  if (v < 0) v += size;
+  else if (v >= size) v -= size;
+  return v;
+}
+
 /**
  * v1.30 (案1/B): 仲間へのエネルギー提供の演出。小○がドナー→受け手へ流れる。
+ * ドナー/受け手の現在位置を追従するので、移動しても空白マスへ向かわない。
  * 表示は速度・マップサイズ依存で間引く（100画面以上は <10倍速、50画面以下は <100倍速）。
  * サイズ・不透明度は一定（量には依存させない）。色は種代表色（フラッシュに保存済み）。
  */
@@ -202,8 +214,24 @@ function drawShareFlashes(
   for (const f of flashes) {
     const t = (world.turn - f.startTurn + animPhase) / f.durationTurns;
     if (t < 0 || t > 1) continue;
-    const ix = interp(f.fromX, f.toX, t, world.width);
-    const iy = interp(f.fromY, f.toY, t, world.height);
+    // 始点・終点は対象生命を追従（移動しても空白マスへ向かわない）。
+    // 生きていれば現在の補間位置、死亡/消失時のみ保存座標へフォールバック。
+    let fx = f.fromX;
+    let fy = f.fromY;
+    let tx = f.toX;
+    let ty = f.toY;
+    const donor = world.livesById.get(f.fromId);
+    if (donor && donor.alive) {
+      fx = interp(donor.prevX, donor.x, animPhase, world.width);
+      fy = interp(donor.prevY, donor.y, animPhase, world.height);
+    }
+    const recip = world.livesById.get(f.toId);
+    if (recip && recip.alive) {
+      tx = interp(recip.prevX, recip.x, animPhase, world.width);
+      ty = interp(recip.prevY, recip.y, animPhase, world.height);
+    }
+    const ix = torusLerp(fx, tx, t, world.width);
+    const iy = torusLerp(fy, ty, t, world.height);
     const cx = ix * cellSize + half;
     const cy = iy * cellSize + half;
     ctx.beginPath();

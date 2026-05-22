@@ -269,6 +269,9 @@ export type CombatFlash = {
 
 /** v1.30 (案1/B): 仲間へのエネルギー提供の演出。小○がドナー→受け手へ流れる。 */
 export type ShareFlash = {
+  /** ドナー/受け手の個体ID。描画時は現在位置を追従し、死亡/消失時のみ下の保存座標を使う。 */
+  fromId: number;
+  toId: number;
   fromX: number;
   fromY: number;
   toX: number;

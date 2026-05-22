@@ -2247,6 +2247,8 @@ function shareEnergyPhase(world: World): void {
     // 表示自体は速度・マップサイズ依存で SimulationCanvas 側が間引く。
     if (world.shareFlashes.length < MAX_SHARE_FLASHES) {
       world.shareFlashes.push({
+        fromId: donor.id,
+        toId: bestRecipient.id,
         fromX: dx0,
         fromY: dy0,
         toX: bestRecipient.x,
