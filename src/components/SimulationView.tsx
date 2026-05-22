@@ -23,7 +23,7 @@ import {
   stepWorld,
 } from "@/lib/world";
 import type { DisabledGeneFlags, WorldEvent } from "@/lib/types";
-import { speciesLabel } from "@/lib/species";
+import { speciesLabel, binCenterColor } from "@/lib/species";
 import { encodeGeneId, truncateGeneId } from "@/lib/geneId";
 import { isUnlocked } from "@/lib/unlock";
 import ShareXButton from "./ShareXButton";
@@ -1654,7 +1654,7 @@ export default function SimulationView({
                         />
                         <InfoRow
                           label={t("info.rgb")}
-                          value={`(${selectedLife.genes.r},${selectedLife.genes.g},${selectedLife.genes.b})`}
+                          value={`(${binCenterColor(selectedLife.genes.r)},${binCenterColor(selectedLife.genes.g)},${binCenterColor(selectedLife.genes.b)})`}
                         />
                         <InfoRow
                           label={t("info.position")}
@@ -2174,7 +2174,7 @@ export default function SimulationView({
           <span
             className="species-dot"
             style={{
-              backgroundColor: `rgb(${hoverInfo.life.genes.r}, ${hoverInfo.life.genes.g}, ${hoverInfo.life.genes.b})`,
+              backgroundColor: `rgb(${binCenterColor(hoverInfo.life.genes.r)}, ${binCenterColor(hoverInfo.life.genes.g)}, ${binCenterColor(hoverInfo.life.genes.b)})`,
             }}
           />
           <strong>ID {hoverInfo.life.id}</strong>
@@ -2237,7 +2237,7 @@ function SelectedLifeBlock({
       <span
         className="species-dot"
         style={{
-          backgroundColor: `rgb(${life.genes.r}, ${life.genes.g}, ${life.genes.b})`,
+          backgroundColor: `rgb(${binCenterColor(life.genes.r)}, ${binCenterColor(life.genes.g)}, ${binCenterColor(life.genes.b)})`,
         }}
       />
       <div className="selected-text">
@@ -2453,9 +2453,9 @@ function computeTopSpecies(world: World, max = 30): SpeciesEntry[] {
     } else {
       map.set(life.speciesId, {
         count: 1,
-        r: life.genes.r,
-        g: life.genes.g,
-        b: life.genes.b,
+        r: binCenterColor(life.genes.r),
+        g: binCenterColor(life.genes.g),
+        b: binCenterColor(life.genes.b),
       });
     }
   }

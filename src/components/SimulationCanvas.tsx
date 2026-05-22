@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { ENERGY_DISPLAY_LEVELS, ENERGY_MAX } from "@/lib/constants";
+import { binCenterColor } from "@/lib/species";
 import type { Life, World } from "@/lib/types";
 
 type Props = {
@@ -340,7 +341,13 @@ function drawLives(
 
   for (const life of world.lives) {
     if (!life.alive) continue;
-    const { r, g, b } = life.genes;
+    // v1.30 (H4 再設計): 表示色は「種代表色」（生 RGB をビン中心に量子化）。
+    // 同種は画面上まったく同色になり、「色＝仲間」を明快にする。生 RGB は仲間タグとして
+    // 内部で微ドリフトし、ビンを越えた瞬間が種分化＝表示色のジャンプになる。
+    const gr = life.genes;
+    const r = binCenterColor(gr.r);
+    const g = binCenterColor(gr.g);
+    const b = binCenterColor(gr.b);
     const isTracked =
       !isTracking || life.speciesId === trackedSpeciesId;
     const fadeAlpha = fadeMap.get(life.id);

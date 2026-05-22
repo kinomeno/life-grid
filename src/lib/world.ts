@@ -50,12 +50,18 @@ import {
   GENE_STRENGTH_MIN,
   GENE_VISION_MAX,
   GENE_VISION_MIN,
+  COLOR_DRIFT_SCALE,
   INITIAL_ENERGY_RATIO,
   MIN_REPRODUCTIVE_AGE_RATIO,
   OFFSPRING_GENE_ENABLED,
 } from "./constants";
 import { mulberry32, randomInt, randomRange, type RNG } from "./random";
-import { speciesIdFromGenes, speciesLabel } from "./species";
+import {
+  speciesIdFromGenes,
+  speciesLabel,
+  speciesColorFromGenes,
+  binCenterColor,
+} from "./species";
 import { makeStatsSample } from "./stats";
 import type {
   DisabledGeneFlags,
@@ -105,29 +111,13 @@ export function defaultDisabledGenes(): DisabledGeneFlags {
  * 稼働遺伝子フラグに従って、無効化された遺伝子を固定値で上書きする。
  * 子個体生成時・初期世代生成時に呼び出される。
  */
-/**
- * v1.30 (H4): 体色を主要パラメータから決定論的に算出する（色＝戦略の可視化）。
- *   R = 速度 / G = 知能 / B = 強さ を各「通常レンジ」で 0〜255 に正規化。
- *   速い=赤・賢い=緑・強い=青、混合戦略は混色。種ビニング（RGB）はそのまま流用するため
- *   「色ビン＝戦略クラスタ＝種」になる。r,g,b は遺伝子だが派生値として常に上書きし、
- *   継承・突然変異はしない（収斂進化＝同戦略は同色に）。
- */
-function applyPhenotypeColor(genes: Genes): void {
-  const ch = (v: number, cap: number): number => {
-    const t = v <= 0 ? 0 : v >= cap ? 1 : v / cap;
-    return Math.round(t * 255);
-  };
-  genes.r = ch(genes.speed, GENE_SPEED_NORMAL_CAP);
-  genes.g = ch(genes.intelligence, ACCURACY_FULL_INTEL);
-  genes.b = ch(genes.strength, GENE_STRENGTH_NORMAL_CAP);
-}
-
 export function applyDisabledGenes(
   genes: Genes,
   disabled: DisabledGeneFlags
 ): Genes {
   const out = { ...genes };
-  // v1.30 (H4): 体色は遺伝子ではなく表現型から算出するため、旧「体色 RGB 無効化」分岐は廃止。
+  // v1.30 (H4 再設計): 体色 r,g,b は「仲間タグ」遺伝子。能力から算出せず、継承＋微ドリフト
+  // （randomGenes / mutatGenes 側で決定）。ここでは触れない。旧「体色 RGB 無効化」分岐も廃止。
   if (disabled.vision) out.vision = FIXED_GENE_VALUES.vision;
   if (disabled.speed) out.speed = FIXED_GENE_VALUES.speed;
   if (disabled.size) out.size = FIXED_GENE_VALUES.size;
@@ -136,10 +126,6 @@ export function applyDisabledGenes(
   if (disabled.birthThreshold)
     out.birthThreshold = FIXED_GENE_VALUES.birthThreshold;
   if (disabled.lifespan) out.lifespan = FIXED_GENE_VALUES.lifespan;
-  // v1.30 (H4): 最終パラメータ（無効化反映後）から体色を再算出（色＝表現型）。
-  // createWorld の初期世代・reproduceLife の子個体とも本関数を通るため、ここが
-  // 全個体共通の体色決定ポイントになる。
-  applyPhenotypeColor(out);
   return out;
 }
 
@@ -315,10 +301,11 @@ function randomGenes(rng: RNG): Genes {
       )
     );
   return {
-    // v1.30 (H4): 体色は表現型から算出。ここはプレースホルダ（applyDisabledGenes で上書き）。
-    r: 0,
-    g: 0,
-    b: 0,
+    // v1.30 (H4 再設計): 体色は「仲間タグ」。初期世代はランダム色で多様な系統からスタートし、
+    // 以降は継承＋微ドリフト（mutatGenes）で系統ごとに色が分かれていく。
+    r: randomInt(rng, 0, 256),
+    g: randomInt(rng, 0, 256),
+    b: randomInt(rng, 0, 256),
     vision: randomInt(rng, GENE_VISION_MIN, GENE_VISION_MAX + 1),
     // v1.11: 初期分布は通常レンジ（1〜100）。突然変異で 100 超のミュータントが稀に発生。
     speed: randomInt(rng, GENE_SPEED_MIN, GENE_SPEED_NORMAL_CAP + 1),
@@ -366,7 +353,8 @@ export function mutatGenes(parentGenes: Genes, mutationRate: number, rng: RNG): 
     }
     return gene;
   };
-  // v1.30 (H4): r,g,b は突然変異させない（体色は applyDisabledGenes で表現型から再算出）。
+  // v1.30 (H4 再設計): r,g,b は「仲間タグ」。親色を継承（{ ...parentGenes } 済み）し、
+  // 能力・行動が変化した分だけランダム方向に微ドリフトさせる（末尾で適用）。
   genes.vision = Math.round(mutate(genes.vision, GENE_VISION_MIN, GENE_VISION_MAX));
   // v1.11: 速度（1〜999）：strength/intelligence と同じく ±3 相当（factor 0.003 で範囲 998 に対し ±3）
   // 100 超のミュータントは稀に発生 → 数世代以内に死亡（短命）。
@@ -415,6 +403,36 @@ export function mutatGenes(parentGenes: Genes, mutationRate: number, rng: RNG): 
   genes.wLoyalty = Math.round(mutate(genes.wLoyalty, GENE_WEIGHT_MIN, GENE_WEIGHT_MAX, 0.05));
   genes.wRepro = Math.round(mutate(genes.wRepro, GENE_WEIGHT_MIN, GENE_WEIGHT_MAX, 0.05));
   genes.wStarvSensitive = Math.round(mutate(genes.wStarvSensitive, GENE_WEIGHT_MIN, GENE_WEIGHT_MAX, 0.05));
+
+  // v1.30 (H4 再設計): 体色ドリフト。
+  // 能力・行動が親からどれだけ変化したか（各遺伝子を意味のあるレンジで正規化した合計）に
+  // 比例して、体色 r,g,b をランダム方向へ動かす。変化ゼロなら色も不変（安定系統＝同色＝同種）。
+  // 蓄積して 48 ビンを越えた子が新種になる。方向はランダムなので、別系統が同じ能力に
+  // 収斂しても色は別＝別種として表現される。
+  const dnorm = (a: number, b: number, range: number): number =>
+    range > 0 ? Math.abs(a - b) / range : 0;
+  const changeMag =
+    dnorm(genes.speed, parentGenes.speed, GENE_SPEED_NORMAL_CAP) +
+    dnorm(genes.strength, parentGenes.strength, GENE_STRENGTH_NORMAL_CAP) +
+    dnorm(genes.intelligence, parentGenes.intelligence, GENE_INTELLIGENCE_NORMAL_CAP) +
+    dnorm(genes.size, parentGenes.size, GENE_SIZE_MAX - GENE_SIZE_MIN) +
+    dnorm(genes.vision, parentGenes.vision, GENE_VISION_MAX - GENE_VISION_MIN) +
+    dnorm(genes.birthThreshold, parentGenes.birthThreshold, GENE_BIRTH_THRESHOLD_MAX - GENE_BIRTH_THRESHOLD_MIN) +
+    dnorm(genes.lifespan, parentGenes.lifespan, GENE_LIFESPAN_MAX - GENE_LIFESPAN_MIN) +
+    dnorm(genes.offspringCount, parentGenes.offspringCount, GENE_OFFSPRING_MAX - GENE_OFFSPRING_MIN) +
+    dnorm(genes.wAppetite, parentGenes.wAppetite, GENE_WEIGHT_MAX - GENE_WEIGHT_MIN) +
+    dnorm(genes.wPredation, parentGenes.wPredation, GENE_WEIGHT_MAX - GENE_WEIGHT_MIN) +
+    dnorm(genes.wCaution, parentGenes.wCaution, GENE_WEIGHT_MAX - GENE_WEIGHT_MIN) +
+    dnorm(genes.wGregarious, parentGenes.wGregarious, GENE_WEIGHT_MAX - GENE_WEIGHT_MIN) +
+    dnorm(genes.wLoyalty, parentGenes.wLoyalty, GENE_WEIGHT_MAX - GENE_WEIGHT_MIN) +
+    dnorm(genes.wRepro, parentGenes.wRepro, GENE_WEIGHT_MAX - GENE_WEIGHT_MIN) +
+    dnorm(genes.wStarvSensitive, parentGenes.wStarvSensitive, GENE_WEIGHT_MAX - GENE_WEIGHT_MIN);
+  if (changeMag > 0) {
+    const amt = changeMag * COLOR_DRIFT_SCALE;
+    genes.r = clamp(Math.round(genes.r + (rng() * 2 - 1) * amt), 0, 255);
+    genes.g = clamp(Math.round(genes.g + (rng() * 2 - 1) * amt), 0, 255);
+    genes.b = clamp(Math.round(genes.b + (rng() * 2 - 1) * amt), 0, 255);
+  }
   return genes;
 }
 
@@ -739,7 +757,7 @@ function detectUniqueEvents(world: World): void {
           turn: world.turn,
           type: "longevity",
           speciesId: oldest.speciesId,
-          rgb: { r: oldest.genes.r, g: oldest.genes.g, b: oldest.genes.b },
+          rgb: speciesColorFromGenes(oldest.genes),
           message: {
             ja: `最長寿命 ${bucket} ターン到達 — ${speciesLabel(
               oldest.speciesId
@@ -779,9 +797,7 @@ function detectUniqueEvents(world: World): void {
         turn: world.turn,
         type: "topSpecies",
         speciesId: topId,
-        rgb: sample
-          ? { r: sample.genes.r, g: sample.genes.g, b: sample.genes.b }
-          : undefined,
+        rgb: sample ? speciesColorFromGenes(sample.genes) : undefined,
         message: {
           ja: `最大繁殖系統が ${speciesLabel(topId)} に交代（${topCount} 体）`,
           en: `Top species shifted to ${speciesLabel(topId)} (${topCount} alive)`,
@@ -834,9 +850,7 @@ function detectUniqueEvents(world: World): void {
         turn: world.turn,
         type: "survival",
         speciesId: id,
-        rgb: sample
-          ? { r: sample.genes.r, g: sample.genes.g, b: sample.genes.b }
-          : undefined,
+        rgb: sample ? speciesColorFromGenes(sample.genes) : undefined,
         message: {
           ja: `生存系統 ${speciesLabel(id)} — ${count} 体が大絶滅を生き延びた`,
           en: `Survivor ${speciesLabel(id)} — ${count} survived the mass extinction`,
@@ -882,9 +896,9 @@ function detectSpecialistSpecies(world: World): void {
         count: 1,
         sumStrength: l.genes.strength,
         sumIntelligence: l.genes.intelligence,
-        r: l.genes.r,
-        g: l.genes.g,
-        b: l.genes.b,
+        r: binCenterColor(l.genes.r),
+        g: binCenterColor(l.genes.g),
+        b: binCenterColor(l.genes.b),
       });
     }
   }
@@ -950,9 +964,9 @@ function detectSpeciesEvents(world: World): void {
     } else {
       cur.set(l.speciesId, {
         count: 1,
-        r: l.genes.r,
-        g: l.genes.g,
-        b: l.genes.b,
+        r: binCenterColor(l.genes.r),
+        g: binCenterColor(l.genes.g),
+        b: binCenterColor(l.genes.b),
       });
     }
   }
@@ -2249,9 +2263,9 @@ function handleCombat(world: World, life: Life): void {
         attackerLifeId: life.id,
         fallbackX: life.x,
         fallbackY: life.y,
-        victimR: opponent.genes.r,
-        victimG: opponent.genes.g,
-        victimB: opponent.genes.b,
+        victimR: binCenterColor(opponent.genes.r),
+        victimG: binCenterColor(opponent.genes.g),
+        victimB: binCenterColor(opponent.genes.b),
         startTurn: world.turn,
         durationTurns: 8,
       });

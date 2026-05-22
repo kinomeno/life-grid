@@ -36,3 +36,27 @@ export function speciesLabel(speciesId: string): string {
   const code = rb * 36 + gb * 6 + bb;
   return `${dominant}-${String(code).padStart(2, "0")}`;
 }
+
+/**
+ * v1.30 (H4 再設計): 表示用の 1 チャンネル「種代表色」。生 RGB をビン中心に量子化する。
+ * 同じ種(speciesId)の個体はすべて同じ表示色になり、「色＝仲間」を視覚的に明快にする。
+ * 内部の生 RGB（仲間タグ・微ドリフトする遺伝子）は speciesIdFromGenes / geneId 側で使う。
+ */
+export function binCenterColor(v: number): number {
+  const c =
+    Math.floor(v / SPECIES_RGB_BIN) * SPECIES_RGB_BIN + (SPECIES_RGB_BIN >> 1);
+  return c > 255 ? 255 : c;
+}
+
+/** 表示用の種代表色（ビン中心色）。speciesIdFromGenes と同じビンを使う。 */
+export function speciesColorFromGenes(genes: Genes): {
+  r: number;
+  g: number;
+  b: number;
+} {
+  return {
+    r: binCenterColor(genes.r),
+    g: binCenterColor(genes.g),
+    b: binCenterColor(genes.b),
+  };
+}

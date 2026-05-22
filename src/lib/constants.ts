@@ -157,6 +157,14 @@ export const ABSORB_RATE = 0.10;
 
 export const SPECIES_RGB_BIN = 48;
 
+// v1.30 (H4 再設計): 体色は「仲間タグ」。能力・行動が親からどれだけ変化したか（正規化合計）に
+// 比例して、体色をランダム方向へ微ドリフトさせる。SCALE が大きいほど分化が速い。
+//   変化ゼロ → 色も不変（安定系統＝同色＝同種）。
+//   蓄積して 48 ビン（SPECIES_RGB_BIN）を越えた子が新種になる。
+//   方向はランダムなので、別系統が同じ能力に収斂しても色は別＝別種（収斂進化を表現できる）。
+// 表示色・仲間認識は既存の RGB ビンを流用（表示はビン中心色に量子化）。
+export const COLOR_DRIFT_SCALE = 90;
+
 export const ENERGY_DISPLAY_LEVELS = 8;
 
 // v1.20: REPRODUCTION_ENERGY_THRESHOLD_RATIO は出産閾値方式への移行で廃止。
