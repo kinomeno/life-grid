@@ -160,12 +160,13 @@ export default function SimulationView({
   // パネル折りたたみ状態。タイトル click で開閉。
   // モバイル縦画面では既定で折りたたむ（観察モード）。
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
+    // v1.30 (N3): 「注目選択」は既定で折りたたむ。
+    if (typeof window === "undefined") return new Set(["focus"]);
     const isMobilePortrait =
       window.innerWidth <= 520 && window.innerHeight > window.innerWidth;
     return isMobilePortrait
-      ? new Set(["global", "species", "life"])
-      : new Set();
+      ? new Set(["global", "species", "life", "focus"])
+      : new Set(["focus"]);
   });
   const toggleSection = useCallback((name: string) => {
     setCollapsedSections((prev) => {
@@ -1645,28 +1646,6 @@ export default function SimulationView({
         className="sim-cell sim-right"
         style={observeMode ? undefined : { maxHeight: `${columnMaxHeight}px` }}
       >
-        {/* v1.30 (N3): 最上位個体へジャンプ（最強/最賢/最速/最大/最古） */}
-        <div className="focus-top-bar">
-          <span className="focus-top-label">{t("focus.label")}</span>
-          {(
-            [
-              ["strength", "focus.strongest"],
-              ["intelligence", "focus.smartest"],
-              ["speed", "focus.fastest"],
-              ["size", "focus.biggest"],
-              ["age", "focus.oldest"],
-            ] as const
-          ).map(([k, lbl]) => (
-            <button
-              key={k}
-              type="button"
-              className="btn focus-top-btn"
-              onClick={() => selectTopLife(k)}
-            >
-              {t(lbl)}
-            </button>
-          ))}
-        </div>
         <section className="panel">
           <button
             type="button"
@@ -1907,6 +1886,42 @@ export default function SimulationView({
                 <p className="empty-sub">{t("info.untracked_hint")}</p>
               </>
             )
+          )}
+        </section>
+        {/* v1.30 (N3): 注目選択（最上位個体へジャンプ）。選択生命の下・既定は折りたたみ。 */}
+        <section className="panel">
+          <button
+            type="button"
+            className="panel-title panel-title-btn"
+            onClick={() => toggleSection("focus")}
+            aria-expanded={!isCollapsed("focus")}
+          >
+            <span className="panel-chevron">
+              {isCollapsed("focus") ? "▶" : "▼"}
+            </span>
+            <span>{t("panel.focus")}</span>
+          </button>
+          {!isCollapsed("focus") && (
+            <div className="focus-top-bar">
+              {(
+                [
+                  ["strength", "focus.strongest"],
+                  ["intelligence", "focus.smartest"],
+                  ["speed", "focus.fastest"],
+                  ["size", "focus.biggest"],
+                  ["age", "focus.oldest"],
+                ] as const
+              ).map(([k, lbl]) => (
+                <button
+                  key={k}
+                  type="button"
+                  className="btn focus-top-btn"
+                  onClick={() => selectTopLife(k)}
+                >
+                  {t(lbl)}
+                </button>
+              ))}
+            </div>
           )}
         </section>
       </aside>

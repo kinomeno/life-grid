@@ -182,8 +182,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--line);
+  padding: 4px 0 6px;
 }
 :global(.focus-top-label) {
   font-size: 11px;
