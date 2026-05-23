@@ -135,9 +135,11 @@ const SECTIONS_JA: Section[] = [
     body: [
       {
         lines: [
-          "近いRGB値を持つ個体を同系統として扱います。",
+          "体色は「仲間（系統）」を表します。近い体色の個体が同じ系統です。",
+          "能力・行動が変化すると体色も少しずつ変化し、十分に変わると",
+          "新しい色＝新種として枝分かれします（種分化）。同種は画面上で同じ色。",
+          "別の系統が偶然似た能力に進化（収斂進化）しても、色は別＝別種のまま。",
           "系統名は自動生成されます（例：R-10, B-04, G-15）。",
-          "色によって直感的に系統を識別できることを優先しています。",
         ],
       },
       {
@@ -289,8 +291,8 @@ const SECTIONS_JA: Section[] = [
             heading: "用途",
             lines: [
               "・実験・観察：「強さだけが進化する世界」「視野以外を全て止めた世界」など。",
-              "・体色（RGB）をオフ：全て灰色になり、系統の視認性は失われますが、能力進化のみ集中して観察できます。",
               "・全 ON / 全 OFF ボタンで一括切替可能。",
+              "・「エネルギー共有（利他）」：ONで困窮した近縁へ余剰エネルギーを分け与える血縁淘汰の実験ができます（既定OFF）。",
             ],
           },
         ],
@@ -308,8 +310,9 @@ const SECTIONS_JA: Section[] = [
           "・速度ボタン：x1 / x10 / x100 / 一時停止",
           "・スペースキー：再生／一時停止のトグル（入力フィールド外で有効）",
           "・拡大縮小：マップ右下の ＋ / − ボタン（等倍時はスクロールバー非表示）",
-          "・行動ログ：誕生・絶滅・時代変化など世界史を確認（開いている間は時間停止）",
-          "・統計グラフ：時系列＋遺伝子分布（ヒストグラム）両対応",
+          "・行動ログ：誕生・絶滅など世界史を確認。「年表」タブで主要イベントを時系列表示",
+          "・統計グラフ：時系列／遺伝子分布／「戦略散布」（速度×知能・点の色＝種）",
+          "・注目選択：選択生命の下「注目選択」から最強/最賢/最速/最大/最古へジャンプ",
           "・PNG保存：現在のマップを画像として保存",
           "・言語切替：上部バー右端のボタンで JA / EN を切替",
           "・タイトル戻り：左上の「LIFE GRID」をクリック（確認ダイアログあり）",
@@ -321,6 +324,7 @@ const SECTIONS_JA: Section[] = [
       {
         heading: "マップ操作モード（マップ下のアイコン）",
         lines: [
+          "🎬 シネマ追尾：注目個体（最大勢力/最古参/最強）へカメラが寄って自動追従",
           "⚡ 投入：マップクリックで局所にエネルギー注入（半径 3）",
           "☄🌵🌸 天変地異召喚：クリック位置に隕石／旱魃／大開花を発生",
           "再度同じボタンでモード解除。",
@@ -353,6 +357,8 @@ const SECTIONS_JA: Section[] = [
       {
         heading: "バージョンごとの新機能",
         lines: [
+          "v1.30: 体色＝仲間(系統タグ)・利他(エネルギー共有/任意)・25画面=観察モード・戦略散布図・年表・シネマ追尾・注目選択・知能再設計",
+          "v1.21: 環境バランス・大マップ軽量化・致命バグ修正・モバイルUI",
           "v1.20: 植物的生物・出産数遺伝子・真の全画面・行動の特徴表示",
           "v1.11: 戦闘で死骸が残る・速度/体格の上限拡張",
           "v1.10: 性格遺伝子(7種)・知能=判断精度モデルに刷新",
@@ -523,9 +529,13 @@ const SECTIONS_EN: Section[] = [
     body: [
       {
         lines: [
-          "Individuals with similar RGB values are treated as the same species.",
+          "Body color represents kin (lineage). Similar colors = same species.",
+          "As abilities/behavior change, color drifts slightly; once it changes",
+          "enough, a new color = a new species branches off (speciation).",
+          "Same-species individuals share the same on-screen color.",
+          "Even if separate lineages converge on similar abilities, colors stay",
+          "different — so convergent evolution appears as distinct species.",
           "Species names are auto-generated (e.g., R-10, B-04, G-15).",
-          "We prioritize intuitive species identification by color.",
         ],
       },
       {
@@ -677,8 +687,8 @@ const SECTIONS_EN: Section[] = [
             heading: "Usage",
             lines: [
               "・Experiment/observe: \"a world where only strength evolves,\" \"a world where everything except vision is frozen,\" etc.",
-              "・Disable color (RGB): all individuals become gray; species visibility is lost, but you can focus on ability evolution.",
               "・Toggle all on/off with the All-On / All-Off buttons.",
+              "・\"Energy sharing (altruism)\": when on, lives donate surplus energy to needy kin — experiment with kin selection (default off).",
             ],
           },
         ],
@@ -696,8 +706,9 @@ const SECTIONS_EN: Section[] = [
           "・Speed buttons: x1 / x10 / x100 / pause.",
           "・Spacebar: toggle play/pause (works outside input fields).",
           "・Zoom: ＋ / − buttons at bottom-right of map (no scrollbar at 100%).",
-          "・Action log: review world history — births, extinctions, era changes (time pauses while open).",
-          "・Stats graph: time series + gene distribution (histogram) modes.",
+          "・Action log: world history (births/extinctions). \"Chronicle\" tab lists major events in time order.",
+          "・Stats graph: time series / gene distribution / \"Strategy\" scatter (speed×intelligence, point color = species).",
+          "・Focus: from \"Focus\" under the selected life, jump to the strongest/smartest/fastest/biggest/oldest.",
           "・Save PNG: download current map view as an image.",
           "・Language toggle: JA / EN button at the top-right of the header.",
           "・Return to title: click \"LIFE GRID\" at top-left (confirmation dialog appears).",
@@ -709,6 +720,7 @@ const SECTIONS_EN: Section[] = [
       {
         heading: "Map modes (icons under the map)",
         lines: [
+          "🎬 Cinema follow: camera zooms in and auto-tracks a notable life (dominant/oldest/strongest)",
           "⚡ Inject: click the map to add local energy (radius 3)",
           "☄🌵🌸 Cataclysm summon: click to spawn meteor / drought / bloom",
           "Click the same button again to clear the mode.",
@@ -740,6 +752,8 @@ const SECTIONS_EN: Section[] = [
       {
         heading: "New features by version",
         lines: [
+          "v1.30: Color = kin (lineage tag), altruism (energy sharing/opt-in), 25-map observe mode, strategy scatter, chronicle, cinema follow, focus-jump, intelligence redesign",
+          "v1.21: Environment balance, large-map perf, critical bug fixes, mobile UI",
           "v1.20: Plant-like life, offspring gene, true fullscreen, behavior view",
           "v1.11: Carcasses remain after combat, speed/size cap raised",
           "v1.10: Personality genes (7), intelligence = decision accuracy",
