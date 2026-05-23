@@ -381,42 +381,6 @@ export default function SimulationView({
         setAnimPhase(phase);
         setVersion((v) => v + 1);
         if (didStep) refreshDerived(world);
-        // v1.30 (H6): シネマ追尾。注目個体へカメラ（ビューポート）を中央寄せ。
-        if (cinemaModeRef.current) {
-          let target =
-            selectedLifeIdRef.current != null
-              ? world.livesById.get(selectedLifeIdRef.current)
-              : undefined;
-          if (
-            !target ||
-            !target.alive ||
-            world.turn - cinemaLastPickTurnRef.current > 150
-          ) {
-            const picked = pickCinemaTarget(world, cinemaPickCountRef.current++);
-            if (picked) {
-              setSelectedLifeId(picked.id);
-              selectedLifeIdRef.current = picked.id;
-              setCinemaReason(
-                `${t(picked.reasonKey)}: ${speciesLabel(picked.speciesId)}`
-              );
-              cinemaLastPickTurnRef.current = world.turn;
-              target = world.livesById.get(picked.id);
-            }
-          }
-          const vp = viewportRef.current;
-          const wrap = vp?.firstElementChild as HTMLElement | null;
-          if (vp && wrap && target && target.alive) {
-            const scale = wrap.offsetWidth / world.width;
-            const wd = (a: number, b: number, sz: number) => {
-              const x = b - a;
-              return Math.abs(x) > sz / 2 ? b : a + x * phase;
-            };
-            const ix = wd(target.prevX, target.x, world.width);
-            const iy = wd(target.prevY, target.y, world.height);
-            vp.scrollLeft = (ix + 0.5) * scale - vp.clientWidth / 2;
-            vp.scrollTop = (iy + 0.5) * scale - vp.clientHeight / 2;
-          }
-        }
         lastRenderTime = now;
       }
       const elapsed = now - tpsWindowStart;
@@ -1226,6 +1190,28 @@ export default function SimulationView({
     v.scrollTop = pxY - v.clientHeight / 2;
   }, [zoom, selectedLifeId, animPhase, cellSize]);
 
+  // v1.30 (H6): シネマ追尾の対象選定。注目個体が死亡 or 150ターン経過で次の注目個体へ自動切替。
+  // カメラの中央寄せは上のズーム追従エフェクトが担当（cinema 時は zoom=2.4）。
+  useEffect(() => {
+    if (!cinemaMode) return;
+    const w = worldRef.current;
+    if (!w) return;
+    const cur =
+      selectedLifeIdRef.current != null
+        ? w.livesById.get(selectedLifeIdRef.current)
+        : undefined;
+    if (!cur || !cur.alive || w.turn - cinemaLastPickTurnRef.current > 150) {
+      const picked = pickCinemaTarget(w, cinemaPickCountRef.current++);
+      if (picked) {
+        cinemaLastPickTurnRef.current = w.turn;
+        setSelectedLifeId(picked.id);
+        setCinemaReason(
+          `${t(picked.reasonKey)}: ${speciesLabel(picked.speciesId)}`
+        );
+      }
+    }
+  }, [version, cinemaMode, t]);
+
   const targetTps = speed === 0 ? 0 : speed === 1 ? 4 : speed === 10 ? 30 : 150;
   const isThrottled =
     speed > 0 && targetTps > 0 && currentTps < targetTps * 0.9;
@@ -1454,6 +1440,10 @@ export default function SimulationView({
             })()}
         </div>
         )}
+        {/* v1.30 (H6): シネマ追尾の「なぜ」を控えめに表示（中央カラム基準＝スクロールしない） */}
+        {cinemaMode && cinemaReason && (
+          <div className="cinema-reason">🎬 {cinemaReason}</div>
+        )}
         <div
           ref={viewportRef}
           className="canvas-viewport"
@@ -1553,10 +1543,6 @@ export default function SimulationView({
           {/* v1.30: 真の全画面時は画面隅に控えめにブランドを表示 */}
           {trueFullscreen && (
             <div className="fullscreen-brand">LIFE GRID</div>
-          )}
-          {/* v1.30 (H6): シネマ追尾の「なぜ」を控えめに表示 */}
-          {cinemaMode && cinemaReason && (
-            <div className="cinema-reason">🎬 {cinemaReason}</div>
           )}
         </div>
         {/* モバイル縦画面：マップ直下に主要操作（再生／ステップ／速度） */}

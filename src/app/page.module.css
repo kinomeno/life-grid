@@ -130,6 +130,7 @@
   background: var(--bg-2);
   padding: 12px;
   gap: 8px;
+  position: relative; /* v1.30 (H6): シネマ理由ラベルの位置基準 */
 }
 
 :global(.sim-right) {
@@ -197,8 +198,8 @@
 /* v1.30 (H6): シネマ追尾の理由ラベル（ビューポート左上に控えめ）。 */
 :global(.cinema-reason) {
   position: absolute;
-  left: 10px;
-  top: 8px;
+  left: 18px;
+  top: 48px;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.85);
   background: rgba(0, 0, 0, 0.45);
