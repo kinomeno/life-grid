@@ -145,7 +145,7 @@ export function applyDisabledGenes(
 }
 
 export function createWorld(config: WorldConfig): World {
-  const { width, height, initialLifeCount, seed, initialGenes } = config;
+  const { width, height, initialLifeCount, seed, initialGenes, terrain } = config;
   const params = config.params ?? defaultSimulationParams();
   const rng = mulberry32(seed);
   const total = width * height;
@@ -155,10 +155,14 @@ export function createWorld(config: WorldConfig): World {
   const initEnergyBoost = width <= 25 ? 1.4 : 1;
   for (let i = 0; i < total; i++) {
     const v = ENERGY_INITIAL_MEAN + (rng() - 0.5) * 2 * ENERGY_INITIAL_VARIANCE;
-    energy[i] = Math.min(
-      ENERGY_MAX,
-      (clamp(v, 0, ENERGY_MAX) * INITIAL_ENERGY_RATIO + 5) * initEnergyBoost
-    );
+    // ver.2: 海セルはエネルギー常時0（rng は揃えるため毎セル消費する）。
+    energy[i] =
+      terrain && terrain[i] === 0
+        ? 0
+        : Math.min(
+            ENERGY_MAX,
+            (clamp(v, 0, ENERGY_MAX) * INITIAL_ENERGY_RATIO + 5) * initEnergyBoost
+          );
   }
 
   const terrainBias = createTerrainBias(width, height, rng);
@@ -179,6 +183,8 @@ export function createWorld(config: WorldConfig): World {
     const y = randomInt(rng, 0, height);
     const idx = y * width + x;
     if (occupancy[idx] !== -1) continue;
+    // ver.2: 海には初期配置しない。
+    if (terrain && terrain[idx] === 0) continue;
     // 初期遺伝子が指定されていれば全個体に同じ遺伝子をコピー（参照ではなくクローン）。
     let genes = initialGenes ? { ...initialGenes } : randomGenes(rng);
     // 稼働遺伝子フラグに従って無効化された遺伝子は固定値で上書き
@@ -234,6 +240,7 @@ export function createWorld(config: WorldConfig): World {
     energy,
     energyNext,
     occupancy,
+    terrain,
     lives,
     livesById,
     recentDeaths: new Map(),
@@ -1371,7 +1378,7 @@ function ensureWrapCaches(width: number, height: number): void {
 }
 
 function updateEnergy(world: World): void {
-  const { width, height, energy, energyNext: next, turn, terrainBias, waveTimeScale, wavePatternId, params } = world;
+  const { width, height, energy, energyNext: next, turn, terrainBias, waveTimeScale, wavePatternId, params, terrain } = world;
   ensureWrapCaches(width, height);
   const yPrev = _yPrevCache!;
   const yNext = _yNextCache!;
@@ -1435,6 +1442,11 @@ function updateEnergy(world: World): void {
     const rowYp = yNext[y] * width;
     for (let x = 0; x < width; x++) {
       const idx = rowY + x;
+      // ver.2: 海セルはエネルギーを持たない（常時0・拡散も再生もしない）。
+      if (terrain && terrain[idx] === 0) {
+        next[idx] = 0;
+        continue;
+      }
       const cur = energy[idx];
 
       const neighborSum =
@@ -1501,6 +1513,8 @@ function actLife(world: World, life: Life): void {
     ny = (ny + height) % height;
     const newIdx = ny * width + nx;
     if (occupancy[newIdx] !== -1) break;
+    // ver.2: 海には入れない（海岸で停止）。
+    if (world.terrain && world.terrain[newIdx] === 0) break;
     const oldIdx = life.y * width + life.x;
     occupancy[oldIdx] = -1;
     occupancy[newIdx] = life.id;
@@ -2284,7 +2298,7 @@ function randomNeighborOrStay(
   life: Life,
   rng: RNG
 ): { x: number; y: number } {
-  const { width, height, occupancy } = world;
+  const { width, height, occupancy, terrain } = world;
   const offsets = [
     [-1, -1], [0, -1], [1, -1],
     [-1, 0],           [1, 0],
@@ -2299,7 +2313,7 @@ function randomNeighborOrStay(
     const nx = (life.x + dx + width) % width;
     const ny = (life.y + dy + height) % height;
     const idx = ny * width + nx;
-    if (occupancy[idx] === -1) return { x: nx, y: ny };
+    if (occupancy[idx] === -1 && (!terrain || terrain[idx] === 1)) return { x: nx, y: ny };
   }
   return { x: life.x, y: life.y };
 }
@@ -2360,7 +2374,7 @@ function findEmptyNeighbors(
   life: Life,
   wanted: number
 ): { x: number; y: number }[] {
-  const { width, height, occupancy } = world;
+  const { width, height, occupancy, terrain } = world;
   const result: { x: number; y: number }[] = [];
   const x = life.x;
   const y = life.y;
@@ -2372,7 +2386,8 @@ function findEmptyNeighbors(
     if (ny < 0) ny += height;
     else if (ny >= height) ny -= height;
     const idx = ny * width + nx;
-    if (occupancy[idx] === -1) {
+    // ver.2: 海には出産しない。
+    if (occupancy[idx] === -1 && (!terrain || terrain[idx] === 1)) {
       result.push({ x: nx, y: ny });
     }
   }

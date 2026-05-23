@@ -200,6 +200,9 @@ export type World = {
   /** updateEnergy 用の書き込みバッファ（毎フレームのアロケーション回避）。 */
   energyNext: Float32Array;
   occupancy: Int32Array;
+  /** ver.2: 地形マスク（1=陸 / 0=海）。undefined＝全マス陸（従来挙動）。
+   *  海は侵入不可・エネルギー常時0。世界地図など固定地形プリセットで使用。 */
+  terrain?: Uint8Array;
   lives: Life[];
   /** O(1) ライフ検索用マップ（id → Life）。cullDead 毎に再構築。 */
   livesById: Map<number, Life>;
@@ -333,4 +336,6 @@ export type WorldConfig = {
   params?: SimulationParams;
   /** 指定した場合、初期生命の遺伝子はこれをコピーする。 */
   initialGenes?: Genes;
+  /** ver.2: 地形マスク（1=陸/0=海）。長さ width*height。指定時は海を避けて配置・海はエネルギー0。 */
+  terrain?: Uint8Array;
 };
