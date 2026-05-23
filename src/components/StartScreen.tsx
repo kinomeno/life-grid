@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { randomSeed } from "@/lib/random";
 import { decodeGeneId, GENE_ID_LENGTH } from "@/lib/geneId";
+import { decodeParamsPreset } from "@/lib/serialize";
 import { isUnlocked } from "@/lib/unlock";
 import StartGridPreview from "./StartGridPreview";
 import RulesScreen from "./RulesScreen";
@@ -10,7 +11,7 @@ import ShareXButton from "./ShareXButton";
 import PasswordPrompt from "./PasswordPrompt";
 import KinomenoLink from "./KinomenoLink";
 import { useLocale } from "./LocaleProvider";
-import type { Genes } from "@/lib/types";
+import type { Genes, SimulationParams } from "@/lib/types";
 
 export type StartConfig = {
   width: number;
@@ -18,6 +19,8 @@ export type StartConfig = {
   initialLifeCount: number;
   seed: number;
   initialGenes?: Genes;
+  /** v1.31: 共有URLの設定プリセット（環境設定）。あれば SimulationView の初期 params に反映。 */
+  initialParams?: Partial<SimulationParams>;
 };
 
 type Props = {
@@ -53,6 +56,10 @@ export default function StartScreen({
   const [seedText, setSeedText] = useState<string>("");
   const [geneText, setGeneText] = useState<string>("");
   const [geneError, setGeneError] = useState<string | null>(null);
+  // v1.31: 共有URLの設定プリセット（環境設定）。start() で StartConfig に載せる。
+  const [presetParams, setPresetParams] = useState<
+    Partial<SimulationParams> | undefined
+  >(undefined);
   const [showRules, setShowRules] = useState(false);
   // ロック解除状態（sessionStorage 同期）
   const [unlocked, setUnlocked] = useState(false);
@@ -87,6 +94,12 @@ export default function StartScreen({
       if (LIFE_COUNT_OPTIONS.includes(nn)) setLifeCount(nn);
     }
     if (geneParam) setGeneText(geneParam);
+    // v1.31: 設定プリセット（共有URLの ?p=）を復元。
+    const pParam = sp.get("p");
+    if (pParam) {
+      const decoded = decodeParamsPreset(pParam);
+      if (Object.keys(decoded).length > 0) setPresetParams(decoded);
+    }
   }, []);
 
   function start() {
@@ -124,6 +137,7 @@ export default function StartScreen({
       initialLifeCount: lifeCount,
       seed: seedNum,
       initialGenes,
+      initialParams: presetParams,
     });
   }
 

@@ -1,9 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import type { WorldEvent, WorldEventType } from "@/lib/types";
+import type {
+  Life,
+  SpeciesLineageNode,
+  WorldEvent,
+  WorldEventType,
+} from "@/lib/types";
 import { useLocale } from "./LocaleProvider";
 import TimeToggle from "./TimeToggle";
+import LineageTree from "./LineageTree";
 import { useDraggablePanel, type DragOffset } from "./useDraggablePanel";
 
 // v1.30 (H7): 「年表」タブに出す主要イベント（物語性の高いもの）。
@@ -22,6 +28,9 @@ const CHRONICLE_TYPES = new Set<WorldEventType>([
 
 type Props = {
   events: WorldEvent[];
+  /** v1.31 (A5): 系統樹タブ用。系統ノードと現存個体。 */
+  lineage?: SpeciesLineageNode[];
+  lives?: Life[];
   onClose: () => void;
   onSpeciesClick?: (speciesId: string) => void;
   /** 時間進行 ON/OFF（true なら世界の時間が進む）。 */
@@ -34,6 +43,8 @@ type Props = {
 
 export default function ActionLogModal({
   events,
+  lineage,
+  lives,
   onClose,
   onSpeciesClick,
   timeRunning = false,
@@ -48,7 +59,8 @@ export default function ActionLogModal({
     onOffsetChange
   );
   // v1.30 (H7): ログ（全件・新しい順）／年表（主要イベント・古い順＝時系列）。
-  const [tab, setTab] = useState<"log" | "chronicle">("log");
+  const [tab, setTab] = useState<"log" | "chronicle" | "lineage">("log");
+  const hasLineage = !!lineage;
   const ordered = [...events].reverse();
   const chronicle = events.filter((e) => CHRONICLE_TYPES.has(e.type));
   const shown = tab === "chronicle" ? chronicle : ordered;
@@ -87,8 +99,25 @@ export default function ActionLogModal({
             >
               {t("log.tab.chronicle")}
             </button>
+            {hasLineage && (
+              <button
+                className={`btn ${tab === "lineage" ? "btn-active" : ""}`}
+                onClick={() => setTab("lineage")}
+              >
+                {t("log.tab.lineage")}
+              </button>
+            )}
           </div>
-          {shown.length === 0 ? (
+          {tab === "lineage" ? (
+            <LineageTree
+              lineage={lineage ?? []}
+              lives={lives ?? []}
+              onSelect={(id) => {
+                onSpeciesClick?.(id);
+                onClose();
+              }}
+            />
+          ) : shown.length === 0 ? (
             <p className="empty-sub">
               {tab === "chronicle" ? t("log.chronicle_empty") : t("log.empty")}
             </p>

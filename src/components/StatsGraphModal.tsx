@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Life, StatsSample } from "@/lib/types";
 import {
   GENE_INTELLIGENCE_MAX,
@@ -20,7 +20,7 @@ import {
   GENE_VISION_MAX,
   GENE_VISION_MIN,
 } from "@/lib/constants";
-import { binCenterColor } from "@/lib/species";
+import { binCenterColor, speciesLabel } from "@/lib/species";
 import { useLocale } from "./LocaleProvider";
 import TimeToggle from "./TimeToggle";
 import { useDraggablePanel, type DragOffset } from "./useDraggablePanel";
@@ -75,6 +75,8 @@ type Props = {
   enabled: GraphSeriesState;
   onChange: (next: GraphSeriesState) => void;
   onClose: () => void;
+  /** v1.31: 戦略散布で系統をクリック/選択したとき（系統追跡へ）。 */
+  onSpeciesClick?: (speciesId: string) => void;
   /** 時間進行 ON/OFF（true なら世界の時間が進む）。 */
   timeRunning?: boolean;
   onToggleTime?: () => void;
@@ -197,6 +199,7 @@ export default function StatsGraphModal({
   enabled,
   onChange,
   onClose,
+  onSpeciesClick,
   timeRunning = false,
   onToggleTime,
   tab,
@@ -226,6 +229,85 @@ export default function StatsGraphModal({
     sample: StatsSample;
   } | null>(null);
 
+  // v1.31: 戦略散布の「系統ごと」マーカー（重心・サイズ∝個体数・色＝種代表色）。
+  // ホバー/クリックのヒットテストと描画の両方で使うため useMemo で前計算する。
+  const scatterMarkers = useMemo<ScatterMarker[]>(() => {
+    if (tab !== "scatter") return [];
+    type Agg = {
+      n: number;
+      sp: number;
+      it: number;
+      st: number;
+      cr: number;
+      cg: number;
+      cb: number;
+    };
+    const agg = new Map<string, Agg>();
+    for (const l of lives) {
+      if (!l.alive) continue;
+      let a = agg.get(l.speciesId);
+      if (!a) {
+        a = {
+          n: 0,
+          sp: 0,
+          it: 0,
+          st: 0,
+          cr: binCenterColor(l.genes.r),
+          cg: binCenterColor(l.genes.g),
+          cb: binCenterColor(l.genes.b),
+        };
+        agg.set(l.speciesId, a);
+      }
+      a.n++;
+      a.sp += l.genes.speed;
+      a.it += l.genes.intelligence;
+      a.st += l.genes.strength;
+    }
+    const out: ScatterMarker[] = [];
+    for (const [id, a] of agg) {
+      const avgSpeed = a.sp / a.n;
+      const avgIntel = a.it / a.n;
+      const avgStrength = a.st / a.n;
+      const { px, py } = scatterProject(avgSpeed, avgIntel, cssW);
+      const r = Math.max(4, Math.min(22, 4 + Math.sqrt(a.n) * 1.6));
+      out.push({
+        id,
+        px,
+        py,
+        r,
+        cr: a.cr,
+        cg: a.cg,
+        cb: a.cb,
+        count: a.n,
+        avgSpeed,
+        avgIntel,
+        avgStrength,
+      });
+    }
+    out.sort((p, q) => q.count - p.count); // 大きい順（描画は大→小、ヒットは小優先）
+    return out;
+  }, [tab, lives, cssW]);
+
+  // v1.31: クリック/タップで開く系統フロート（persistent=タッチで固定表示）。
+  const [scatterFloat, setScatterFloat] = useState<{
+    id: string;
+    px: number;
+    py: number;
+    persistent: boolean;
+  } | null>(null);
+
+  const hitScatterMarker = (px: number, py: number): ScatterMarker | null => {
+    // 小さいマーカー（描画で手前）を優先してヒット判定。
+    for (let i = scatterMarkers.length - 1; i >= 0; i--) {
+      const m = scatterMarkers[i];
+      const dx = px - m.px;
+      const dy = py - m.py;
+      const rr = m.r + 4;
+      if (dx * dx + dy * dy <= rr * rr) return m;
+    }
+    return null;
+  };
+
   // v1.21.1: 描画幅をコンテナに合わせて測定（260〜600px）。リサイズ追従。
   useEffect(() => {
     const measure = () => {
@@ -254,19 +336,51 @@ export default function StatsGraphModal({
     if (tab === "timeseries") {
       drawChart(ctx, cssW, cssH, history, enabled, hoverInfo?.sample.turn ?? null);
     } else if (tab === "scatter") {
-      drawScatter(ctx, cssW, cssH, lives, t("graph.scatter_x"), t("graph.scatter_y"));
+      drawScatter(
+        ctx,
+        cssW,
+        cssH,
+        lives,
+        scatterMarkers,
+        scatterFloat?.id ?? null,
+        t("graph.scatter_x"),
+        t("graph.scatter_y")
+      );
     } else {
       const gene = GENES.find((g) => g.key === geneKey) ?? GENES[0];
       drawHistogram(ctx, cssW, cssH, lives, gene);
     }
-  }, [tab, history, enabled, lives, geneKey, hoverInfo, cssW, t]);
+  }, [
+    tab,
+    history,
+    enabled,
+    lives,
+    geneKey,
+    hoverInfo,
+    scatterMarkers,
+    scatterFloat,
+    cssW,
+    t,
+  ]);
 
-  // タブ切替・分布時はホバーをクリア
+  // タブ切替時はホバー/フロートをクリア
   useEffect(() => {
     if (tab !== "timeseries") setHoverInfo(null);
+    if (tab !== "scatter") setScatterFloat(null);
   }, [tab]);
 
   function handleCanvasMove(e: React.MouseEvent<HTMLCanvasElement>) {
+    if (tab === "scatter") {
+      // PC のマウスホバー。タッチで固定表示中は維持する。
+      if (scatterFloat?.persistent) return;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const m = hitScatterMarker(e.clientX - rect.left, e.clientY - rect.top);
+      if (m) setScatterFloat({ id: m.id, px: m.px, py: m.py, persistent: false });
+      else if (scatterFloat) setScatterFloat(null);
+      return;
+    }
     if (tab !== "timeseries" || history.length < 2) {
       if (hoverInfo) setHoverInfo(null);
       return;
@@ -314,6 +428,26 @@ export default function StatsGraphModal({
 
   function handleCanvasLeave() {
     setHoverInfo(null);
+    if (scatterFloat && !scatterFloat.persistent) setScatterFloat(null);
+  }
+
+  // v1.31: クリック/タップ。PCマウス＝即・系統選択。タッチ＝フロート固定（中の選択ボタンで確定）。
+  function handleScatterPointer(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (tab !== "scatter") return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const m = hitScatterMarker(e.clientX - rect.left, e.clientY - rect.top);
+    if (!m) {
+      setScatterFloat(null);
+      return;
+    }
+    if (e.pointerType === "touch") {
+      setScatterFloat({ id: m.id, px: m.px, py: m.py, persistent: true });
+    } else {
+      onSpeciesClick?.(m.id);
+      onClose();
+    }
   }
 
   return (
@@ -474,6 +608,8 @@ export default function StatsGraphModal({
               className="graph-canvas"
               onMouseMove={handleCanvasMove}
               onMouseLeave={handleCanvasLeave}
+              onPointerUp={handleScatterPointer}
+              style={tab === "scatter" ? { cursor: "pointer" } : undefined}
             />
             {hoverInfo && tab === "timeseries" && (
               <div
@@ -539,6 +675,73 @@ export default function StatsGraphModal({
                 )}
               </div>
             )}
+            {scatterFloat && tab === "scatter" && (() => {
+              const m = scatterMarkers.find((x) => x.id === scatterFloat.id);
+              if (!m) return null;
+              return (
+                <div
+                  className="graph-tooltip"
+                  style={{
+                    position: "absolute",
+                    left: Math.max(8, Math.min(scatterFloat.px + 12, cssW - 168)),
+                    top: Math.max(8, Math.min(scatterFloat.py - 30, SC_H - 150)),
+                    pointerEvents: scatterFloat.persistent ? "auto" : "none",
+                  }}
+                >
+                  <div
+                    className="graph-tooltip-turn"
+                    style={{ display: "flex", alignItems: "center", gap: "6px" }}
+                  >
+                    <span
+                      className="graph-swatch"
+                      style={{ backgroundColor: `rgb(${m.cr},${m.cg},${m.cb})` }}
+                    />
+                    {speciesLabel(m.id)}
+                  </div>
+                  <div className="graph-tooltip-row">
+                    <span className="graph-tooltip-label">{t("graph.pop")}</span>
+                    <span className="graph-tooltip-value">
+                      {m.count.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="graph-tooltip-row">
+                    <span className="graph-tooltip-label">
+                      {t("info.move_speed")}
+                    </span>
+                    <span className="graph-tooltip-value">
+                      {m.avgSpeed.toFixed(0)}
+                    </span>
+                  </div>
+                  <div className="graph-tooltip-row">
+                    <span className="graph-tooltip-label">
+                      {t("info.intelligence")}
+                    </span>
+                    <span className="graph-tooltip-value">
+                      {m.avgIntel.toFixed(0)}
+                    </span>
+                  </div>
+                  <div className="graph-tooltip-row">
+                    <span className="graph-tooltip-label">
+                      {t("info.strength")}
+                    </span>
+                    <span className="graph-tooltip-value">
+                      {m.avgStrength.toFixed(0)}
+                    </span>
+                  </div>
+                  {scatterFloat.persistent && onSpeciesClick && (
+                    <button
+                      className="btn graph-float-btn"
+                      onClick={() => {
+                        onSpeciesClick(m.id);
+                        onClose();
+                      }}
+                    >
+                      {t("graph.select_species")}
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           {tab === "timeseries" && history.length === 0 && (
@@ -564,24 +767,61 @@ function formatTooltipValue(v: number): string {
  * v1.30 (H5): 戦略空間スキャッタ図。x=速度, y=知能、点＝生存個体（色＝種代表色）。
  * クラスタ＝ニッチ、拡散＝多様性が一目で分かる。
  */
+// v1.31: 戦略散布の投影（速度×知能 → キャンバス座標）。memo と drawScatter で共有する。
+const SC_PADL = 40;
+const SC_PADR = 14;
+const SC_PADT = 14;
+const SC_PADB = 28;
+const SC_XMAX = 120; // 速度（通常0-100＋少し）
+const SC_YMAX = 150; // 知能（accuracy 飽和の 150）
+const SC_H = 280; // 散布図の描画高さ（effect の cssH と一致させる）
+
+type ScatterMarker = {
+  id: string;
+  px: number;
+  py: number;
+  r: number;
+  cr: number;
+  cg: number;
+  cb: number;
+  count: number;
+  avgSpeed: number;
+  avgIntel: number;
+  avgStrength: number;
+};
+
+function scatterProject(
+  speed: number,
+  intel: number,
+  cssW: number
+): { px: number; py: number } {
+  const innerW = cssW - SC_PADL - SC_PADR;
+  const innerH = SC_H - SC_PADT - SC_PADB;
+  const sx = Math.min(speed, SC_XMAX) / SC_XMAX;
+  const sy = Math.min(intel, SC_YMAX) / SC_YMAX;
+  return { px: SC_PADL + sx * innerW, py: SC_PADT + innerH - sy * innerH };
+}
+
 function drawScatter(
   ctx: CanvasRenderingContext2D,
   cssW: number,
   cssH: number,
   lives: Life[],
+  markers: ScatterMarker[],
+  hoveredId: string | null,
   xLabel: string,
   yLabel: string
 ) {
   ctx.fillStyle = "#fafafa";
   ctx.fillRect(0, 0, cssW, cssH);
-  const padL = 40;
-  const padR = 14;
-  const padT = 14;
-  const padB = 28;
+  const padL = SC_PADL;
+  const padR = SC_PADR;
+  const padT = SC_PADT;
+  const padB = SC_PADB;
   const innerW = cssW - padL - padR;
   const innerH = cssH - padT - padB;
-  const xMax = 120; // 速度（通常0-100＋少し）
-  const yMax = 150; // 知能（accuracy 飽和の 150）
+  const xMax = SC_XMAX;
+  const yMax = SC_YMAX;
   // グリッド＋目盛
   ctx.font = "10px sans-serif";
   for (let i = 0; i <= 3; i++) {
@@ -603,21 +843,35 @@ function drawScatter(
   }
   ctx.strokeStyle = "#ddd";
   ctx.strokeRect(padL, padT, innerW, innerH);
-  // 点（種代表色・半透明でクラスタの密度が見える）
+  // 背景：個体点（種代表色・ごく薄く）。種内の広がりをテクスチャとして見せる。
   let n = 0;
   for (const l of lives) {
     if (!l.alive) continue;
     n++;
-    const sx = Math.min(l.genes.speed, xMax) / xMax;
-    const sy = Math.min(l.genes.intelligence, yMax) / yMax;
-    const px = padL + sx * innerW;
-    const py = padT + innerH - sy * innerH;
+    const { px, py } = scatterProject(l.genes.speed, l.genes.intelligence, cssW);
     ctx.fillStyle = `rgba(${binCenterColor(l.genes.r)},${binCenterColor(
       l.genes.g
-    )},${binCenterColor(l.genes.b)},0.55)`;
+    )},${binCenterColor(l.genes.b)},0.16)`;
     ctx.beginPath();
-    ctx.arc(px, py, 2.5, 0, Math.PI * 2);
+    ctx.arc(px, py, 1.8, 0, Math.PI * 2);
     ctx.fill();
+  }
+  // 系統マーカー（重心・サイズ∝個体数）。大→小の順に描き、小さい種を手前に。
+  for (const m of markers) {
+    ctx.beginPath();
+    ctx.arc(m.px, m.py, m.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${m.cr},${m.cg},${m.cb},0.9)`;
+    ctx.fill();
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = "rgba(255,255,255,0.92)";
+    ctx.stroke();
+    if (m.id === hoveredId) {
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(30,30,30,0.85)";
+      ctx.beginPath();
+      ctx.arc(m.px, m.py, m.r + 3, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   }
   // 軸ラベル
   ctx.fillStyle = "#555";
@@ -630,7 +884,7 @@ function drawScatter(
   ctx.restore();
   ctx.fillStyle = "#999";
   ctx.font = "10px sans-serif";
-  ctx.fillText(`n=${n}`, padL + innerW - 42, padT + 12);
+  ctx.fillText(`n=${n} (${markers.length})`, padL + innerW - 70, padT + 12);
 }
 
 function drawChart(

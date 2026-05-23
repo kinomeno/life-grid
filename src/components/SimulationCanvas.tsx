@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { ENERGY_DISPLAY_LEVELS, ENERGY_MAX } from "@/lib/constants";
 import { binCenterColor } from "@/lib/species";
+import { computeDecisionField } from "@/lib/world";
 import type { Life, World } from "@/lib/types";
 
 type Props = {
@@ -16,6 +17,8 @@ type Props = {
   /** v1.21 軽量化: true なら描画を簡易化（形状→円）。大マップ高速時に有効。 */
   simplifiedRender?: boolean;
   selectedLifeId?: number | null;
+  /** v1.31 (H9): 選択個体の思考ヒートマップを重ねるか。 */
+  showThoughtHeatmap?: boolean;
   /** v1.02: 選択生命の最近の移動座標列（古い順、最大 60 点）。空配列なら描画しない。 */
   selectedLifePath?: { x: number; y: number }[];
   trackedSpeciesId?: string | null;
@@ -32,6 +35,7 @@ export default function SimulationCanvas({
   animPhase = 1,
   simplifiedRender = false,
   selectedLifeId = null,
+  showThoughtHeatmap = false,
   selectedLifePath = [],
   trackedSpeciesId = null,
   onCellClick,
@@ -74,6 +78,9 @@ export default function SimulationCanvas({
     }
 
     drawEnergyField(ctx, world, cellSize, off, imgRef.current);
+    if (showThoughtHeatmap) {
+      drawThoughtHeatmap(ctx, world, cellSize, selectedLifeId);
+    }
     drawSelectedPath(ctx, selectedLifePath, cellSize, world.width, world.height);
     drawLives(ctx, world, cellSize, trackedSpeciesId, selectedLifeId, animPhase, simplifiedRender);
     drawCombatFlashes(ctx, world, cellSize, animPhase);
@@ -88,6 +95,7 @@ export default function SimulationCanvas({
     animPhase,
     simplifiedRender,
     selectedLifeId,
+    showThoughtHeatmap,
     selectedLifePath,
     trackedSpeciesId,
   ]);
@@ -241,6 +249,52 @@ function drawShareFlashes(
     ctx.lineWidth = lineW;
     ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
     ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * v1.31 (H9): 選択個体の「思考」をヒートマップで重ねる。
+ * computeDecisionField が返す候補セルのスコアを正規化し、青(低)→赤(高)で色付け。
+ * 実際に選ばれるセル（次の一手）を白枠で強調する。エネルギー場の上・生命の下に描く。
+ */
+function drawThoughtHeatmap(
+  ctx: CanvasRenderingContext2D,
+  world: World,
+  cellSize: number,
+  selectedLifeId: number | null
+) {
+  if (selectedLifeId === null) return;
+  const life = world.livesById.get(selectedLifeId);
+  if (!life || !life.alive) return;
+  const cells = computeDecisionField(world, life);
+  if (cells.length === 0) return;
+  let min = Infinity;
+  let max = -Infinity;
+  for (const c of cells) {
+    if (c.score < min) min = c.score;
+    if (c.score > max) max = c.score;
+  }
+  const range = max - min;
+  ctx.save();
+  let chosen: { x: number; y: number } | null = null;
+  for (const c of cells) {
+    const t = range > 1e-9 ? (c.score - min) / range : 0.5;
+    const hue = 220 * (1 - t); // 220=青(低) → 0=赤(高)
+    ctx.fillStyle = `hsla(${hue.toFixed(0)}, 85%, 55%, 0.42)`;
+    ctx.fillRect(c.x * cellSize, c.y * cellSize, cellSize, cellSize);
+    if (c.chosen) chosen = c;
+  }
+  if (chosen) {
+    const lw = Math.max(1.5, cellSize * 0.18);
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+    ctx.strokeRect(
+      chosen.x * cellSize + lw / 2,
+      chosen.y * cellSize + lw / 2,
+      cellSize - lw,
+      cellSize - lw
+    );
   }
   ctx.restore();
 }

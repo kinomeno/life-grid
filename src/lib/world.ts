@@ -3,6 +3,7 @@ import {
   ACCURACY_FULL_INTEL,
   BASE_MUTATION_RATE,
   COMBAT_ENERGY_LOSS_RATIO,
+  DEFAULT_ADVANCED,
   COST_BASE,
   COST_INTELLIGENCE,
   COST_INTELLIGENCE_EXP,
@@ -75,6 +76,7 @@ import type {
   Genes,
   Life,
   SimulationParams,
+  SpeciesLineageNode,
   World,
   WorldConfig,
   WorldEvent,
@@ -100,6 +102,8 @@ export function defaultSimulationParams(): SimulationParams {
     smoothAnimation: true,
     // v1.30 (案1/B): 既定はOFF（オプトイン）。設定でONにすると分配＋wShare進化が有効。
     energyShareEnabled: false,
+    // v1.31: 上級設定（コスト等の倍率）。既定すべて1.0＝現行バランス。
+    advanced: { ...DEFAULT_ADVANCED },
   };
 }
 
@@ -201,9 +205,22 @@ export function createWorld(config: WorldConfig): World {
   // 初期生命の系統を knownSpecies に登録
   const knownSpecies = new Set<string>();
   const livesById = new Map<number, Life>();
+  // v1.31 (A5): 系統樹の初期ノード（初期種は親 null・誕生ターン 0）。
+  const speciesLineage = new Map<string, SpeciesLineageNode>();
   for (const life of lives) {
     knownSpecies.add(life.speciesId);
     livesById.set(life.id, life);
+    if (!speciesLineage.has(life.speciesId)) {
+      const c = speciesColorFromGenes(life.genes);
+      speciesLineage.set(life.speciesId, {
+        id: life.speciesId,
+        parentId: null,
+        birthTurn: 0,
+        r: c.r,
+        g: c.g,
+        b: c.b,
+      });
+    }
   }
 
   // updateEnergy 用バッファ（毎フレームのアロケーション回避）
@@ -227,6 +244,7 @@ export function createWorld(config: WorldConfig): World {
     eraBaseDurationTurns,
     eraTime: 0,
     knownSpecies,
+    speciesLineage,
     prevSpeciesCounts: new Map(),
     prevEraIndex: 0,
     events: [],
@@ -1441,6 +1459,8 @@ function updateEnergy(world: World): void {
 function actLife(world: World, life: Life): void {
   const { width, height, energy, occupancy } = world;
   const g = life.genes;
+  // v1.31: 上級設定（コスト等の倍率）。既定すべて1.0なので ×1.0 は恒等＝従来と一致。
+  const adv = world.params.advanced;
 
   // v1.11: 速度は 1〜999 の sqrt スケール（線形だと崩壊するため）。
   //   1 ターンに加算される速度量 = sqrt(speed / 33.3)
@@ -1487,7 +1507,7 @@ function actLife(world: World, life: Life): void {
     life.x = nx;
     life.y = ny;
     steps++;
-    life.energy -= COST_SPEED_PER_STEP;
+    life.energy -= COST_SPEED_PER_STEP * adv.costSpeedMul;
   }
   // v1.10: 今ターンの実移動を「向き」として記録（判断材料・描画用）。
   // トーラス境界跨ぎを考慮して短い方の向きを採用。
@@ -1515,25 +1535,30 @@ function actLife(world: World, life: Life): void {
   //   知能を採餌から切り離し、価値を accuracy（行動の正確さ）に集約する。
   //   「賢い個体が採餌も得意」で他戦略を駆逐する現象を解消し、多様な戦略戦を促す
   //   （grid 検証：吸収撤廃＋コスト1/3＋乗算なし が種数・戦略バランス最良）。
-  const absorb = Math.max(0, Math.min(available * ABSORB_RATE, capacity));
+  const absorb = Math.max(
+    0,
+    Math.min(available * ABSORB_RATE * adv.absorbMul, capacity)
+  );
   energy[idx] = available - absorb;
   life.energy += absorb;
 
   // v1.01: 強さ・知能でコスト指数を別々に持たせる。
   // 強さ ^2.0（戦闘優位が直接効くため厳しめ）、知能 ^1.85（間接効果なので緩め）。
   // 戦闘は決定論。バランスは指数差で取る。
-  const strengthCost = nonlinearGeneCost(g.strength, COST_STRENGTH, COST_STRENGTH_EXP);
-  const intelligenceCost = nonlinearGeneCost(
-    g.intelligence,
-    COST_INTELLIGENCE,
-    COST_INTELLIGENCE_EXP
-  );
+  const strengthCost =
+    nonlinearGeneCost(g.strength, COST_STRENGTH, COST_STRENGTH_EXP) *
+    adv.costStrengthMul;
+  const intelligenceCost =
+    nonlinearGeneCost(g.intelligence, COST_INTELLIGENCE, COST_INTELLIGENCE_EXP) *
+    adv.costIntelligenceMul;
   // v1.11: 速度 100 超の維持コスト（指数 1.7）。
   // 速度 999 で約 7.5/turn、100 までは 0.15 以下で軽め。
-  const speedMaintCost = nonlinearGeneCost(g.speed, COST_SPEED_MAINT, COST_SPEED_EXP);
+  const speedMaintCost =
+    nonlinearGeneCost(g.speed, COST_SPEED_MAINT, COST_SPEED_EXP) *
+    adv.costSpeedMul;
   const upkeep =
-    COST_BASE +
-    COST_VISION * g.vision +
+    COST_BASE * adv.costBaseMul +
+    COST_VISION * g.vision * adv.costVisionMul +
     intelligenceCost +
     strengthCost +
     speedMaintCost +
@@ -1873,6 +1898,245 @@ function findBestNeighborCell(
   return { x: bestX, y: bestY };
 }
 
+/** v1.31 (H9): 思考ヒートマップ用の候補セルとスコア。 */
+export type DecisionCell = { x: number; y: number; score: number; chosen: boolean };
+
+/**
+ * v1.31 (H9): 選択個体の「思考」を可視化するため、findBestNeighborCell と同じ採点を
+ * 再現し、視野内の各候補セルのスコアを返す。
+ *
+ * ※ read-only。シミュレーション本体（stepWorld）からは呼ばれず、描画層から選択個体に
+ *    対してのみ呼ばれる。findBestNeighborCell 本体には一切手を加えていない。
+ *    採点ロジックは findBestNeighborCell と一致させること（片方を変えたら両方更新）。
+ *    モジュール共有スクラッチ配列（_aX 等）を使うが、RAF のフレーム間に呼ばれるため
+ *    stepWorld と同時実行されず安全。
+ */
+export function computeDecisionField(world: World, life: Life): DecisionCell[] {
+  if (!life.alive) return [];
+  const { width, height, energy, occupancy, livesById } = world;
+  const g = life.genes;
+  const intel = g.intelligence > 0 ? g.intelligence : 0;
+
+  const rngSeed =
+    ((world.turn + 1) * 2654435761) ^ ((life.id + 1) * 73856093);
+  const rng = mulberry32(rngSeed >>> 0);
+
+  const accuracy =
+    intel >= ACCURACY_FULL_INTEL ? 1.0 : Math.sqrt(intel / ACCURACY_FULL_INTEL);
+  // 知能 0（完全ランダム）は意味のある思考マップが無い。
+  if (accuracy === 0) return [];
+
+  const visionBonusRaw = (intel / VISION_DEPTH_INTEL_PER_BONUS) | 0;
+  const visionBonus =
+    visionBonusRaw > VISION_DEPTH_BONUS_MAX
+      ? VISION_DEPTH_BONUS_MAX
+      : visionBonusRaw;
+  const effectiveVision =
+    accuracy < 0.5 ? (g.vision > 1 ? g.vision - 1 : 1) : g.vision;
+  const depthRaw = effectiveVision + visionBonus;
+  const depth = depthRaw < 1 ? 1 : depthRaw;
+  const depthSq = depth * depth;
+  const invDepth = 1 / depth;
+
+  const selfHunger = life.energy < g.size ? 1 - life.energy / g.size : 0;
+
+  const wA = g.wAppetite * 0.01;
+  const wP = g.wPredation * 0.01;
+  const wC = g.wCaution * 0.01;
+  const wG = g.wGregarious * 0.01;
+  const wL = g.wLoyalty * 0.01;
+  const wR = g.wRepro * 0.01;
+  const wS = g.wStarvSensitive * 0.01;
+
+  const lx = life.x;
+  const ly = life.y;
+  const speciesId = life.speciesId;
+  const myStrength = g.strength;
+  let allyCount = 0;
+  let enemyCount = 0;
+  const halfW = width / 2;
+  const halfH = height / 2;
+
+  for (let dy = -depth; dy <= depth; dy++) {
+    for (let dx = -depth; dx <= depth; dx++) {
+      const distSq = dx * dx + dy * dy;
+      if (distSq > depthSq) continue;
+      if (dx === 0 && dy === 0) continue;
+      let nx = lx + dx;
+      if (nx < 0) nx += width;
+      else if (nx >= width) nx -= width;
+      let ny = ly + dy;
+      if (ny < 0) ny += height;
+      else if (ny >= height) ny -= height;
+      const idx = ny * width + nx;
+      const occId = occupancy[idx];
+      if (occId === -1) continue;
+      const other = livesById.get(occId);
+      if (!other || !other.alive) continue;
+      if (other.speciesId === speciesId) {
+        if (allyCount < ALLY_CAP) {
+          _aX[allyCount] = nx;
+          _aY[allyCount] = ny;
+          _aEnergy[allyCount] = other.energy;
+          allyCount++;
+        }
+      } else if (enemyCount < ENEMY_CAP) {
+        const og = other.genes;
+        const enemyDef = og.strength + og.size * 0.05;
+        _eX[enemyCount] = nx;
+        _eY[enemyCount] = ny;
+        _eEnergy[enemyCount] = other.energy;
+        _eStrength[enemyCount] = og.strength;
+        _eDx[enemyCount] = other.dx;
+        _eDy[enemyCount] = other.dy;
+        _eWinnable[enemyCount] = myStrength > enemyDef ? 1 : 0;
+        enemyCount++;
+      }
+    }
+  }
+
+  const cells: DecisionCell[] = [];
+  let bestX = lx;
+  let bestY = ly;
+  let bestScore = -Infinity;
+
+  for (let dy = -depth; dy <= depth; dy++) {
+    for (let dx = -depth; dx <= depth; dx++) {
+      const distSq = dx * dx + dy * dy;
+      if (distSq > depthSq) continue;
+      let nx = lx + dx;
+      if (nx < 0) nx += width;
+      else if (nx >= width) nx -= width;
+      let ny = ly + dy;
+      if (ny < 0) ny += height;
+      else if (ny >= height) ny -= height;
+      const idx = ny * width + nx;
+      if (occupancy[idx] !== -1 && (dx !== 0 || dy !== 0)) continue;
+
+      const f_energy = energy[idx] * 0.01;
+      const dist = distSq > 0 ? Math.sqrt(distSq) : 0;
+      const f_dist = dist * invDepth;
+      const f_starvHunger = f_energy * selfHunger;
+
+      let f_allyNear = 0;
+      let f_strongAllyNear = 0;
+      if (allyCount > 0) {
+        let nearestAllySq = Infinity;
+        let nearestAllyEnergy = 0;
+        for (let k = 0; k < allyCount; k++) {
+          let adx = _aX[k] - nx;
+          let ady = _aY[k] - ny;
+          if (adx > halfW) adx -= width;
+          else if (adx < -halfW) adx += width;
+          if (ady > halfH) ady -= height;
+          else if (ady < -halfH) ady += height;
+          const aDistSq = adx * adx + ady * ady;
+          if (aDistSq < nearestAllySq) {
+            nearestAllySq = aDistSq;
+            nearestAllyEnergy = _aEnergy[k];
+          }
+        }
+        if (nearestAllySq !== Infinity) {
+          const d = Math.sqrt(nearestAllySq);
+          const proximity = 1 - d * invDepth;
+          if (proximity > 0) {
+            f_allyNear = proximity;
+            const eClamp = nearestAllyEnergy > 100 ? 1 : nearestAllyEnergy * 0.01;
+            f_strongAllyNear = proximity * eClamp;
+          }
+        }
+      }
+      let emptyAround = 0;
+      for (let k = 0; k < 8; k++) {
+        let ax = nx + NEIGHBOR_DX[k];
+        if (ax < 0) ax += width;
+        else if (ax >= width) ax -= width;
+        let ay = ny + NEIGHBOR_DY[k];
+        if (ay < 0) ay += height;
+        else if (ay >= height) ay -= height;
+        if (occupancy[ay * width + ax] === -1) emptyAround++;
+      }
+      const f_emptyAround = emptyAround * 0.125;
+
+      let f_prey = 0;
+      let f_threat = 0;
+      let f_approach = 0;
+      if (enemyCount > 0) {
+        let nearestPreySq = Infinity;
+        let nearestPreyEnergy = 0;
+        let nearestThreatSq = Infinity;
+        let nearestThreatStrength = 0;
+        let nearestThreatApproachRaw = 0;
+        for (let k = 0; k < enemyCount; k++) {
+          let edx = _eX[k] - nx;
+          let edy = _eY[k] - ny;
+          if (edx > halfW) edx -= width;
+          else if (edx < -halfW) edx += width;
+          if (edy > halfH) edy -= height;
+          else if (edy < -halfH) edy += height;
+          const eDistSq = edx * edx + edy * edy;
+          if (_eWinnable[k]) {
+            if (eDistSq < nearestPreySq) {
+              nearestPreySq = eDistSq;
+              nearestPreyEnergy = _eEnergy[k];
+            }
+          } else if (eDistSq < nearestThreatSq) {
+            nearestThreatSq = eDistSq;
+            nearestThreatStrength = _eStrength[k];
+            const dot = -_eDx[k] * edx + -_eDy[k] * edy;
+            const half = dot * 0.5;
+            nearestThreatApproachRaw = half > 1 ? 1 : half < -1 ? -1 : half;
+          }
+        }
+        if (nearestPreySq !== Infinity) {
+          const d = Math.sqrt(nearestPreySq);
+          const proximity = 1 - d * invDepth;
+          if (proximity > 0) {
+            const eClamp = nearestPreyEnergy > 100 ? 1 : nearestPreyEnergy * 0.01;
+            f_prey = proximity * eClamp;
+          }
+        }
+        if (nearestThreatSq !== Infinity) {
+          const d = Math.sqrt(nearestThreatSq);
+          const proximity = 1 - d * invDepth;
+          if (proximity > 0) {
+            const sClamp =
+              nearestThreatStrength > 999 ? 1 : nearestThreatStrength / 999;
+            f_threat = proximity * sClamp;
+          }
+          if (nearestThreatApproachRaw > 0) f_approach = nearestThreatApproachRaw;
+        }
+      }
+
+      const weightedSum =
+        wA * f_energy +
+        wP * f_prey -
+        wC * (f_threat + 0.5 * f_approach) +
+        wG * f_allyNear +
+        wL * f_strongAllyNear +
+        wR * f_emptyAround +
+        wS * f_starvHunger;
+
+      const noise = (1 - accuracy) * (rng() - 0.5) * 2;
+      const score = accuracy * weightedSum + noise - 0.3 * f_dist;
+
+      cells.push({ x: nx, y: ny, score, chosen: false });
+      if (score > bestScore) {
+        bestScore = score;
+        bestX = nx;
+        bestY = ny;
+      }
+    }
+  }
+  for (const c of cells) {
+    if (c.x === bestX && c.y === bestY) {
+      c.chosen = true;
+      break;
+    }
+  }
+  return cells;
+}
+
 /**
  * 個体の現在の行動モードを返す（UI 表示用）。
  *
@@ -2169,6 +2433,22 @@ function reproduceLife(
     let childGenes = mutatGenes(parent.genes, effectiveMutationRate, rng);
     childGenes = applyDisabledGenes(childGenes, world.params.disabledGenes);
     const childSpeciesId = speciesIdFromGenes(childGenes);
+    // v1.31 (A5): 種分化（親と別の色ビン）の初出を系統樹に記録する。
+    // 乱数は消費しない＝シミュレーションの決定性に影響しない（観察用の副記録）。
+    if (
+      childSpeciesId !== parent.speciesId &&
+      !world.speciesLineage.has(childSpeciesId)
+    ) {
+      const cc = speciesColorFromGenes(childGenes);
+      world.speciesLineage.set(childSpeciesId, {
+        id: childSpeciesId,
+        parentId: parent.speciesId,
+        birthTurn: world.turn,
+        r: cc.r,
+        g: cc.g,
+        b: cc.b,
+      });
+    }
     // v1.30 (H8): 誕生時に変異した主要遺伝子と「新種か」を記録（観察用ハイライト）。
     const pg = parent.genes;
     const muts: string[] = [];
@@ -2438,16 +2718,20 @@ function handleCombat(world: World, life: Life): void {
       // v1.10: 旧 params.combatAdvantage は廃止。掠奪率は COMBAT_ENERGY_LOSS_RATIO に固定し、
       // 時代の combatScale で動的に変動する。
       const era = currentEra(world);
+      // v1.31: 上級設定の戦闘略奪率倍率を適用（0..1にclamp）。×1.0 は従来と一致。
+      const effLoss = clamp(
+        COMBAT_ENERGY_LOSS_RATIO * world.params.advanced.combatLossMul,
+        0,
+        1
+      );
       const lootEnergy =
-        opponent.energy *
-        COMBAT_ENERGY_LOSS_RATIO *
-        era.environment.combatScale;
+        opponent.energy * effLoss * era.environment.combatScale;
       life.energy += lootEnergy;
       // v1.11/v1.20: 残り 40% は「死骸」としてその場のセルに付与。
       // depositCarcassEnergy で上限超過分は上下左右 4 セルに均等分配。
       const carcassEnergy =
         opponent.energy *
-        (1 - COMBAT_ENERGY_LOSS_RATIO) *
+        (1 - effLoss) *
         era.environment.combatScale
         + opponent.genes.size * 0.3;
       depositCarcassEnergy(world, nx, ny, carcassEnergy);

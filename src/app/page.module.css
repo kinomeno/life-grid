@@ -127,6 +127,10 @@
   /* 上：ニュース（無効時は非表示）、中：マップ、下：ズーム操作 */
   display: grid;
   grid-template-rows: auto 1fr auto;
+  /* v1.31: 単一カラムをコンテナ幅に固定（minmax(0,1fr)）。
+     これがないと暗黙カラムが最も広い子（map-bar の最小幅）に合わせて広がり、
+     小マップ(25)でカラム枠を超えて右パネルにはみ出し、マップの中央寄せもずれていた。 */
+  grid-template-columns: minmax(0, 1fr);
   background: var(--bg-2);
   padding: 12px;
   gap: 8px;
@@ -233,8 +237,10 @@
 :global(.map-bar) {
   display: flex;
   align-items: center;
+  flex-wrap: wrap; /* v1.31: 小マップ(25)でカラムが狭いとき折り返してはみ出さない */
   gap: 6px;
   justify-self: stretch;
+  min-width: 0;
   padding: 0 4px;
 }
 
@@ -823,9 +829,10 @@
   position: fixed;
   /* sticky ヘッダー内（高さ ~48px）に重ねて表示。
      z-index 31 はヘッダー 30 より上に置くため必須。
-     右側は言語切替を避けて 92px の余白を取る。 */
+     v1.31: 右側に「セーブ／ロード」メニュー＋言語切替(JA/EN)分の余白を確保し、
+     これらのヘッダー右ボタンを覆い隠さないようにする（旧 92px → 205px）。 */
   top: 10px;
-  right: 92px;
+  right: 205px;
   display: flex;
   gap: 0;
   background: var(--bg-2);
@@ -1177,6 +1184,29 @@
 :global(.graph-tooltip-value) {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+}
+
+/* v1.31: 上級設定（折りたたみ） */
+:global(.advanced-summary) {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-strong);
+  padding: 4px 0;
+  user-select: none;
+}
+
+:global(.advanced-hint) {
+  margin-top: 6px;
+  margin-bottom: 10px;
+}
+
+/* v1.31: 戦略散布フロート内「この系統を選択」ボタン（タッチ時に表示） */
+:global(.graph-float-btn) {
+  margin-top: 8px;
+  width: 100%;
+  font-size: 11px;
+  padding: 5px 8px;
 }
 
 /* 行動ログ */
@@ -1650,6 +1680,17 @@
   margin: 0 0 4px;
 }
 
+/* v1.31: 操作名などの強調（** ** で囲った語） */
+:global(.rules-term) {
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+/* v1.31: カテゴリ（heading 付きブロック）間の余白で可読性を上げる */
+:global(.rules-content-block + .rules-content-block) {
+  margin-top: 14px;
+}
+
 /* v1.20: ルール文中の URL リンク（ご挨拶の note 記事など）を強調表示 */
 :global(.rules-link) {
   display: inline-block;
@@ -1814,6 +1855,67 @@
 :global(.lang-toggle-active:hover) {
   color: var(--bg-2);
   background: var(--text);
+}
+
+/* v1.31: ヘッダーのセーブ/ロードメニュー（JA/EN と高さ・トーンを揃える） */
+:global(.saveload-menu) {
+  position: relative;
+  align-self: center;
+  flex-shrink: 0;
+  margin-right: 6px;
+}
+
+:global(.saveload-btn) {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  background: var(--bg-2);
+  color: var(--text-soft);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+
+:global(.saveload-btn:hover) {
+  color: var(--text-strong);
+  background: var(--bg-1);
+}
+
+:global(.saveload-dropdown) {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  min-width: 172px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+
+:global(.saveload-item) {
+  text-align: left;
+  font-size: 12px;
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--text-strong);
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+
+:global(.saveload-item:hover) {
+  background: var(--bg-1);
+}
+
+:global(.saveload-sep) {
+  height: 1px;
+  background: var(--line-soft);
+  margin: 2px 0;
 }
 
 :global(.settings-summary) {
@@ -2236,4 +2338,118 @@
 :global(.kinomeno-link:hover) {
   color: var(--text-strong);
   text-decoration: underline;
+}
+
+/* v1.31 (A5): 系統樹モーダル */
+:global(.lineage-summary) {
+  font-size: 12px;
+  color: var(--text-soft);
+  margin-bottom: 8px;
+  letter-spacing: 0.02em;
+}
+
+:global(.lineage-list) {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* v1.31: 高さを内容量ではなくビューポート基準の固定値にして、
+     時間進行ON時に系統が増減しても縦サイズが変わらない（ガタつかない）ようにする。
+     行が少なければ下に余白、多ければスクロール。 */
+  height: min(58vh, 400px);
+  overflow-y: auto;
+}
+
+:global(.lineage-row) {
+  display: grid;
+  grid-template-columns: 14px 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 4px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+:global(.lineage-clickable) {
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+:global(.lineage-clickable:hover) {
+  background-color: var(--bg-2);
+  border-radius: 3px;
+}
+
+:global(.lineage-extinct) {
+  opacity: 0.5;
+}
+
+:global(.lineage-dot) {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+:global(.lineage-name) {
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:global(.lineage-born) {
+  color: var(--text-soft);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+:global(.lineage-pop) {
+  color: var(--text-soft);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  min-width: 40px;
+  text-align: right;
+}
+
+:global(.lineage-alive .lineage-pop) {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+:global(.lineage-head) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+:global(.lineage-head .lineage-summary) {
+  margin-bottom: 0;
+}
+
+:global(.lineage-toggle) {
+  font-size: 11px;
+  padding: 3px 10px;
+  white-space: nowrap;
+  flex: none;
+}
+
+/* v1.31 (C1): セーブ/ロードのトースト通知 */
+:global(.save-toast) {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  z-index: 10000;
+  background: rgba(20, 28, 44, 0.94);
+  color: #f5f7fb;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
 }

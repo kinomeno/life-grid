@@ -304,48 +304,75 @@ const SECTIONS_JA: Section[] = [
     label: "操作方法",
     body: [
       {
+        heading: "再生・速度",
         lines: [
-          "・生命クリック：個体選択（右パネルに詳細＋行動モード表示）",
-          "・系統クリック：系統追跡（マップ上で強調表示）",
-          "・速度ボタン：x1 / x10 / x100 / 一時停止",
-          "・スペースキー：再生／一時停止のトグル（入力フィールド外で有効）",
-          "・拡大縮小：マップ右下の ＋ / − ボタン（等倍時はスクロールバー非表示）",
-          "・行動ログ：誕生・絶滅など世界史を確認。「年表」タブで主要イベントを時系列表示",
-          "・統計グラフ：時系列／遺伝子分布／「戦略散布」（速度×知能・点の色＝種）",
-          "・注目選択：選択生命の下「注目選択」から最強/最賢/最速/最大/最古へジャンプ",
-          "・PNG保存：現在のマップを画像として保存",
-          "・言語切替：上部バー右端のボタンで JA / EN を切替",
-          "・タイトル戻り：左上の「LIFE GRID」をクリック（確認ダイアログあり）",
-          "・ホイール：マップにマウスを乗せてスクロールでズーム",
-          "・右クリックドラッグ：拡大時にマップをパン（移動）",
-          "・ホバー：マウスを生命の上に乗せるとミニ情報ポップアップ",
+          "**速度ボタン** … x1 / x10 / x100 / 一時停止",
+          "**スペースキー** … 再生／一時停止のトグル（入力欄の外で有効）",
         ],
       },
       {
-        heading: "マップ操作モード（マップ下のアイコン）",
+        heading: "視点（ズーム・移動・全画面）",
         lines: [
-          "🎬 シネマ追尾：注目個体（最大勢力/最古参/最強）へカメラが寄って自動追従",
-          "⚡ 投入：マップクリックで局所にエネルギー注入（半径 3）",
-          "☄🌵🌸 天変地異召喚：クリック位置に隕石／旱魃／大開花を発生",
-          "再度同じボタンでモード解除。",
+          "**＋ / − ボタン** … マップ右下で拡大縮小（等倍時はスクロールバー非表示）",
+          "**マウスホイール** … マップ上でスクロールしてズーム",
+          "**右クリックドラッグ** … 拡大時にマップをパン（移動）",
+          "**全画面（⛶ / ⛶⛶）** … マップ下のアイコン。⛶＝HUDを隠す／⛶⛶＝真の全画面（観賞専用）",
+        ],
+      },
+      {
+        heading: "選択・観察",
+        lines: [
+          "**生命クリック** … 個体を選択（右パネルに詳細・行動モード）",
+          "**系統クリック** … その系統を追跡（マップ上で強調）",
+          "**ホバー** … 生命にマウスを乗せるとミニ情報（PC のみ）",
+          "**▼注目選択** … 選択生命の下から最強／最賢／最速／最大／最古へジャンプ",
+          "**🧠 思考ヒートマップ** … マップ下のアイコン。選択個体が次にどこへ動きたいかを色で表示（青=低→赤=高）",
+        ],
+      },
+      {
+        heading: "観察ウィンドウ",
+        lines: [
+          "**統計グラフ** … 時系列／遺伝子分布／戦略散布（速度×知能・点＝系統色）",
+          "**行動ログ** … 「ログ」「年表（主要イベント）」「系統樹（種の枝分かれ）」の3タブ",
+        ],
+      },
+      {
+        heading: "介入（マップ下のアイコン）",
+        lines: [
+          "**🎬 シネマ追尾** … 注目個体（最大勢力／最古参／最強）へカメラが寄って自動追従",
+          "**⚡ 投入** … クリック位置にエネルギーを注入（半径 3）",
+          "**☄ / 🌵 / 🌸 天変地異** … クリック位置に隕石／旱魃／大開花。再度押すと解除",
+        ],
+      },
+      {
+        heading: "ファイル・共有",
+        lines: [
+          "**セーブ／ロード（右上メニュー）** … 「セーブ／ロード」＝ブラウザ内に保存・読み出し。「書き出し／読み込み」＝ファイルで保存・復元（続きから同じ進化を再現）",
+          "**PNG保存** … 現在のマップを画像として保存",
+          "**𝕏 で共有** … 右下のボタンから投稿（環境設定は共有URLに含まれます）",
+        ],
+      },
+      {
+        heading: "その他",
+        lines: [
+          "**言語切替** … 上部バー右端の JA / EN",
+          "**タイトルへ戻る** … 左上「LIFE GRID」をクリック（確認あり）",
         ],
       },
       {
         heading: "保護モード（金色の光輪）",
         lines: [
-          "個体選択後の「保護モード」チェックで戦闘・寿命・天変地異から守る。",
-          "観察対象の個体を長期追跡するために使用。",
-          "保護中の個体は金色の光輪に包まれる。",
+          "個体選択後の「**保護モード**」チェックで戦闘・寿命・天変地異から守る。",
+          "観察対象を長期追跡するために使用。保護中の個体は金色の光輪に包まれる。",
         ],
       },
       {
         heading: "モバイル縦画面（観察モード）",
         lines: [
           "スマホ等の縦画面では自動的に観察モードに切替。",
-          "・全体情報・系統・選択生命の各パネルは折りたたみ既定",
-          "・マップ操作モード（⚡☄🌵🌸）は非表示",
+          "・全体情報／系統／選択生命の各パネルは折りたたみ既定",
           "・速度は ×1 と ×100 のみ表示",
-          "・ホバーポップアップは無効（タッチ環境のため）",
+          "・ホバーは無効（タッチ環境のため。タップで操作）",
         ],
       },
     ],
@@ -700,36 +727,65 @@ const SECTIONS_EN: Section[] = [
     label: "Controls",
     body: [
       {
+        heading: "Playback & speed",
         lines: [
-          "・Click a life: select the individual (right panel shows details + behavior mode).",
-          "・Click a species: track it (highlighted on the map).",
-          "・Speed buttons: x1 / x10 / x100 / pause.",
-          "・Spacebar: toggle play/pause (works outside input fields).",
-          "・Zoom: ＋ / − buttons at bottom-right of map (no scrollbar at 100%).",
-          "・Action log: world history (births/extinctions). \"Chronicle\" tab lists major events in time order.",
-          "・Stats graph: time series / gene distribution / \"Strategy\" scatter (speed×intelligence, point color = species).",
-          "・Focus: from \"Focus\" under the selected life, jump to the strongest/smartest/fastest/biggest/oldest.",
-          "・Save PNG: download current map view as an image.",
-          "・Language toggle: JA / EN button at the top-right of the header.",
-          "・Return to title: click \"LIFE GRID\" at top-left (confirmation dialog appears).",
-          "・Mouse wheel: scroll on the map to zoom.",
-          "・Right-click drag: pan the map when zoomed in.",
-          "・Hover: place mouse over a life for a mini info popup.",
+          "**Speed buttons** … x1 / x10 / x100 / pause",
+          "**Spacebar** … toggle play/pause (works outside input fields)",
         ],
       },
       {
-        heading: "Map modes (icons under the map)",
+        heading: "View (zoom, pan, fullscreen)",
         lines: [
-          "🎬 Cinema follow: camera zooms in and auto-tracks a notable life (dominant/oldest/strongest)",
-          "⚡ Inject: click the map to add local energy (radius 3)",
-          "☄🌵🌸 Cataclysm summon: click to spawn meteor / drought / bloom",
-          "Click the same button again to clear the mode.",
+          "**＋ / − buttons** … zoom at bottom-right of map (no scrollbar at 100%)",
+          "**Mouse wheel** … scroll on the map to zoom",
+          "**Right-click drag** … pan the map when zoomed in",
+          "**Fullscreen (⛶ / ⛶⛶)** … icons under the map. ⛶ = hide HUD / ⛶⛶ = true fullscreen (viewing only)",
+        ],
+      },
+      {
+        heading: "Select & observe",
+        lines: [
+          "**Click a life** … select it (right panel shows details & behavior mode)",
+          "**Click a species** … track it (highlighted on the map)",
+          "**Hover** … mini info popup over a life (PC only)",
+          "**▼Focus** … from under the selected life, jump to strongest/smartest/fastest/biggest/oldest",
+          "**🧠 Thought heatmap** … icon under the map. Colors where the selected life wants to move next (blue=low → red=high)",
+        ],
+      },
+      {
+        heading: "Observation windows",
+        lines: [
+          "**Stats graph** … time series / gene distribution / strategy scatter (speed×intelligence, point = species color)",
+          "**Action log** … three tabs: Log / Chronicle (major events) / Lineage (species branching)",
+        ],
+      },
+      {
+        heading: "Intervene (icons under the map)",
+        lines: [
+          "**🎬 Cinema follow** … camera zooms in and auto-tracks a notable life (dominant/oldest/strongest)",
+          "**⚡ Inject** … click to add local energy (radius 3)",
+          "**☄ / 🌵 / 🌸 Cataclysm** … click to spawn meteor / drought / bloom. Press again to clear",
+        ],
+      },
+      {
+        heading: "File & share",
+        lines: [
+          "**Save / Load (top-right menu)** … Save/Load = store/restore in the browser. Export/Import = save/restore via a file (resume the same evolution)",
+          "**Save PNG** … download the current map as an image",
+          "**Share on 𝕏** … post from the button at bottom-right (environment settings are included in the share URL)",
+        ],
+      },
+      {
+        heading: "Other",
+        lines: [
+          "**Language** … JA / EN at the top-right of the header",
+          "**Return to title** … click \"LIFE GRID\" at top-left (confirmation appears)",
         ],
       },
       {
         heading: "Protect mode (gold halo)",
         lines: [
-          "Toggle \"Protect\" in the selected-life panel to make a life immune to combat, aging, and cataclysms.",
+          "Toggle \"**Protect**\" in the selected-life panel to make a life immune to combat, aging, and cataclysms.",
           "Use it for long-term observation. Protected lives are wrapped in a gold halo.",
         ],
       },
@@ -738,9 +794,8 @@ const SECTIONS_EN: Section[] = [
         lines: [
           "Switches automatically to observation mode in portrait orientation.",
           "・Info / species / selected-life panels collapsed by default",
-          "・Map mode buttons (⚡☄🌵🌸) hidden",
           "・Only ×1 and ×100 speeds shown",
-          "・Hover popup disabled (touch environment)",
+          "・Hover disabled (touch environment; tap to interact)",
         ],
       },
     ],
@@ -824,23 +879,43 @@ function flatten(sections: Section[]): Section[] {
  * ご挨拶セクションの note URL などを強調表示。
  */
 function renderLine(line: string): ReactNode {
-  // http(s) URL を区切りとして分割（全角/半角スペースまで）
-  const parts = line.split(/(https?:\/\/[^\s　]+)/g);
-  return parts.map((part, i) =>
-    /^https?:\/\//.test(part) ? (
-      <a
-        key={i}
-        href={part}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="rules-link"
-      >
-        {part}
-      </a>
-    ) : (
-      part
-    )
-  );
+  // v1.31: 行内の **太字** と http(s) URL をインラインで処理する。
+  const nodes: ReactNode[] = [];
+  let key = 0;
+  // まず **bold** で分割（偶数=通常, 奇数=太字）
+  const boldParts = line.split(/\*\*([^*]+)\*\*/g);
+  boldParts.forEach((seg, i) => {
+    if (seg === "") return;
+    if (i % 2 === 1) {
+      nodes.push(
+        <strong key={key++} className="rules-term">
+          {seg}
+        </strong>
+      );
+      return;
+    }
+    // 通常部分内の URL をリンク化（全角/半角スペースまで）
+    const parts = seg.split(/(https?:\/\/[^\s　]+)/g);
+    for (const part of parts) {
+      if (part === "") continue;
+      if (/^https?:\/\//.test(part)) {
+        nodes.push(
+          <a
+            key={key++}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rules-link"
+          >
+            {part}
+          </a>
+        );
+      } else {
+        nodes.push(<span key={key++}>{part}</span>);
+      }
+    }
+  });
+  return nodes;
 }
 
 function sectionsFor(locale: Locale): Section[] {

@@ -66,6 +66,24 @@ export type Life = {
 /** 日本語と英語の両方を保持するメッセージ。表示時にロケールで選択。 */
 export type LocalizedMessage = { ja: string; en: string };
 
+/** v1.31: 上級設定。コスト等の倍率（既定すべて1.0＝現行バランス）。研究者向け。 */
+export type AdvancedParams = {
+  /** 基礎代謝コスト倍率。 */
+  costBaseMul: number;
+  /** 視野コスト倍率。 */
+  costVisionMul: number;
+  /** 速度コスト倍率（移動・維持の両方）。 */
+  costSpeedMul: number;
+  /** 強さコスト倍率。 */
+  costStrengthMul: number;
+  /** 知能コスト倍率。 */
+  costIntelligenceMul: number;
+  /** 採餌（エネルギー吸収）効率倍率。 */
+  absorbMul: number;
+  /** 戦闘の略奪率倍率（残りは死骸として場に還元）。 */
+  combatLossMul: number;
+};
+
 export type SimulationParams = {
   /** 世界全体のエネルギー量倍率（再生・波振幅にスケールがかかる）。1.0が既定。 */
   totalEnergy: number;
@@ -86,6 +104,8 @@ export type SimulationParams = {
   /** v1.30 (案1/B): 仲間へのエネルギー提供（利他）を有効化する。既定 false（オプトイン）。
    *  OFF時は分配フェーズを実行しないだけで、wShare 遺伝子の値は保持（不活性化のみ・50に戻さない）。 */
   energyShareEnabled: boolean;
+  /** v1.31: 上級設定（コスト等の倍率）。研究者がバランス調整に使う。既定すべて1.0。 */
+  advanced: AdvancedParams;
 };
 
 /**
@@ -156,6 +176,21 @@ export type StatsSample = {
   avgB: number;
 };
 
+/** v1.31 (A5): 系統樹のノード。種(色ビンID)ごとの初出と親種を記録する。
+ *  色ビンは有界（チャンネル6段階＝最大216種）なのでメモリは小さい。 */
+export type SpeciesLineageNode = {
+  /** 種ID（色ビン）。 */
+  id: string;
+  /** 親種ID。初期種・親不明は null。 */
+  parentId: string | null;
+  /** この種が初めて出現したターン。 */
+  birthTurn: number;
+  /** 創始個体の種代表色（表示用）。 */
+  r: number;
+  g: number;
+  b: number;
+};
+
 export type World = {
   width: number;
   height: number;
@@ -192,6 +227,8 @@ export type World = {
   eraTime: number;
   /** 既出系統の追跡（誕生イベント記録用）。 */
   knownSpecies: Set<string>;
+  /** v1.31 (A5): 種分化の系統記録（種ID → ノード）。色ビンは有界（最大216）。 */
+  speciesLineage: Map<string, SpeciesLineageNode>;
   /** 直近の系統別生物数（絶滅イベント記録用）。 */
   prevSpeciesCounts: Map<string, number>;
   /** 直近の時代インデックス（紀元変化検出用）。 */

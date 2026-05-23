@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import SimulationCanvas from "./SimulationCanvas";
 import StatsGraphModal, {
   DEFAULT_GRAPH_SERIES,
@@ -12,6 +20,11 @@ import ActionLogModal from "./ActionLogModal";
 import RulesScreen from "./RulesScreen";
 import { computeStats, type WorldStats } from "@/lib/stats";
 import { randomSeed } from "@/lib/random";
+import {
+  serializeWorld,
+  deserializeWorld,
+  encodeParamsPreset,
+} from "@/lib/serialize";
 import {
   createWorld,
   currentEra,
@@ -26,6 +39,7 @@ import {
 import type { DisabledGeneFlags, WorldEvent } from "@/lib/types";
 import { speciesLabel, binCenterColor } from "@/lib/species";
 import { encodeGeneId, truncateGeneId } from "@/lib/geneId";
+import { DEFAULT_ADVANCED } from "@/lib/constants";
 import { isUnlocked } from "@/lib/unlock";
 import ShareXButton from "./ShareXButton";
 import PasswordPrompt from "./PasswordPrompt";
@@ -39,6 +53,10 @@ type Props = {
   initialLifeCount: number;
   initialSeed: number;
   initialGenes?: Genes;
+  /** v1.31: 共有URLの設定プリセット（環境設定の一部）。あれば初期 params に上書き。 */
+  initialParams?: Partial<SimulationParams>;
+  /** v1.31: 保存データから読み込んだ World。あれば createWorld の代わりにこれで開始。 */
+  initialWorld?: World;
   onBackToTitle?: () => void;
 };
 
@@ -55,14 +73,28 @@ type SpeciesEntry = {
   archetype: string[];
 };
 
-export default function SimulationView({
-  width,
-  height,
-  initialLifeCount,
-  initialSeed,
-  initialGenes,
-  onBackToTitle,
-}: Props) {
+/** v1.31: ヘッダーのセーブ/ロードメニューから呼ぶ命令型ハンドル。 */
+export type SimulationViewHandle = {
+  saveStorage: () => void;
+  loadStorage: () => void;
+  exportFile: () => void;
+  importFile: () => void;
+};
+
+const SimulationView = forwardRef<SimulationViewHandle, Props>(
+  function SimulationView(
+    {
+      width,
+      height,
+      initialLifeCount,
+      initialSeed,
+      initialGenes,
+      initialParams,
+      initialWorld,
+      onBackToTitle,
+    }: Props,
+    ref
+  ) {
   const { t, locale } = useLocale();
   // 画面サイズを追跡し、マップが overflow（スクロールバー）しないよう自動拡縮する
   const [screenWidth, setScreenWidth] = useState<number>(() =>
@@ -90,11 +122,20 @@ export default function SimulationView({
     //   - 高さ: ヘッダー・操作バー・上下余白を差し引いた残り
     const sidePanels = screenWidth >= 900 ? 240 * 2 + 60 : 40;
     const availW = Math.max(160, screenWidth - sidePanels);
-    const availH = Math.max(160, screenHeight - 180); // ヘッダー+操作バー+余白
+    // v1.31: 縦の確保量を実測に合わせて拡大（180→270）。
+    // ヘッダー(50)+ステータス(28)+ニュース/余白+map-bar(26)+下部操作バー(51)+本文padding
+    // = 約260px。180 では cellSize 上限12（マップ600px）に張り付く高さ帯（〜860px）で
+    // 数十px溢れて縦スクロールバーが出ていた。
+    const availH = Math.max(160, screenHeight - 270);
     const fitW = availW / Math.max(width, height);
     const fitH = availH / Math.max(width, height);
-    const fit = Math.floor(Math.min(fitW, fitH));
-    // 上限は 12 まで緩和（大画面で全体が小さくなりすぎないように）
+    // v1.31: floor を外して分数セルサイズを許可。
+    // 大マップ（例 200）で floor(2.95)=2 となり利用可能領域の約1/3を捨てて
+    // メインフレームが小さくなっていた問題を解消し、領域いっぱいに広げる。
+    // エネルギー場は nearest-neighbor 拡大（imageSmoothingEnabled=false）なので
+    // 分数倍率でも見た目はほぼ問題ない。
+    const fit = Math.min(fitW, fitH);
+    // 上限は 12（大画面で小マップが巨大化しすぎないように）。下限 2。
     return Math.max(2, Math.min(12, fit));
   }, [width, height, screenWidth, screenHeight]);
 
@@ -128,6 +169,8 @@ export default function SimulationView({
     //   ・100 以上:   1.2（知能進化を促す標準値）
     if (width <= 50) p.totalEnergy = 1.5;
     else if (width <= 75) p.totalEnergy = 1.35;
+    // v1.31: 共有URLの設定プリセットがあれば上書き（研究者の設定を t0 から再現）。
+    if (initialParams) Object.assign(p, initialParams);
     return p;
   });
   // RAF ループ内で常に最新の params を参照するための ref
@@ -139,11 +182,16 @@ export default function SimulationView({
   const [showStats, setShowStats] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  // v1.31 (H9): 思考ヒートマップ表示トグル（選択個体の行動評価を可視化）
+  const [showThoughtHeatmap, setShowThoughtHeatmap] = useState(false);
   // 統計／ログ画面の「時間進行 ON/OFF」トグル（初期 OFF＝停止）
   const [statsKeepRunning, setStatsKeepRunning] = useState(false);
   const [logKeepRunning, setLogKeepRunning] = useState(false);
   const [seedCopied, setSeedCopied] = useState(false);
   const [seedInput, setSeedInput] = useState("");
+  // v1.31 (C1): セーブ/ロード（ファイル入力参照 + 一時メッセージ）
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
   const [selectedLifeId, setSelectedLifeId] = useState<number | null>(null);
   // v1.20: 矢印キー処理で最新の selectedLifeId を参照するための ref
@@ -212,17 +260,21 @@ export default function SimulationView({
 
   useEffect(() => {
     if (worldRef.current !== null) return;
-    const w = createWorld({
-      width,
-      height,
-      initialLifeCount,
-      seed: initialSeed,
-      params,
-      initialGenes,
-    });
+    // v1.31: 保存データから読み込んだ World があればそれで開始（タイトルから再開）。
+    const w =
+      initialWorld ??
+      createWorld({
+        width,
+        height,
+        initialLifeCount,
+        seed: initialSeed,
+        params,
+        initialGenes,
+      });
     worldRef.current = w;
     setWorldState(w);
-    setSeed(initialSeed);
+    setSeed(w.seed);
+    if (initialWorld) setParams(w.params);
     refreshDerived(w);
     setVersion((v) => v + 1);
     // v1.20: 初回起動時にもランダムで生命を 1 体選択
@@ -231,17 +283,22 @@ export default function SimulationView({
       const idx = Math.floor(Math.random() * alive.length);
       setSelectedLifeId(alive[idx].id);
     }
-    // 共有可能な URL に更新（履歴を汚さず replaceState）
-    if (typeof window !== "undefined") {
-      const sp = new URLSearchParams();
-      sp.set("seed", String(initialSeed));
-      sp.set("w", String(width));
-      sp.set("n", String(initialLifeCount));
-      window.history.replaceState(null, "", `?${sp.toString()}`);
-    }
+    // v1.31: 共有URL（seed/w/n/p）は下の useEffect で同期する。
     // params/initialGenes は初回のみ読み取り（リセット時のみ反映）。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [width, height, initialLifeCount, initialSeed, refreshDerived]);
+
+  // v1.31: 共有URLを seed/w/n＋設定プリセット(p) で同期（履歴を汚さず replaceState）。
+  // 設定を変更した後に共有しても、その設定が URL（=共有内容）に反映される。
+  useEffect(() => {
+    if (typeof window === "undefined" || seed === null) return;
+    const sp = new URLSearchParams();
+    sp.set("seed", String(seed));
+    sp.set("w", String(width));
+    sp.set("n", String(initialLifeCount));
+    sp.set("p", encodeParamsPreset(params));
+    window.history.replaceState(null, "", `?${sp.toString()}`);
+  }, [seed, params, width, initialLifeCount]);
 
   useEffect(() => {
     const w = worldRef.current;
@@ -252,6 +309,114 @@ export default function SimulationView({
     speedRef.current = s;
     setSpeedState(s);
   }, []);
+
+  // v1.31: 「セーブ」＝ブラウザ内（localStorage）に保存。
+  const saveStorage = useCallback(() => {
+    const w = worldRef.current;
+    if (!w) return;
+    try {
+      localStorage.setItem("lifegrid_save", serializeWorld(w));
+      setSaveMsg(t("save.saved_storage"));
+    } catch {
+      setSaveMsg(t("save.error"));
+    }
+    window.setTimeout(() => setSaveMsg(null), 2500);
+  }, [t]);
+
+  // v1.31: 「書き出し」＝ファイルへダウンロード。
+  const exportFile = useCallback(() => {
+    const w = worldRef.current;
+    if (!w) return;
+    try {
+      const json = serializeWorld(w);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `life-grid_seed${w.seed}_t${w.turn}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setSaveMsg(t("save.exported"));
+    } catch {
+      setSaveMsg(t("save.error"));
+    }
+    window.setTimeout(() => setSaveMsg(null), 2500);
+  }, [t]);
+
+  // v1.31 (C1): 復元した World を現在のシミュレーションに反映する。
+  const applyLoadedWorld = useCallback(
+    (w: World) => {
+      setSpeed(0); // ロード直後は一時停止
+      worldRef.current = w;
+      setWorldState(w);
+      setParams(w.params);
+      setSeed(w.seed);
+      refreshDerived(w);
+      setSelectedLifeId(null);
+      setTrackedSpeciesId(null);
+      setVersion((v) => v + 1);
+      setSaveMsg(t("save.loaded"));
+      window.setTimeout(() => setSaveMsg(null), 2500);
+    },
+    [refreshDerived, setSpeed, t]
+  );
+
+  // v1.31 (C1): 選択されたファイルを読み込んで復元する。
+  const handleLoadFile = useCallback(
+    (file: File) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const w = deserializeWorld(String(reader.result));
+          applyLoadedWorld(w);
+        } catch (err) {
+          setSaveMsg(err instanceof Error ? err.message : t("save.load_error"));
+          window.setTimeout(() => setSaveMsg(null), 4000);
+        }
+      };
+      reader.onerror = () => {
+        setSaveMsg(t("save.load_error"));
+        window.setTimeout(() => setSaveMsg(null), 4000);
+      };
+      reader.readAsText(file);
+    },
+    [applyLoadedWorld, t]
+  );
+
+  // v1.31: 「ロード」＝ブラウザ内（localStorage）から読み出し。無ければ案内。
+  const loadStorage = useCallback(() => {
+    let json: string | null = null;
+    try {
+      json = localStorage.getItem("lifegrid_save");
+    } catch {
+      json = null;
+    }
+    if (!json) {
+      setSaveMsg(t("save.none"));
+      window.setTimeout(() => setSaveMsg(null), 2500);
+      return;
+    }
+    try {
+      applyLoadedWorld(deserializeWorld(json));
+    } catch (err) {
+      setSaveMsg(err instanceof Error ? err.message : t("save.load_error"));
+      window.setTimeout(() => setSaveMsg(null), 4000);
+    }
+  }, [applyLoadedWorld, t]);
+
+  // v1.31: 「読み込み」＝ファイル選択ダイアログを開く。
+  const importFile = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  // v1.31: セーブ/ロードはヘッダー（AppHeader）のメニューから呼ばれる。
+  useImperativeHandle(
+    ref,
+    () => ({ saveStorage, loadStorage, exportFile, importFile }),
+    [saveStorage, loadStorage, exportFile, importFile]
+  );
 
   // v1.30 (H10): タブが非アクティブになったら自動で一時停止（無駄計算・電池配慮）。復帰は手動。
   useEffect(() => {
@@ -1532,6 +1697,7 @@ export default function SimulationView({
                   animPhase={animPhase}
                   simplifiedRender={simplifiedRender}
                   selectedLifeId={selectedLifeId}
+                  showThoughtHeatmap={showThoughtHeatmap}
                   selectedLifePath={selectedLifePath}
                   trackedSpeciesId={trackedSpeciesId}
                   onCellClick={handleCellClick}
@@ -1597,6 +1763,16 @@ export default function SimulationView({
             aria-label={t("ctrl.cinema")}
           >
             🎬
+          </button>
+          {/* v1.31 (H9): 思考ヒートマップ（選択個体の行動評価を色で可視化） */}
+          <button
+            className={`mini-btn ${showThoughtHeatmap ? "mini-btn-active" : ""}`}
+            onClick={() => setShowThoughtHeatmap((v) => !v)}
+            title={t("ctrl.thought_heatmap")}
+            aria-label={t("ctrl.thought_heatmap")}
+            aria-pressed={showThoughtHeatmap}
+          >
+            🧠
           </button>
           {/* G1: エネルギー投入 */}
           <button
@@ -2099,110 +2275,223 @@ export default function SimulationView({
             </section>
 
             <section className="modal-section">
-              <div className="settings-grid">
-                <div>
-                  <h3 className="settings-col-title">
-                    {t("settings.col.world_rules")}
-                  </h3>
-                  <div className="param-list">
-                    <ParamSlider
-                      label={t("settings.param.total_energy")}
-                      value={params.totalEnergy}
-                      min={0.3}
-                      max={2.0}
-                      step={0.05}
-                      onChange={(v) =>
-                        setParams((p) => ({ ...p, totalEnergy: v }))
-                      }
-                    />
-                    <ParamSlider
-                      label={t("settings.param.mutation_rate")}
-                      value={params.mutationRateMultiplier}
-                      min={0.0}
-                      max={3.0}
-                      step={0.05}
-                      onChange={(v) =>
-                        setParams((p) => ({
-                          ...p,
-                          mutationRateMultiplier: v,
-                        }))
-                      }
-                    />
-                    <ParamSlider
-                      label={t("settings.param.wave_speed")}
-                      value={params.waveSpeed}
-                      min={0.0}
-                      max={3.0}
-                      step={0.05}
-                      onChange={(v) =>
-                        setParams((p) => ({ ...p, waveSpeed: v }))
-                      }
-                    />
-                    {/* v1.10: 攻撃優位度のスライダーは廃止。掠奪率は内部定数 +
-                        era.combatScale で時代ごとに変動する。 */}
-                    <button
-                      className="btn param-reset"
-                      onClick={() => setParams(defaultSimulationParams())}
-                    >
-                      {t("common.reset_default")}
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="settings-col-title">
-                    {t("settings.col.gene_toggle")}
-                  </h3>
-                  <p className="empty-sub">{t("settings.gene_toggle_hint")}</p>
-                  <GeneToggleGrid
-                    disabled={params.disabledGenes}
-                    onChange={(next) =>
-                      setParams((p) => ({ ...p, disabledGenes: next }))
-                    }
-                  />
-                  <div className="gene-toggle-actions">
-                    <button
-                      className="btn"
-                      onClick={() =>
-                        setParams((p) => ({
-                          ...p,
-                          disabledGenes: defaultDisabledGenes(),
-                        }))
-                      }
-                    >
-                      {t("settings.gene_all_on")}
-                    </button>
-                    <button
-                      className="btn"
-                      onClick={() =>
-                        setParams((p) => ({
-                          ...p,
-                          disabledGenes: allDisabledGenes(),
-                        }))
-                      }
-                    >
-                      {t("settings.gene_all_off")}
-                    </button>
-                  </div>
-                  {/* v1.30 (案1/B): 仲間へのエネルギー提供（利他）。既定OFFのオプトイン。 */}
-                  <label
-                    className="settings-toggle"
-                    title={t("settings.energy_share_hint")}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={params.energyShareEnabled}
-                      onChange={(e) =>
-                        setParams((p) => ({
-                          ...p,
-                          energyShareEnabled: e.target.checked,
-                        }))
-                      }
-                    />
-                    <span>{t("settings.energy_share")}</span>
-                  </label>
-                </div>
+              <h3 className="settings-col-title">
+                {t("settings.col.world_rules")}
+              </h3>
+              <div className="param-list">
+                <ParamSlider
+                  label={t("settings.param.total_energy")}
+                  value={params.totalEnergy}
+                  min={0.3}
+                  max={2.0}
+                  step={0.05}
+                  onChange={(v) => setParams((p) => ({ ...p, totalEnergy: v }))}
+                />
+                <ParamSlider
+                  label={t("settings.param.mutation_rate")}
+                  value={params.mutationRateMultiplier}
+                  min={0.0}
+                  max={3.0}
+                  step={0.05}
+                  onChange={(v) =>
+                    setParams((p) => ({ ...p, mutationRateMultiplier: v }))
+                  }
+                />
+                <ParamSlider
+                  label={t("settings.param.wave_speed")}
+                  value={params.waveSpeed}
+                  min={0.0}
+                  max={3.0}
+                  step={0.05}
+                  onChange={(v) => setParams((p) => ({ ...p, waveSpeed: v }))}
+                />
+                <button
+                  className="btn param-reset"
+                  onClick={() => setParams(defaultSimulationParams())}
+                >
+                  {t("common.reset_default")}
+                </button>
               </div>
+              {/* v1.30 (案1/B): 仲間へのエネルギー提供（利他）。既定OFFのオプトイン。 */}
+              <label
+                className="settings-toggle"
+                title={t("settings.energy_share_hint")}
+              >
+                <input
+                  type="checkbox"
+                  checked={params.energyShareEnabled}
+                  onChange={(e) =>
+                    setParams((p) => ({
+                      ...p,
+                      energyShareEnabled: e.target.checked,
+                    }))
+                  }
+                />
+                <span>{t("settings.energy_share")}</span>
+              </label>
+            </section>
+
+            {/* v1.31: 上級設定（研究者向け）。既定で折りたたみ。 */}
+            <section className="modal-section">
+              <details className="advanced-details">
+                <summary className="advanced-summary">
+                  {t("settings.advanced.title")}
+                </summary>
+                <p className="empty-sub advanced-hint">
+                  {t("settings.advanced.hint")}
+                </p>
+                <div className="settings-grid">
+                  <div>
+                    <h3 className="settings-col-title">
+                      {t("settings.advanced.cost_title")}
+                    </h3>
+                    <div className="param-list">
+                      <ParamSlider
+                        label={t("settings.adv.cost_base")}
+                        value={params.advanced.costBaseMul}
+                        min={0}
+                        max={3}
+                        step={0.1}
+                        onChange={(v) =>
+                          setParams((p) => ({
+                            ...p,
+                            advanced: { ...p.advanced, costBaseMul: v },
+                          }))
+                        }
+                      />
+                      <ParamSlider
+                        label={t("settings.adv.cost_vision")}
+                        value={params.advanced.costVisionMul}
+                        min={0}
+                        max={3}
+                        step={0.1}
+                        onChange={(v) =>
+                          setParams((p) => ({
+                            ...p,
+                            advanced: { ...p.advanced, costVisionMul: v },
+                          }))
+                        }
+                      />
+                      <ParamSlider
+                        label={t("settings.adv.cost_speed")}
+                        value={params.advanced.costSpeedMul}
+                        min={0}
+                        max={3}
+                        step={0.1}
+                        onChange={(v) =>
+                          setParams((p) => ({
+                            ...p,
+                            advanced: { ...p.advanced, costSpeedMul: v },
+                          }))
+                        }
+                      />
+                      <ParamSlider
+                        label={t("settings.adv.cost_strength")}
+                        value={params.advanced.costStrengthMul}
+                        min={0}
+                        max={3}
+                        step={0.1}
+                        onChange={(v) =>
+                          setParams((p) => ({
+                            ...p,
+                            advanced: { ...p.advanced, costStrengthMul: v },
+                          }))
+                        }
+                      />
+                      <ParamSlider
+                        label={t("settings.adv.cost_intelligence")}
+                        value={params.advanced.costIntelligenceMul}
+                        min={0}
+                        max={3}
+                        step={0.1}
+                        onChange={(v) =>
+                          setParams((p) => ({
+                            ...p,
+                            advanced: {
+                              ...p.advanced,
+                              costIntelligenceMul: v,
+                            },
+                          }))
+                        }
+                      />
+                      <ParamSlider
+                        label={t("settings.adv.absorb")}
+                        value={params.advanced.absorbMul}
+                        min={0.2}
+                        max={3}
+                        step={0.1}
+                        onChange={(v) =>
+                          setParams((p) => ({
+                            ...p,
+                            advanced: { ...p.advanced, absorbMul: v },
+                          }))
+                        }
+                      />
+                      <ParamSlider
+                        label={t("settings.adv.combat_loss")}
+                        value={params.advanced.combatLossMul}
+                        min={0}
+                        max={1.6}
+                        step={0.1}
+                        onChange={(v) =>
+                          setParams((p) => ({
+                            ...p,
+                            advanced: { ...p.advanced, combatLossMul: v },
+                          }))
+                        }
+                      />
+                      <button
+                        className="btn param-reset"
+                        onClick={() =>
+                          setParams((p) => ({
+                            ...p,
+                            advanced: { ...DEFAULT_ADVANCED },
+                          }))
+                        }
+                      >
+                        {t("settings.advanced.reset_cost")}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="settings-col-title">
+                      {t("settings.col.gene_toggle")}
+                    </h3>
+                    <p className="empty-sub">{t("settings.gene_toggle_hint")}</p>
+                    <GeneToggleGrid
+                      disabled={params.disabledGenes}
+                      onChange={(next) =>
+                        setParams((p) => ({ ...p, disabledGenes: next }))
+                      }
+                    />
+                    <div className="gene-toggle-actions">
+                      <button
+                        className="btn"
+                        onClick={() =>
+                          setParams((p) => ({
+                            ...p,
+                            disabledGenes: defaultDisabledGenes(),
+                          }))
+                        }
+                      >
+                        {t("settings.gene_all_on")}
+                      </button>
+                      <button
+                        className="btn"
+                        onClick={() =>
+                          setParams((p) => ({
+                            ...p,
+                            disabledGenes: allDisabledGenes(),
+                          }))
+                        }
+                      >
+                        {t("settings.gene_all_off")}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </details>
             </section>
 
             <section className="modal-section">
@@ -2331,6 +2620,10 @@ export default function SimulationView({
           enabled={graphSeries}
           onChange={setGraphSeries}
           onClose={() => setShowStats(false)}
+          onSpeciesClick={(id) => {
+            setTrackedSpeciesId(id);
+            setShowStats(false);
+          }}
           timeRunning={statsKeepRunning}
           onToggleTime={() => setStatsKeepRunning((v) => !v)}
           tab={statsTab}
@@ -2345,6 +2638,8 @@ export default function SimulationView({
       {showLog && world && (
         <ActionLogModal
           events={world.events}
+          lineage={Array.from(world.speciesLineage.values())}
+          lives={world.lives}
           onClose={() => setShowLog(false)}
           onSpeciesClick={(id) => {
             setTrackedSpeciesId(id);
@@ -2364,6 +2659,20 @@ export default function SimulationView({
           onOffsetChange={setRulesModalOffset}
         />
       )}
+
+      {/* v1.31 (C1): ロード用の隠しファイル入力 */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/json,.json"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleLoadFile(f);
+          e.target.value = ""; // 同じファイルを連続で選べるように
+        }}
+      />
+      {saveMsg && <div className="save-toast">{saveMsg}</div>}
 
       <ShareXButton
         text={
@@ -2412,7 +2721,10 @@ export default function SimulationView({
     )}
     </>
   );
-}
+  }
+);
+
+export default SimulationView;
 
 function GeneIdRow({ life }: { life: Life }) {
   const { t } = useLocale();
