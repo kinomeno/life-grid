@@ -37,11 +37,11 @@ import {
   stepWorld,
 } from "@/lib/world";
 import type { DisabledGeneFlags, WorldEvent } from "@/lib/types";
-import { speciesLabel, binCenterColor } from "@/lib/species";
+import { speciesLabel, speciesDisplayName, binCenterColor } from "@/lib/species";
 import { encodeGeneId, truncateGeneId } from "@/lib/geneId";
 import { DEFAULT_ADVANCED } from "@/lib/constants";
 import { isUnlocked } from "@/lib/unlock";
-import { getWorldTerrain } from "@/lib/maps";
+import { getWorldTerrain, regionJaByCode } from "@/lib/maps";
 import ShareXButton from "./ShareXButton";
 import PasswordPrompt from "./PasswordPrompt";
 import KinomenoLink from "./KinomenoLink";
@@ -1997,7 +1997,11 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
                       <div className="info-grid-2 info-compact">
                         <InfoRow
                           label={t("info.species")}
-                          value={speciesLabel(selectedLife.speciesId)}
+                          value={speciesDisplayName(
+                            selectedLife.speciesId,
+                            world.speciesLineage.get(selectedLife.speciesId),
+                            regionJaByCode
+                          )}
                         />
                         <InfoRow
                           label={t("info.rgb")}
@@ -3065,7 +3069,7 @@ function computeTopSpecies(world: World, max = 30): SpeciesEntry[] {
   for (const [id, v] of map) {
     entries.push({
       id,
-      label: speciesLabel(id),
+      label: speciesDisplayName(id, world.speciesLineage.get(id), regionJaByCode),
       count: v.count,
       r: v.r,
       g: v.g,

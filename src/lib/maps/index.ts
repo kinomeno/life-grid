@@ -38,6 +38,12 @@ function decodeRegions(rows: string[], width: number, height: number): Int8Array
   return arr;
 }
 
+// ver.2: リージョンコード → 日本語名（系統名「北アメリカA」用）。
+const _regionJa = new Map<string, string>(WORLD_REGIONS.map((r) => [r.code, r.ja]));
+export function regionJaByCode(code: string): string | undefined {
+  return _regionJa.get(code);
+}
+
 let _world: TerrainPreset | null = null;
 
 /** 世界地図プリセット（200x100・横ループ・上下端は海・陸橋込み・10区分）。 */

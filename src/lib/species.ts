@@ -37,6 +37,34 @@ export function speciesLabel(speciesId: string): string {
   return `${dominant}-${String(code).padStart(2, "0")}`;
 }
 
+/** ver.2: 連番ラベル。0->A, 1->B, … 25->Z, 26->AA, …。 */
+export function letterFromSeq(seq: number): string {
+  let s = "";
+  let n = seq;
+  do {
+    s = String.fromCharCode(65 + (n % 26)) + s;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return s;
+}
+
+/**
+ * ver.2: 出生地つきの系統表示名。「北アメリカA」等。
+ * 出自(origin)と連番(seq)があり、region 名引き関数が渡されればそれを使う。
+ * 無ければ従来の色ベース名（speciesLabel）にフォールバック。
+ */
+export function speciesDisplayName(
+  speciesId: string,
+  node?: { origin?: string; seq?: number } | null,
+  regionJa?: (code: string) => string | undefined
+): string {
+  if (node && node.origin != null && node.seq != null && regionJa) {
+    const ja = regionJa(node.origin);
+    if (ja) return `${ja}${letterFromSeq(node.seq)}`;
+  }
+  return speciesLabel(speciesId);
+}
+
 /**
  * v1.30 (H4 再設計): 表示用の 1 チャンネル「種代表色」。生 RGB をビン中心に量子化する。
  * 同じ種(speciesId)の個体はすべて同じ表示色になり、「色＝仲間」を視覚的に明快にする。

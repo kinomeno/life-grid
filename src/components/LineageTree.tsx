@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import type { Life, SpeciesLineageNode } from "@/lib/types";
-import { speciesLabel } from "@/lib/species";
+import { speciesDisplayName } from "@/lib/species";
+import { regionJaByCode } from "@/lib/maps";
 import { useLocale } from "./LocaleProvider";
 
 type Props = {
@@ -95,7 +96,7 @@ export default function LineageTree({ lineage, lives, onSelect }: Props) {
           className="lineage-dot"
           style={{ backgroundColor: `rgb(${node.r}, ${node.g}, ${node.b})` }}
         />
-        <span className="lineage-name">{speciesLabel(node.id)}</span>
+        <span className="lineage-name">{speciesDisplayName(node.id, node, regionJaByCode)}</span>
         <span className="lineage-born">T{node.birthTurn.toLocaleString()}</span>
         <span className="lineage-pop">
           {isAlive ? `×${node.aliveCount}` : t("lineage.extinct")}
