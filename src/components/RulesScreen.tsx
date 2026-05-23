@@ -412,6 +412,14 @@ const SECTIONS_JA: Section[] = [
         ],
       },
       {
+        heading: "詳しい遊び方・解説（note）",
+        lines: [
+          "遊び込む人向けの完全ガイド（詳細説明書）を note に公開しています。",
+          "各機能の意味・観察のコツ・戦略のヒントはこちらへ。",
+          "　▶ https://note.com/kinomeno/n/ndb8659cc6d4a",
+        ],
+      },
+      {
         heading: "ご意見・フィードバック",
         lines: [
           "ご感想・ご要望・バグ報告などは、下記 note 記事の",
@@ -832,6 +840,14 @@ const SECTIONS_EN: Section[] = [
           "emerge naturally from simple rules — just sit back and watch.",
           "There is no winning or losing. Tune the environment little by little",
           "and enjoy observing your own unique story of evolution.",
+        ],
+      },
+      {
+        heading: "Full guide (note)",
+        lines: [
+          "A complete guide for deep play is published on note (Japanese).",
+          "For what each feature means and strategy tips:",
+          "　▶ https://note.com/kinomeno/n/ndb8659cc6d4a",
         ],
       },
       {

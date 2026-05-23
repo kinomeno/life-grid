@@ -10,6 +10,7 @@ import RulesScreen from "./RulesScreen";
 import ShareXButton from "./ShareXButton";
 import PasswordPrompt from "./PasswordPrompt";
 import KinomenoLink from "./KinomenoLink";
+import SupportLink from "./SupportLink";
 import { useLocale } from "./LocaleProvider";
 import type { Genes, SimulationParams } from "@/lib/types";
 
@@ -242,6 +243,8 @@ export default function StartScreen({
             {t("start.button.start")}
           </button>
         </div>
+        {/* v1.32 (J1): 開発を応援する（SUPPORT_URL 設定時のみ表示） */}
+        <SupportLink className="start-support" />
       </div>
 
       {showRules && <RulesScreen onClose={() => setShowRules(false)} />}

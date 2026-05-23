@@ -201,6 +201,11 @@ export const MAX_SHARE_FLASHES = 300;
 // 見えない）。追従バグ修正後は 4 で「飛んでいく」過程がはっきり見える。微調整は 3〜5 で。
 export const SHARE_FLASH_DURATION = 4;
 
+// v1.32 (J1): 「開発を応援する」外部リンク（投げ銭）。
+// Ko-fi（ko-fi.com/kinomeno）へリンク。ゲスト支援可・通貨は日本円（JPY）設定。
+// 空文字の間は応援ボタンを一切表示しない（デッドリンク防止）。外部リンクのみ・非侵襲。
+export const SUPPORT_URL: string = "https://ko-fi.com/kinomeno";
+
 // v1.31: 上級設定（コスト等の倍率）の既定値。すべて 1.0 = 現行バランス。
 // 研究者がバランス調整に使う。1.0 のままなら従来とビット一致（×1.0 は恒等）。
 export const DEFAULT_ADVANCED = {

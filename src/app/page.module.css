@@ -1918,6 +1918,27 @@
   margin: 2px 0;
 }
 
+/* v1.32 (J1): 開発を応援する（投げ銭）リンク。控えめ・非侵襲。 */
+:global(.support-link) {
+  display: inline-block;
+  font-size: 12px;
+  color: var(--text-soft);
+  text-decoration: none;
+  letter-spacing: 0.03em;
+  transition: color 0.12s;
+}
+
+:global(.support-link:hover) {
+  color: var(--text-strong);
+  text-decoration: underline;
+}
+
+:global(.start-support) {
+  display: block;
+  text-align: center;
+  margin-top: 12px;
+}
+
 :global(.settings-summary) {
   font-size: 12px;
   line-height: 1.6;

@@ -22,7 +22,7 @@ type Dictionary = Record<string, string>;
 const ja: Dictionary = {
   "app.title": "LIFE GRID",
   "app.subtitle": "生命進化シミュレーター",
-  "app.version": "ver 1.31",
+  "app.version": "ver 1.32",
   "lang.toggle.ja": "JA",
   "lang.toggle.en": "EN",
 
@@ -37,6 +37,7 @@ const ja: Dictionary = {
   "start.gene_error": "遺伝子IDが不正です（{n}桁の数字、または空欄でランダム）",
   "start.button.rules": "ルール説明",
   "start.button.start": "シミュレーション開始",
+  "support.label": "Ko-fiで応援（開発を支援）",
 
   // 共通
   "common.cancel": "キャンセル",
@@ -261,7 +262,7 @@ const ja: Dictionary = {
   "settings.gene_all_off": "全て無効",
   "settings.energy_share": "エネルギー共有（利他）",
   "settings.energy_share_hint": "ONにすると、隣接する困窮した仲間（同種＝近縁）に余剰エネルギーを分け与えます。利他性は遺伝子(wShare)として進化し、知能が高いほど転送効率が上がります。血縁淘汰・群れの助け合いの実験用。既定はOFF。",
-  "settings.advanced.title": "上級設定（研究者向け）",
+  "settings.advanced.title": "詳細設定",
   "settings.advanced.hint": "能力別のコスト倍率と稼働遺伝子。バランスを自分で調整できます。すべて1.0で標準バランス。設定はセーブ・共有に含まれます。",
   "settings.advanced.cost_title": "能力別コスト倍率",
   "settings.adv.cost_base": "基礎代謝",
@@ -338,7 +339,7 @@ const ja: Dictionary = {
 const en: Dictionary = {
   "app.title": "LIFE GRID",
   "app.subtitle": "Life Evolution Simulator",
-  "app.version": "ver 1.31",
+  "app.version": "ver 1.32",
   "lang.toggle.ja": "JA",
   "lang.toggle.en": "EN",
 
@@ -353,6 +354,7 @@ const en: Dictionary = {
   "start.gene_error": "Invalid gene ID ({n} digits required, or leave blank).",
   "start.button.rules": "Rules",
   "start.button.start": "Start Simulation",
+  "support.label": "Support me on Ko-fi",
 
   // Common
   "common.cancel": "Cancel",
@@ -577,7 +579,7 @@ const en: Dictionary = {
   "settings.gene_all_off": "All Off",
   "settings.energy_share": "Energy sharing (altruism)",
   "settings.energy_share_hint": "When on, individuals donate surplus energy to needy adjacent kin (same species). Altruism evolves as a gene (wShare); higher intelligence improves transfer efficiency. For experimenting with kin selection. Default off.",
-  "settings.advanced.title": "Advanced (for researchers)",
+  "settings.advanced.title": "Detailed settings",
   "settings.advanced.hint": "Per-ability cost multipliers and active genes. Tune the balance yourself. All 1.0 = standard balance. Included in saves and shares.",
   "settings.advanced.cost_title": "Per-ability cost multipliers",
   "settings.adv.cost_base": "Base metabolism",

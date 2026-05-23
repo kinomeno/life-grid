@@ -1,0 +1,18 @@
+# Dependabot 設定
+# 依存パッケージの脆弱性・更新を定期的にチェックし、
+# 修正/更新の Pull Request を自動作成する。
+# （クレジット取引セキュリティ申告の
+#  「脆弱性診断を定期的に実施し、必要な修正対応を行う」の運用実態）
+# docs: https://docs.github.com/code-security/dependabot
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "deps"
