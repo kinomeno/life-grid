@@ -1402,7 +1402,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
   return (
     <>
     <div
-      className={`sim-root${fullscreenMap ? " sim-fullscreen" : ""}${observeMode || wideMode ? " sim-observe" : ""}`}
+      className={`sim-root${fullscreenMap ? " sim-fullscreen" : ""}${observeMode || wideMode ? " sim-observe" : ""}${wideMode ? " sim-wide" : ""}`}
       style={{
         // 中央列幅をマップサイズ＋枠ぶん（padding+border）に固定。
         // ニュースの文字長に引きずられないようにするため。

@@ -95,6 +95,14 @@
   max-height: 80vh;
 }
 
+/* ver.2: 横長マップ（世界地図）は系統(上位)リストを固定高にして、系統数の増減で
+   左カラム＝全体の縦サイズがガタつかないようにする（.lineage-list と同じ手法）。
+   行が少なければ下に余白、多ければ内部スクロール。 */
+:global(.sim-root.sim-wide) :global(.species-list) {
+  flex: none;
+  height: min(34vh, 240px);
+}
+
 :global(.sim-cell) {
   display: flex;
   flex-direction: column;
