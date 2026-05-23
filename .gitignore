@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ver.2 リージョン検証用の一時画像
+region-preview.png
+region-classified.png
