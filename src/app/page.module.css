@@ -194,6 +194,20 @@
   padding: 2px 6px;
 }
 
+/* v1.30 (H6): シネマ追尾の理由ラベル（ビューポート左上に控えめ）。 */
+:global(.cinema-reason) {
+  position: absolute;
+  left: 10px;
+  top: 8px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.45);
+  padding: 2px 8px;
+  border-radius: 10px;
+  pointer-events: none;
+  z-index: 10000;
+}
+
 /* v1.30: 真の全画面時の控えめなブランド表示（画面右下隅）。 */
 :global(.fullscreen-brand) {
   position: absolute;

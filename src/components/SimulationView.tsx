@@ -381,6 +381,42 @@ export default function SimulationView({
         setAnimPhase(phase);
         setVersion((v) => v + 1);
         if (didStep) refreshDerived(world);
+        // v1.30 (H6): シネマ追尾。注目個体へカメラ（ビューポート）を中央寄せ。
+        if (cinemaModeRef.current) {
+          let target =
+            selectedLifeIdRef.current != null
+              ? world.livesById.get(selectedLifeIdRef.current)
+              : undefined;
+          if (
+            !target ||
+            !target.alive ||
+            world.turn - cinemaLastPickTurnRef.current > 150
+          ) {
+            const picked = pickCinemaTarget(world, cinemaPickCountRef.current++);
+            if (picked) {
+              setSelectedLifeId(picked.id);
+              selectedLifeIdRef.current = picked.id;
+              setCinemaReason(
+                `${t(picked.reasonKey)}: ${speciesLabel(picked.speciesId)}`
+              );
+              cinemaLastPickTurnRef.current = world.turn;
+              target = world.livesById.get(picked.id);
+            }
+          }
+          const vp = viewportRef.current;
+          const wrap = vp?.firstElementChild as HTMLElement | null;
+          if (vp && wrap && target && target.alive) {
+            const scale = wrap.offsetWidth / world.width;
+            const wd = (a: number, b: number, sz: number) => {
+              const x = b - a;
+              return Math.abs(x) > sz / 2 ? b : a + x * phase;
+            };
+            const ix = wd(target.prevX, target.x, world.width);
+            const iy = wd(target.prevY, target.y, world.height);
+            vp.scrollLeft = (ix + 0.5) * scale - vp.clientWidth / 2;
+            vp.scrollTop = (iy + 0.5) * scale - vp.clientHeight / 2;
+          }
+        }
         lastRenderTime = now;
       }
       const elapsed = now - tpsWindowStart;
@@ -772,6 +808,32 @@ export default function SimulationView({
   // ズーム倍率（A 案：CSS transform でスケール。0.5〜3.0 倍）
   const [zoom, setZoom] = useState(1.0);
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const zoomRef = useRef(1.0);
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+  // v1.30 (H6): シネマ追尾モード。注目個体にカメラ（ビューポート）が追従する。
+  const [cinemaMode, setCinemaMode] = useState(false);
+  const cinemaModeRef = useRef(false);
+  useEffect(() => {
+    cinemaModeRef.current = cinemaMode;
+  }, [cinemaMode]);
+  const [cinemaReason, setCinemaReason] = useState<string | null>(null);
+  const cinemaPrevZoomRef = useRef(1.0);
+  const cinemaLastPickTurnRef = useRef(-1e9);
+  const cinemaPickCountRef = useRef(0);
+  const toggleCinema = useCallback(() => {
+    if (cinemaModeRef.current) {
+      setCinemaMode(false);
+      setCinemaReason(null);
+      setZoom(cinemaPrevZoomRef.current);
+    } else {
+      cinemaPrevZoomRef.current = zoomRef.current;
+      cinemaLastPickTurnRef.current = -1e9; // 次フレームで即ターゲット選定
+      setCinemaMode(true);
+      setZoom(2.4); // CINEMA_ZOOM: 寄りの追従
+    }
+  }, [setZoom]);
 
   // v1.02: マップ全画面モード。HUD（パネル・ヘッダー・下部ボタン）を一時的に隠す。
   // F キーまたは右上ボタンでトグル、ESC で解除。
@@ -1492,6 +1554,10 @@ export default function SimulationView({
           {trueFullscreen && (
             <div className="fullscreen-brand">LIFE GRID</div>
           )}
+          {/* v1.30 (H6): シネマ追尾の「なぜ」を控えめに表示 */}
+          {cinemaMode && cinemaReason && (
+            <div className="cinema-reason">🎬 {cinemaReason}</div>
+          )}
         </div>
         {/* モバイル縦画面：マップ直下に主要操作（再生／ステップ／速度） */}
         <div className="mobile-quick-controls">
@@ -1537,6 +1603,15 @@ export default function SimulationView({
         </div>
         {/* マップ操作バー：モードボタン群 + ズーム */}
         <div className="map-bar">
+          {/* v1.30 (H6): シネマ追尾トグル（注目個体にカメラ追従） */}
+          <button
+            className={`mini-btn ${cinemaMode ? "mini-btn-active" : ""}`}
+            onClick={toggleCinema}
+            title={t("ctrl.cinema")}
+            aria-label={t("ctrl.cinema")}
+          >
+            🎬
+          </button>
           {/* G1: エネルギー投入 */}
           <button
             className={`mini-btn ${interactionMode === "lightning" ? "mini-btn-active" : ""}`}
@@ -2600,6 +2675,49 @@ function InfoRow({
       <dd className={mono ? "mono" : undefined}>{value}</dd>
     </div>
   );
+}
+
+// v1.30 (H6): シネマ追尾の注目対象を選ぶ（最大勢力／最古参／最強 をローテーション）。
+function pickCinemaTarget(
+  world: World,
+  pickCount: number
+): { id: number; reasonKey: string; speciesId: string } | null {
+  const alive = world.lives.filter((l) => l.alive);
+  if (alive.length === 0) return null;
+  const crit = pickCount % 3;
+  if (crit === 1) {
+    let best = alive[0];
+    for (const l of alive) if (l.age > best.age) best = l;
+    return { id: best.id, reasonKey: "cinema.oldest", speciesId: best.speciesId };
+  }
+  if (crit === 2) {
+    let best = alive[0];
+    for (const l of alive) if (l.genes.strength > best.genes.strength) best = l;
+    return {
+      id: best.id,
+      reasonKey: "cinema.strongest",
+      speciesId: best.speciesId,
+    };
+  }
+  // 0: 最大勢力（最多の種）の高エネルギー代表
+  const counts = new Map<string, number>();
+  for (const l of alive)
+    counts.set(l.speciesId, (counts.get(l.speciesId) ?? 0) + 1);
+  let topSp = alive[0].speciesId;
+  let topC = 0;
+  for (const [sp, c] of counts)
+    if (c > topC) {
+      topC = c;
+      topSp = sp;
+    }
+  let best = alive[0];
+  let bv = -Infinity;
+  for (const l of alive)
+    if (l.speciesId === topSp && l.energy > bv) {
+      bv = l.energy;
+      best = l;
+    }
+  return { id: best.id, reasonKey: "cinema.dominant", speciesId: best.speciesId };
 }
 
 function computeTopSpecies(world: World, max = 30): SpeciesEntry[] {
