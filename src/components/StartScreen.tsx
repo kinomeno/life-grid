@@ -22,6 +22,8 @@ export type StartConfig = {
   initialGenes?: Genes;
   /** v1.31: 共有URLの設定プリセット（環境設定）。あれば SimulationView の初期 params に反映。 */
   initialParams?: Partial<SimulationParams>;
+  /** ver.2: 地形プリセット識別子（"world"=世界地図）。未指定＝従来のトーラス全面陸。 */
+  terrainId?: string;
 };
 
 type Props = {
@@ -31,11 +33,21 @@ type Props = {
   onStart: (config: StartConfig) => void;
 };
 
-const MAP_PRESETS: { label: string; size: number; locked?: boolean }[] = [
-  { label: "25 × 25", size: 25 },
-  { label: "50 × 50", size: 50 },
-  { label: "100 × 100", size: 100 },
-  { label: "200 × 200", size: 200, locked: true },
+type MapPreset = {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+  /** ver.2: 地形プリセット識別子（指定時は固定地形＝海あり）。 */
+  terrainId?: string;
+  locked?: boolean;
+};
+const MAP_PRESETS: MapPreset[] = [
+  { id: "s25", label: "25 × 25", width: 25, height: 25 },
+  { id: "s50", label: "50 × 50", width: 50, height: 50 },
+  { id: "s100", label: "100 × 100", width: 100, height: 100 },
+  { id: "s200", label: "200 × 200", width: 200, height: 200, locked: true },
+  { id: "world", label: "🌍 世界地図", width: 200, height: 100, terrainId: "world" },
 ];
 
 const LIFE_COUNT_OPTIONS = [10, 20, 40, 50, 100];
@@ -46,9 +58,11 @@ export default function StartScreen({
   onStart,
 }: Props) {
   const { t } = useLocale();
-  const [size, setSize] = useState<number>(
-    MAP_PRESETS.find((p) => p.size === defaultWidth)?.size ?? 50
+  const [selectedId, setSelectedId] = useState<string>(
+    MAP_PRESETS.find((p) => p.width === defaultWidth && !p.terrainId)?.id ?? "s50"
   );
+  const selectedPreset =
+    MAP_PRESETS.find((p) => p.id === selectedId) ?? MAP_PRESETS[1];
   const [lifeCount, setLifeCount] = useState<number>(
     LIFE_COUNT_OPTIONS.includes(defaultInitialLifeCount)
       ? defaultInitialLifeCount
@@ -86,9 +100,9 @@ export default function StartScreen({
     if (seedParam) setSeedText(seedParam);
     if (wParam) {
       const wn = Number(wParam);
-      const preset = MAP_PRESETS.find((p) => p.size === wn);
+      const preset = MAP_PRESETS.find((p) => p.width === wn && !p.terrainId);
       // ロックされている場合は採用しない（ユーザーがロック解除する必要あり）
-      if (preset && !preset.locked) setSize(preset.size);
+      if (preset && !preset.locked) setSelectedId(preset.id);
     }
     if (nParam) {
       const nn = Number(nParam);
@@ -133,12 +147,13 @@ export default function StartScreen({
     setGeneError(null);
 
     onStart({
-      width: size,
-      height: size,
+      width: selectedPreset.width,
+      height: selectedPreset.height,
       initialLifeCount: lifeCount,
       seed: seedNum,
       initialGenes,
       initialParams: presetParams,
+      terrainId: selectedPreset.terrainId,
     });
   }
 
@@ -160,8 +175,8 @@ export default function StartScreen({
               const locked = p.locked && !unlocked;
               return (
                 <button
-                  key={p.size}
-                  className={`btn ${size === p.size ? "btn-active" : ""} ${
+                  key={p.id}
+                  className={`btn ${selectedId === p.id ? "btn-active" : ""} ${
                     locked ? "btn-locked" : ""
                   }`}
                   onClick={() => {
@@ -170,13 +185,13 @@ export default function StartScreen({
                         label: t("password.feature.map", { label: p.label }),
                         onUnlock: () => {
                           setUnlocked(true);
-                          setSize(p.size);
+                          setSelectedId(p.id);
                           setPwTarget(null);
                         },
                       });
                       return;
                     }
-                    setSize(p.size);
+                    setSelectedId(p.id);
                   }}
                   title={locked ? t("common.locked_hint") : undefined}
                 >

@@ -306,37 +306,47 @@ function drawEnergyField(
   off: HTMLCanvasElement,
   img: ImageData | null
 ) {
-  const { width, height, energy } = world;
+  const { width, height, energy, terrain } = world;
   if (!img) return;
   const data = img.data;
 
   const levels = ENERGY_DISPLAY_LEVELS;
   for (let i = 0; i < energy.length; i++) {
+    const o = i * 4;
+    // ver.2: 海セルは深い青で描画（陸＝従来のグレースケール）。
+    if (terrain && terrain[i] === 0) {
+      data[o] = 16;
+      data[o + 1] = 38;
+      data[o + 2] = 64;
+      data[o + 3] = 255;
+      continue;
+    }
     const v = energy[i] / ENERGY_MAX;
     const t = Math.min(1, Math.max(0, v));
     const quantized = Math.floor(t * levels) / levels;
     const shade = Math.round(250 - quantized * 90);
-    const o = i * 4;
     data[o] = shade;
     data[o + 1] = shade;
     data[o + 2] = shade;
     data[o + 3] = 255;
   }
 
-  // Visual-only toroidal seam
-  for (let y = 0; y < height; y++) {
-    const lo = (y * width + 0) * 4;
-    const ro = (y * width + (width - 1)) * 4;
-    const avg = (data[lo] + data[ro]) >> 1;
-    data[lo] = data[lo + 1] = data[lo + 2] = avg;
-    data[ro] = data[ro + 1] = data[ro + 2] = avg;
-  }
-  for (let x = 0; x < width; x++) {
-    const to = x * 4;
-    const bo = ((height - 1) * width + x) * 4;
-    const avg = (data[to] + data[bo]) >> 1;
-    data[to] = data[to + 1] = data[to + 2] = avg;
-    data[bo] = data[bo + 1] = data[bo + 2] = avg;
+  // Visual-only toroidal seam（地形マップでは海色を壊すためスキップ）
+  if (!terrain) {
+    for (let y = 0; y < height; y++) {
+      const lo = (y * width + 0) * 4;
+      const ro = (y * width + (width - 1)) * 4;
+      const avg = (data[lo] + data[ro]) >> 1;
+      data[lo] = data[lo + 1] = data[lo + 2] = avg;
+      data[ro] = data[ro + 1] = data[ro + 2] = avg;
+    }
+    for (let x = 0; x < width; x++) {
+      const to = x * 4;
+      const bo = ((height - 1) * width + x) * 4;
+      const avg = (data[to] + data[bo]) >> 1;
+      data[to] = data[to + 1] = data[to + 2] = avg;
+      data[bo] = data[bo + 1] = data[bo + 2] = avg;
+    }
   }
 
   const offCtx = off.getContext("2d");

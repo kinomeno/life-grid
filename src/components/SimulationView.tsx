@@ -41,6 +41,7 @@ import { speciesLabel, binCenterColor } from "@/lib/species";
 import { encodeGeneId, truncateGeneId } from "@/lib/geneId";
 import { DEFAULT_ADVANCED } from "@/lib/constants";
 import { isUnlocked } from "@/lib/unlock";
+import { getWorldTerrain } from "@/lib/maps";
 import ShareXButton from "./ShareXButton";
 import PasswordPrompt from "./PasswordPrompt";
 import KinomenoLink from "./KinomenoLink";
@@ -57,6 +58,8 @@ type Props = {
   initialParams?: Partial<SimulationParams>;
   /** v1.31: 保存データから読み込んだ World。あれば createWorld の代わりにこれで開始。 */
   initialWorld?: World;
+  /** ver.2: 地形プリセット識別子（"world"=世界地図）。未指定＝従来のトーラス全面陸。 */
+  terrainId?: string;
   onBackToTitle?: () => void;
 };
 
@@ -91,11 +94,17 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
       initialGenes,
       initialParams,
       initialWorld,
+      terrainId,
       onBackToTitle,
     }: Props,
     ref
   ) {
   const { t, locale } = useLocale();
+  // ver.2: 地形プリセット（世界地図）。terrainId="world" のとき海あり地形を使う。
+  const terrain = useMemo(
+    () => (terrainId === "world" ? getWorldTerrain().terrain : undefined),
+    [terrainId]
+  );
   // 画面サイズを追跡し、マップが overflow（スクロールバー）しないよう自動拡縮する
   const [screenWidth, setScreenWidth] = useState<number>(() =>
     typeof window !== "undefined" ? window.innerWidth : 1280
@@ -270,6 +279,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
         seed: initialSeed,
         params,
         initialGenes,
+        terrain,
       });
     worldRef.current = w;
     setWorldState(w);
@@ -286,7 +296,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
     // v1.31: 共有URL（seed/w/n/p）は下の useEffect で同期する。
     // params/initialGenes は初回のみ読み取り（リセット時のみ反映）。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [width, height, initialLifeCount, initialSeed, refreshDerived]);
+  }, [width, height, initialLifeCount, initialSeed, refreshDerived, terrain]);
 
   // v1.31: 共有URLを seed/w/n＋設定プリセット(p) で同期（履歴を汚さず replaceState）。
   // 設定を変更した後に共有しても、その設定が URL（=共有内容）に反映される。
@@ -569,6 +579,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
         initialLifeCount,
         seed: newSeed,
         params,
+        terrain,
       });
       worldRef.current = w;
       setWorldState(w);
@@ -585,7 +596,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
       setTrackedSpeciesId(null);
       refreshDerived(w);
     },
-    [width, height, initialLifeCount, refreshDerived, params]
+    [width, height, initialLifeCount, refreshDerived, params, terrain]
   );
 
   // A5: 統計データを CSV としてダウンロード

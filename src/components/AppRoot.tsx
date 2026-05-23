@@ -126,6 +126,7 @@ export default function AppRoot({
             initialSeed={config.seed}
             initialGenes={config.initialGenes}
             initialParams={config.initialParams}
+            terrainId={config.terrainId}
             initialWorld={pendingWorld ?? undefined}
             onBackToTitle={() => setShowTitleConfirm(true)}
           />
