@@ -92,6 +92,38 @@ function nearestPair(cellsA, cellsB) {
   return [ba, bb];
 }
 
+// 陸に囲まれた小さな他区分ブロブを周囲の多数派へ吸収（海に囲まれた島は保持）。
+function removeStrayBlobs(reg, land, maxSize) {
+  const seen = new Uint8Array(W * H), st = [];
+  for (let s = 0; s < W * H; s++) {
+    if (!land[s] || seen[s]) continue;
+    const myreg = reg[s], cells = [];
+    st.push(s); seen[s] = 1;
+    while (st.length) {
+      const c = st.pop(); cells.push(c);
+      const cx = c % W, cy = (c / W) | 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue; const ny = cy + dy; if (ny < 0 || ny >= H) continue;
+        const ni = ny * W + ((cx + dx + W) % W);
+        if (land[ni] && !seen[ni] && reg[ni] === myreg) { seen[ni] = 1; st.push(ni); }
+      }
+    }
+    if (cells.length > maxSize) continue;
+    const cset = new Set(cells), ext = {}; let extLand = 0;
+    for (const c of cells) {
+      const cx = c % W, cy = (c / W) | 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue; const ny = cy + dy; if (ny < 0 || ny >= H) continue;
+        const ni = ny * W + ((cx + dx + W) % W);
+        if (land[ni] && !cset.has(ni)) { ext[reg[ni]] = (ext[reg[ni]] || 0) + 1; extLand++; }
+      }
+    }
+    if (extLand === 0) continue; // 島は保持
+    let mj = -1, mc = 0; for (const k in ext) if (ext[k] > mc) { mc = ext[k]; mj = +k; }
+    if (mj >= 0) for (const c of cells) reg[c] = mj;
+  }
+}
+
 (async () => {
   const mask = await sharp(MASK_SRC).resize(W, H, { fit: "fill" }).grayscale().raw().toBuffer({ resolveWithObject: true });
   const mch = mask.info.channels;
@@ -109,8 +141,8 @@ function nearestPair(cellsA, cellsB) {
       reg[y * W + x] = nearest(user.data[o], user.data[o + 1], user.data[o + 2]);
     }
 
-  // 多数決スムージング（孤立誤分類ドット除去）
-  for (let p = 0; p < 3; p++) {
+  // 多数決スムージング（孤立誤分類ドット除去）。own<=2 で 2〜3 セルの誤分類塊も吸収。
+  for (let p = 0; p < 4; p++) {
     const next = reg.slice();
     for (let y = 1; y < H - 1; y++)
       for (let x = 0; x < W; x++) {
@@ -124,10 +156,13 @@ function nearestPair(cellsA, cellsB) {
             cnt[reg[ni]] = (cnt[reg[ni]] || 0) + 1; if (reg[ni] === reg[i]) own++;
           }
         let mj = -1, mc = 0; for (const k in cnt) if (cnt[k] > mc) { mc = cnt[k]; mj = +k; }
-        if (mj >= 0 && mj !== reg[i] && own <= 1 && mc >= 4) next[i] = mj;
+        if (mj >= 0 && mj !== reg[i] && own <= 2 && mc >= 4) next[i] = mj;
       }
     reg.set(next);
   }
+  // 小ブロブ（陸に囲まれた他区分の小塊）を吸収（2回）。島は保持。
+  removeStrayBlobs(reg, land, 6);
+  removeStrayBlobs(reg, land, 6);
   // アイスランド（欧州北西の小島）を欧州へ
   const EU = idxOf("EU");
   for (let y = 4; y <= 12; y++) for (let x = 6; x <= 22; x++) if (land[y * W + x]) reg[y * W + x] = EU;
@@ -140,6 +175,21 @@ function nearestPair(cellsA, cellsB) {
   const saEast = americas.cells.filter((c) => (c / W | 0) >= 55).reduce((m, c) => (c % W) > (m % W) ? c : m, americas.cells[0]);
   const afrWest = oldworld.cells.filter((c) => { const y = c / W | 0; return y >= 45 && y <= 72; }).reduce((m, c) => (c % W) < (m % W) ? c : m, oldworld.cells[0]);
   drawBridge(land, saEast, afrWest);
+
+  // ベーリング橋：旧大陸の北東端（NEアジア）→ アメリカの北西端（アラスカ）。太平洋の北。
+  const owNE = oldworld.cells.filter((c) => { const y = c / W | 0; return y >= 6 && y <= 30; }).reduce((m, c) => (c % W) > (m % W) ? c : m, oldworld.cells[0]);
+  const amNW = americas.cells.filter((c) => { const y = c / W | 0; return y >= 6 && y <= 30; }).reduce((m, c) => (c % W) < (m % W) ? c : m, americas.cells[0]);
+  drawBridge(land, owNE, amNW);
+
+  // アイスランド → ヨーロッパ本土（北西の小島を欧州へ）。
+  const iceCells = [], euArea = [];
+  for (let i = 0; i < W * H; i++) {
+    if (!land[i]) continue;
+    const x = i % W, y = i / W | 0;
+    if (x >= 4 && x <= 24 && y >= 3 && y <= 14) iceCells.push(i);
+    else if (x >= 16 && x <= 52 && y >= 12 && y <= 36) euArea.push(i);
+  }
+  if (iceCells.length && euArea.length) { const [ia, ib] = nearestPair(iceCells, euArea); drawBridge(land, ia, ib); }
 
   // 残りの孤立塊を最大連結塊へ最近傍で連結（反復）
   for (let iter = 0; iter < 40; iter++) {
