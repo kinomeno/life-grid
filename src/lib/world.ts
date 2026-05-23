@@ -144,8 +144,36 @@ export function applyDisabledGenes(
   return out;
 }
 
+// ver.2: 祖先の体色を「地域の色の同系統（別ビン）」で count 色生成する。
+// 主要チャンネル（色味）を保ち、他2チャンネルをビン境界をまたいでずらして別種化。
+function founderColors(
+  r: number,
+  g: number,
+  b: number,
+  count: number
+): [number, number, number][] {
+  const BIN = SPECIES_RGB_BIN;
+  const base: [number, number, number] = [r, g, b];
+  const di = base[0] >= base[1] && base[0] >= base[2] ? 0 : base[1] >= base[2] ? 1 : 2;
+  const others = [0, 1, 2].filter((i) => i !== di);
+  const offs = [[0, 0], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [0, 1], [1, 0]];
+  const seen = new Set<string>();
+  const out: [number, number, number][] = [];
+  for (let k = 0; k < offs.length && out.length < count; k++) {
+    const c: [number, number, number] = [base[0], base[1], base[2]];
+    c[others[0]] = clamp(base[others[0]] + offs[k][0] * BIN, 0, 255);
+    c[others[1]] = clamp(base[others[1]] + offs[k][1] * BIN, 0, 255);
+    const key = `${Math.floor(c[0] / BIN)},${Math.floor(c[1] / BIN)},${Math.floor(c[2] / BIN)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(c);
+  }
+  if (out.length === 0) out.push(base);
+  return out;
+}
+
 export function createWorld(config: WorldConfig): World {
-  const { width, height, initialLifeCount, seed, initialGenes, terrain } = config;
+  const { width, height, initialLifeCount, seed, initialGenes, terrain, regions, regionMeta } = config;
   const params = config.params ?? defaultSimulationParams();
   const rng = mulberry32(seed);
   const total = width * height;
@@ -176,36 +204,83 @@ export function createWorld(config: WorldConfig): World {
   const lives: Life[] = [];
 
   let nextId = 0;
-  let attempts = 0;
-  while (lives.length < initialLifeCount && attempts < initialLifeCount * 20) {
-    attempts++;
-    const x = randomInt(rng, 0, width);
-    const y = randomInt(rng, 0, height);
-    const idx = y * width + x;
-    if (occupancy[idx] !== -1) continue;
-    // ver.2: 海には初期配置しない。
-    if (terrain && terrain[idx] === 0) continue;
-    // 初期遺伝子が指定されていれば全個体に同じ遺伝子をコピー（参照ではなくクローン）。
-    let genes = initialGenes ? { ...initialGenes } : randomGenes(rng);
-    // 稼働遺伝子フラグに従って無効化された遺伝子は固定値で上書き
-    genes = applyDisabledGenes(genes, params.disabledGenes);
-    const life: Life = {
-      id: nextId++,
-      x,
-      y,
-      prevX: x,
-      prevY: y,
-      energy: genes.size * 0.5,
-      age: 0,
-      speciesId: speciesIdFromGenes(genes),
-      genes,
-      alive: true,
-      moveAccum: 0,
-      dx: 0,
-      dy: 0,
-    };
-    lives.push(life);
-    occupancy[idx] = life.id;
+  if (regions && regionMeta && regionMeta.length > 0) {
+    // ver.2: 大陸ごとに数種の祖先を配置（同系色・能力ランダム）。
+    //   各区分 = 同系色の祖先 FOUNDERS 種、それぞれ INDIV 体のコロニー。
+    //   能力は祖先ごとにランダム → 区分ごとの力量差を平準化＆内部競争。
+    const FOUNDERS_PER_REGION = 3;
+    const INDIV_PER_FOUNDER = 4;
+    const cellsByRegion: number[][] = regionMeta.map(() => []);
+    for (let i = 0; i < total; i++) {
+      const rg = regions[i];
+      if (rg >= 0 && rg < regionMeta.length && (!terrain || terrain[i] === 1)) {
+        cellsByRegion[rg].push(i);
+      }
+    }
+    for (let rgi = 0; rgi < regionMeta.length; rgi++) {
+      const meta = regionMeta[rgi];
+      const cells = cellsByRegion[rgi];
+      if (!cells || cells.length === 0) continue;
+      const colors = founderColors(meta.r, meta.g, meta.b, FOUNDERS_PER_REGION);
+      for (const col of colors) {
+        let template = randomGenes(rng);
+        template.r = col[0];
+        template.g = col[1];
+        template.b = col[2];
+        template = applyDisabledGenes(template, params.disabledGenes);
+        const sid = speciesIdFromGenes(template);
+        for (let k = 0; k < INDIV_PER_FOUNDER; k++) {
+          for (let t = 0; t < 30; t++) {
+            const idx = cells[Math.floor(rng() * cells.length)];
+            if (occupancy[idx] !== -1) continue;
+            const x = idx % width;
+            const y = (idx / width) | 0;
+            const genes = { ...template };
+            const life: Life = {
+              id: nextId++, x, y, prevX: x, prevY: y,
+              energy: genes.size * 0.5, age: 0,
+              speciesId: sid, genes, alive: true,
+              moveAccum: 0, dx: 0, dy: 0, origin: meta.code,
+            };
+            lives.push(life);
+            occupancy[idx] = life.id;
+            break;
+          }
+        }
+      }
+    }
+  } else {
+    let attempts = 0;
+    while (lives.length < initialLifeCount && attempts < initialLifeCount * 20) {
+      attempts++;
+      const x = randomInt(rng, 0, width);
+      const y = randomInt(rng, 0, height);
+      const idx = y * width + x;
+      if (occupancy[idx] !== -1) continue;
+      // ver.2: 海には初期配置しない。
+      if (terrain && terrain[idx] === 0) continue;
+      // 初期遺伝子が指定されていれば全個体に同じ遺伝子をコピー（参照ではなくクローン）。
+      let genes = initialGenes ? { ...initialGenes } : randomGenes(rng);
+      // 稼働遺伝子フラグに従って無効化された遺伝子は固定値で上書き
+      genes = applyDisabledGenes(genes, params.disabledGenes);
+      const life: Life = {
+        id: nextId++,
+        x,
+        y,
+        prevX: x,
+        prevY: y,
+        energy: genes.size * 0.5,
+        age: 0,
+        speciesId: speciesIdFromGenes(genes),
+        genes,
+        alive: true,
+        moveAccum: 0,
+        dx: 0,
+        dy: 0,
+      };
+      lives.push(life);
+      occupancy[idx] = life.id;
+    }
   }
 
   // 初期生命の系統を knownSpecies に登録
@@ -218,6 +293,11 @@ export function createWorld(config: WorldConfig): World {
     livesById.set(life.id, life);
     if (!speciesLineage.has(life.speciesId)) {
       const c = speciesColorFromGenes(life.genes);
+      let seq: number | undefined;
+      if (life.origin) {
+        seq = 0;
+        for (const n of speciesLineage.values()) if (n.origin === life.origin) seq++;
+      }
       speciesLineage.set(life.speciesId, {
         id: life.speciesId,
         parentId: null,
@@ -225,6 +305,8 @@ export function createWorld(config: WorldConfig): World {
         r: c.r,
         g: c.g,
         b: c.b,
+        origin: life.origin,
+        seq,
       });
     }
   }
@@ -2455,6 +2537,12 @@ function reproduceLife(
       !world.speciesLineage.has(childSpeciesId)
     ) {
       const cc = speciesColorFromGenes(childGenes);
+      const origin = parent.origin;
+      let seq: number | undefined;
+      if (origin) {
+        seq = 0;
+        for (const n of world.speciesLineage.values()) if (n.origin === origin) seq++;
+      }
       world.speciesLineage.set(childSpeciesId, {
         id: childSpeciesId,
         parentId: parent.speciesId,
@@ -2462,6 +2550,8 @@ function reproduceLife(
         r: cc.r,
         g: cc.g,
         b: cc.b,
+        origin,
+        seq,
       });
     }
     // v1.30 (H8): 誕生時に変異した主要遺伝子と「新種か」を記録（観察用ハイライト）。
@@ -2500,6 +2590,8 @@ function reproduceLife(
       // v1.30 (H8): 観察用ハイライト
       bornMutations: muts.length ? muts : undefined,
       bornNewSpecies: childSpeciesId !== parent.speciesId || undefined,
+      // ver.2: 出生地は親から不変で継承（祖先の出自）。
+      origin: parent.origin,
     };
     world.lives.push(childLife);
     world.livesById.set(childLife.id, childLife);

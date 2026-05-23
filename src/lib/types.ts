@@ -61,6 +61,8 @@ export type Life = {
   bornMutations?: string[];
   /** v1.30 (H8): 誕生時に親と別の種（色ビン）になった＝新種の創始個体。 */
   bornNewSpecies?: boolean;
+  /** ver.2: 出生地（大陸リージョンのコード, 例 "NA"）。子へ不変で継承＝祖先の出自。世界地図のみ。 */
+  origin?: string;
 };
 
 /** 日本語と英語の両方を保持するメッセージ。表示時にロケールで選択。 */
@@ -189,6 +191,10 @@ export type SpeciesLineageNode = {
   r: number;
   g: number;
   b: number;
+  /** ver.2: この系統の祖先の出生地（リージョンコード）。世界地図のみ。 */
+  origin?: string;
+  /** ver.2: 出生地ごとの連番（0=A,1=B,…）。表示名「北アメリカA」に使う。 */
+  seq?: number;
 };
 
 export type World = {
@@ -328,6 +334,16 @@ export type ShareFlash = {
   durationTurns: number;
 };
 
+/** ver.2: 大陸リージョンのメタ情報（worldRegions.ts の WorldRegionMeta と同形）。 */
+export type RegionMeta = {
+  id: number;
+  code: string;
+  ja: string;
+  r: number;
+  g: number;
+  b: number;
+};
+
 export type WorldConfig = {
   width: number;
   height: number;
@@ -338,4 +354,8 @@ export type WorldConfig = {
   initialGenes?: Genes;
   /** ver.2: 地形マスク（1=陸/0=海）。長さ width*height。指定時は海を避けて配置・海はエネルギー0。 */
   terrain?: Uint8Array;
+  /** ver.2: リージョン（大陸区分）インデックス。-1=海/0..=区分。指定時は大陸ごとに祖先を配置。 */
+  regions?: Int8Array;
+  /** ver.2: リージョンのメタ（コード・名前・色）。regions と対で渡す。 */
+  regionMeta?: RegionMeta[];
 };

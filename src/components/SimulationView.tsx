@@ -100,11 +100,12 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
     ref
   ) {
   const { t, locale } = useLocale();
-  // ver.2: 地形プリセット（世界地図）。terrainId="world" のとき海あり地形を使う。
-  const terrain = useMemo(
-    () => (terrainId === "world" ? getWorldTerrain().terrain : undefined),
+  // ver.2: 地形プリセット（世界地図）。terrainId="world" のとき海あり地形＋大陸区分を使う。
+  const terrainPreset = useMemo(
+    () => (terrainId === "world" ? getWorldTerrain() : undefined),
     [terrainId]
   );
+  const terrain = terrainPreset?.terrain;
   // 画面サイズを追跡し、マップが overflow（スクロールバー）しないよう自動拡縮する
   const [screenWidth, setScreenWidth] = useState<number>(() =>
     typeof window !== "undefined" ? window.innerWidth : 1280
@@ -282,6 +283,8 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
         params,
         initialGenes,
         terrain,
+        regions: terrainPreset?.regions,
+        regionMeta: terrainPreset?.regionMeta,
       });
     worldRef.current = w;
     setWorldState(w);
@@ -298,7 +301,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
     // v1.31: 共有URL（seed/w/n/p）は下の useEffect で同期する。
     // params/initialGenes は初回のみ読み取り（リセット時のみ反映）。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [width, height, initialLifeCount, initialSeed, refreshDerived, terrain]);
+  }, [width, height, initialLifeCount, initialSeed, refreshDerived, terrainPreset]);
 
   // v1.31: 共有URLを seed/w/n＋設定プリセット(p) で同期（履歴を汚さず replaceState）。
   // 設定を変更した後に共有しても、その設定が URL（=共有内容）に反映される。
@@ -582,6 +585,8 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
         seed: newSeed,
         params,
         terrain,
+        regions: terrainPreset?.regions,
+        regionMeta: terrainPreset?.regionMeta,
       });
       worldRef.current = w;
       setWorldState(w);
@@ -598,7 +603,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
       setTrackedSpeciesId(null);
       refreshDerived(w);
     },
-    [width, height, initialLifeCount, refreshDerived, params, terrain]
+    [width, height, initialLifeCount, refreshDerived, params, terrainPreset]
   );
 
   // A5: 統計データを CSV としてダウンロード
