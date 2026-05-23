@@ -136,8 +136,10 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
     // = 約260px。180 では cellSize 上限12（マップ600px）に張り付く高さ帯（〜860px）で
     // 数十px溢れて縦スクロールバーが出ていた。
     const availH = Math.max(160, screenHeight - 270);
-    const fitW = availW / Math.max(width, height);
-    const fitH = availH / Math.max(width, height);
+    // ver.2: 各軸を実寸法でフィット。従来は max(w,h)＝正方形前提で、横長マップは
+    // 縦が半分しか使われず小さくなっていた（200x100 で縦が 1/2 に）。
+    const fitW = availW / width;
+    const fitH = availH / height;
     // v1.31: floor を外して分数セルサイズを許可。
     // 大マップ（例 200）で floor(2.95)=2 となり利用可能領域の約1/3を捨てて
     // メインフレームが小さくなっていた問題を解消し、領域いっぱいに広げる。
@@ -1111,6 +1113,10 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
   // v1.30 (あ): 25画面＝観察モード。選択生命欄を縦スクロールさせず、全体の高さをパネルに合わせ、
   // 小さなマップは中央カラムの縦中央へ（左右カラムの高さ制限を外し、CSS .sim-observe で行を内容高に）。
   const observeMode = !!world && world.width <= 25;
+  // ver.2: 横長マップ（世界地図など width>height）。25マップと同様、選択生命を縦スクロール
+  // させない sim-observe レイアウトを使う（地図は実寸フィットで大きく表示）。
+  // ※速度制限（x1限定）は付けない＝ observeMode とは別扱い。
+  const wideMode = !!world && world.width > world.height;
   // v1.10: ズームレベルは固定配列で管理し、1.0（100%）が常にステップに含まれるよう保証する。
   // 以前は ZOOM_STEP=0.2 で 1.0 基準にしていたが、ZOOM_MIN=0.5 がグリッド外のため、
   // 0.5 まで縮小→拡大で 0.5→0.7→0.9→1.1 となり 100% を踏まずに飛び越えてしまうバグがあった。
@@ -1396,7 +1402,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
   return (
     <>
     <div
-      className={`sim-root${fullscreenMap ? " sim-fullscreen" : ""}${observeMode ? " sim-observe" : ""}`}
+      className={`sim-root${fullscreenMap ? " sim-fullscreen" : ""}${observeMode || wideMode ? " sim-observe" : ""}`}
       style={{
         // 中央列幅をマップサイズ＋枠ぶん（padding+border）に固定。
         // ニュースの文字長に引きずられないようにするため。
@@ -1435,7 +1441,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
       </div>
       <aside
         className="sim-cell sim-left"
-        style={observeMode ? undefined : { maxHeight: `${columnMaxHeight}px` }}
+        style={observeMode || wideMode ? undefined : { maxHeight: `${columnMaxHeight}px` }}
       >
         <section className="panel">
           <button
@@ -1892,7 +1898,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
 
       <aside
         className="sim-cell sim-right"
-        style={observeMode ? undefined : { maxHeight: `${columnMaxHeight}px` }}
+        style={observeMode || wideMode ? undefined : { maxHeight: `${columnMaxHeight}px` }}
       >
         <section className="panel">
           <button
