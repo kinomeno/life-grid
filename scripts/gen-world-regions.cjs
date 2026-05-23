@@ -1,10 +1,10 @@
 /*
- * ユーザーの色分け画像(aaaaaa.png)から大陸リージョンを生成する。
- * - 陸/海は IMG_5876.PNG のマスクを使用（worldMap.ts と一致）
- * - 各陸セルを「最近傍のパレット色」で 10 区分に分類
- * 出力:
- *   - src/lib/maps/worldRegions.ts （区分データ＋メタ）
- *   - region-classified.png （検証用：分類結果を色で再描画）
+ * 世界地図の「陸/海マスク（陸橋つき）」と「大陸リージョン」を生成する統合パイプライン。
+ *  1) IMG_5876.PNG から陸/海マスク
+ *  2) aaaaaa.png（ユーザー色分け）を最近傍色で 10 区分に分類＋多数決スムージング＋アイスランド補正
+ *  3) 陸橋（1ドット線）を追加：大西洋（南米東岸→継ぎ目→アフリカ西岸）＋孤立塊を最近傍連結
+ *  4) 橋セルに最近傍リージョンを割当て、連結性を検証
+ * 出力: src/lib/maps/worldMap.ts（陸/海）・worldRegions.ts（区分）・region-classified.png（検証）
  * 実行: node scripts/gen-world-regions.cjs
  */
 const sharp = require("sharp");
@@ -12,33 +12,84 @@ const fs = require("fs");
 const path = require("path");
 const MASK_SRC = path.join(__dirname, "..", "..", "参考画像", "IMG_5876.PNG");
 const USER_SRC = path.join(__dirname, "..", "..", "参考画像", "aaaaaa.png");
-const OUT_TS = path.join(__dirname, "..", "src", "lib", "maps", "worldRegions.ts");
+const OUT_MAP = path.join(__dirname, "..", "src", "lib", "maps", "worldMap.ts");
+const OUT_REG = path.join(__dirname, "..", "src", "lib", "maps", "worldRegions.ts");
 const OUT_PNG = path.join(__dirname, "..", "region-classified.png");
 const W = 200, H = 100, TH = 128, SCALE = 4;
 
-// 区分の代表色（ユーザー画像のパレット）。色はそのまま祖先の初期体色にも使う。
 const REGIONS = [
-  { code: "NA",     ja: "北アメリカ",   rgb: [160, 200, 240] },
-  { code: "NAsia",  ja: "北アジア",     rgb: [40, 80, 240] },
-  { code: "EU",     ja: "ヨーロッパ",   rgb: [40, 200, 80] },
-  { code: "EAsia",  ja: "東アジア",     rgb: [240, 80, 80] },
-  { code: "NAfr",   ja: "北アフリカ",   rgb: [20, 20, 20] },
-  { code: "CAsia",  ja: "中央アジア",   rgb: [200, 200, 40] },
-  { code: "SA",     ja: "南アメリカ",   rgb: [120, 40, 120] },
-  { code: "SAfr",   ja: "南アフリカ",   rgb: [40, 200, 240] },
-  { code: "SEAsia", ja: "東南アジア",   rgb: [240, 160, 240] },
-  { code: "AU",     ja: "オーストラリア", rgb: [40, 240, 200] },
+  { code: "NA",     ja: "北アメリカ",     match: [160, 200, 240], display: [160, 200, 240] },
+  { code: "NAsia",  ja: "北アジア",       match: [40, 80, 240],   display: [40, 80, 240] },
+  { code: "EU",     ja: "ヨーロッパ",     match: [40, 200, 80],   display: [40, 200, 80] },
+  { code: "EAsia",  ja: "東アジア",       match: [240, 80, 80],   display: [240, 80, 80] },
+  { code: "NAfr",   ja: "北アフリカ",     match: [20, 20, 20],    display: [225, 150, 70] },
+  { code: "CAsia",  ja: "中央アジア",     match: [200, 200, 40],  display: [200, 200, 40] },
+  { code: "SA",     ja: "南アメリカ",     match: [120, 40, 120],  display: [150, 60, 160] },
+  { code: "SAfr",   ja: "南アフリカ",     match: [40, 200, 240],  display: [40, 200, 240] },
+  { code: "SEAsia", ja: "東南アジア",     match: [240, 160, 240], display: [240, 160, 240] },
+  { code: "AU",     ja: "オーストラリア", match: [40, 240, 200],  display: [40, 240, 200] },
 ];
-const CHAR = (i) => String.fromCharCode(65 + i); // A..J
-
-function nearest(r, g, b) {
-  let best = 0, bd = Infinity;
+const CHAR = (i) => String.fromCharCode(65 + i);
+const idxOf = (c) => REGIONS.findIndex((r) => r.code === c);
+const nearest = (r, g, b) => {
+  let bi = 0, bd = Infinity;
   for (let i = 0; i < REGIONS.length; i++) {
-    const [pr, pg, pb] = REGIONS[i].rgb;
+    const [pr, pg, pb] = REGIONS[i].match;
     const d = (r - pr) ** 2 + (g - pg) ** 2 + (b - pb) ** 2;
-    if (d < bd) { bd = d; best = i; }
+    if (d < bd) { bd = d; bi = i; }
   }
-  return { idx: best, dist: Math.sqrt(bd) };
+  return bi;
+};
+const wrapDX = (x0, x1) => { let d = x1 - x0; if (d > W / 2) d -= W; else if (d < -W / 2) d += W; return d; };
+
+function components(land) {
+  const comp = new Int32Array(W * H).fill(-1);
+  const list = [];
+  const st = [];
+  for (let s = 0; s < W * H; s++) {
+    if (!land[s] || comp[s] !== -1) continue;
+    const id = list.length, cells = [];
+    st.push(s); comp[s] = id;
+    while (st.length) {
+      const c = st.pop(); cells.push(c);
+      const cx = c % W, cy = (c / W) | 0;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue;
+          const ny = cy + dy; if (ny < 0 || ny >= H) continue;
+          const ni = ny * W + ((cx + dx + W) % W);
+          if (land[ni] && comp[ni] === -1) { comp[ni] = id; st.push(ni); }
+        }
+    }
+    list.push({ id, cells, size: cells.length });
+  }
+  list.sort((a, b) => b.size - a.size);
+  return list;
+}
+
+function drawBridge(land, a, b) {
+  const ax = a % W, ay = (a / W) | 0, bx = b % W, by = (b / W) | 0;
+  const dx = wrapDX(ax, bx), dy = by - ay;
+  const steps = Math.max(Math.abs(dx), Math.abs(dy), 1);
+  for (let s = 0; s <= steps; s++) {
+    const t = s / steps;
+    const x = (Math.round(ax + dx * t) % W + W) % W;
+    const y = Math.round(ay + dy * t);
+    if (y >= 1 && y < H - 1) land[y * W + x] = 1;
+  }
+}
+
+function nearestPair(cellsA, cellsB) {
+  let bd = Infinity, ba = -1, bb = -1;
+  for (const a of cellsA) {
+    const ax = a % W, ay = (a / W) | 0;
+    for (const b of cellsB) {
+      const dx = wrapDX(ax, b % W), dy = ((b / W) | 0) - ay;
+      const d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; ba = a; bb = b; }
+    }
+  }
+  return [ba, bb];
 }
 
 (async () => {
@@ -47,56 +98,113 @@ function nearest(r, g, b) {
   const user = await sharp(USER_SRC).resize(W, H, { fit: "fill" }).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const uch = user.info.channels;
 
-  const rows = [];
-  const counts = {};
-  let land = 0, far = 0, maxDist = 0;
-  const out = Buffer.alloc(W * SCALE * H * SCALE * 3);
-  for (let y = 0; y < H; y++) {
-    let row = "";
+  const land = new Uint8Array(W * H);
+  const reg = new Int16Array(W * H).fill(-1);
+  for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
       const v = mask.data[(y * W + x) * mch];
-      const isLand = v < TH && y !== 0 && y !== H - 1;
-      let ch = ".", color = [12, 30, 52];
-      if (isLand) {
-        land++;
-        const o = (y * W + x) * uch;
-        let { idx, dist } = nearest(user.data[o], user.data[o + 1], user.data[o + 2]);
-        // グリーンランド（右側の緑）は北アメリカへ寄せる
-        if (REGIONS[idx].code === "EU" && x > 140) idx = REGIONS.findIndex((r) => r.code === "NA");
-        ch = CHAR(idx);
-        color = REGIONS[idx].rgb;
-        counts[REGIONS[idx].code] = (counts[REGIONS[idx].code] || 0) + 1;
-        if (dist > 120) far++;
-        if (dist > maxDist) maxDist = dist;
-      }
-      row += ch;
-      for (let sy = 0; sy < SCALE; sy++)
-        for (let sx = 0; sx < SCALE; sx++) {
-          const px = ((y * SCALE + sy) * W * SCALE + (x * SCALE + sx)) * 3;
-          out[px] = color[0]; out[px + 1] = color[1]; out[px + 2] = color[2];
-        }
+      if (!(v < TH && y !== 0 && y !== H - 1)) continue;
+      land[y * W + x] = 1;
+      const o = (y * W + x) * uch;
+      reg[y * W + x] = nearest(user.data[o], user.data[o + 1], user.data[o + 2]);
     }
-    rows.push(row);
+
+  // 多数決スムージング（孤立誤分類ドット除去）
+  for (let p = 0; p < 3; p++) {
+    const next = reg.slice();
+    for (let y = 1; y < H - 1; y++)
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x; if (!land[i]) continue;
+        const cnt = {}; let own = 0;
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            if (!dx && !dy) continue;
+            const ny = y + dy; if (ny < 0 || ny >= H) continue;
+            const ni = ny * W + ((x + dx + W) % W); if (!land[ni]) continue;
+            cnt[reg[ni]] = (cnt[reg[ni]] || 0) + 1; if (reg[ni] === reg[i]) own++;
+          }
+        let mj = -1, mc = 0; for (const k in cnt) if (cnt[k] > mc) { mc = cnt[k]; mj = +k; }
+        if (mj >= 0 && mj !== reg[i] && own <= 1 && mc >= 4) next[i] = mj;
+      }
+    reg.set(next);
+  }
+  // アイスランド（欧州北西の小島）を欧州へ
+  const EU = idxOf("EU");
+  for (let y = 4; y <= 12; y++) for (let x = 6; x <= 22; x++) if (land[y * W + x]) reg[y * W + x] = EU;
+
+  // ---- 陸橋 ----
+  const comps0 = components(land);
+  // 大西洋橋：南米東岸(右下) → アフリカ西岸(左・中緯度)。継ぎ目を跨ぐ。
+  const americas = comps0[1]; // 2番目に大きい＝南北アメリカ
+  const oldworld = comps0[0]; // 最大＝旧大陸
+  const saEast = americas.cells.filter((c) => (c / W | 0) >= 55).reduce((m, c) => (c % W) > (m % W) ? c : m, americas.cells[0]);
+  const afrWest = oldworld.cells.filter((c) => { const y = c / W | 0; return y >= 45 && y <= 72; }).reduce((m, c) => (c % W) < (m % W) ? c : m, oldworld.cells[0]);
+  drawBridge(land, saEast, afrWest);
+
+  // 残りの孤立塊を最大連結塊へ最近傍で連結（反復）
+  for (let iter = 0; iter < 40; iter++) {
+    const cs = components(land);
+    if (cs.length <= 1) break;
+    const main = cs[0].cells;
+    const other = cs[1].cells; // 次に大きい孤立塊
+    const [a, b] = nearestPair(other, main);
+    if (a < 0) break;
+    drawBridge(land, a, b);
+  }
+  const finalComps = components(land);
+
+  // 橋で増えた陸セル(reg==-1)に最近傍リージョンを割当て
+  const known = [];
+  for (let i = 0; i < W * H; i++) if (land[i] && reg[i] >= 0) known.push(i);
+  for (let i = 0; i < W * H; i++) {
+    if (!land[i] || reg[i] >= 0) continue;
+    const ix = i % W, iy = i / W | 0;
+    let bd = Infinity, br = 0;
+    for (const k of known) {
+      const dx = wrapDX(ix, k % W), dy = (k / W | 0) - iy, d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; br = reg[k]; }
+    }
+    reg[i] = br;
   }
 
+  // 出力
+  const mapRows = [], regRows = [], counts = {};
+  const out = Buffer.alloc(W * SCALE * H * SCALE * 3);
+  for (let y = 0; y < H; y++) {
+    let mr = "", rr = "";
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      let color = [12, 30, 52];
+      if (land[i]) {
+        mr += "#"; rr += CHAR(reg[i]); color = REGIONS[reg[i]].display;
+        counts[REGIONS[reg[i]].code] = (counts[REGIONS[reg[i]].code] || 0) + 1;
+      } else { mr += "."; rr += "."; }
+      for (let sy = 0; sy < SCALE; sy++) for (let sx = 0; sx < SCALE; sx++) {
+        const px = ((y * SCALE + sy) * W * SCALE + (x * SCALE + sx)) * 3;
+        out[px] = color[0]; out[px + 1] = color[1]; out[px + 2] = color[2];
+      }
+    }
+    mapRows.push(mr); regRows.push(rr);
+  }
   await sharp(out, { raw: { width: W * SCALE, height: H * SCALE, channels: 3 } }).png().toFile(OUT_PNG);
 
-  const meta = REGIONS.map((r, i) => `  { id: ${i}, code: ${JSON.stringify(r.code)}, ja: ${JSON.stringify(r.ja)}, r: ${r.rgb[0]}, g: ${r.rgb[1]}, b: ${r.rgb[2]} },`).join("\n");
-  const ts =
+  fs.writeFileSync(OUT_MAP,
+    `// 自動生成: scripts/gen-world-regions.cjs（IMG_5876＋陸橋）\n` +
+    `// '#'=陸（生息可）/'.'=海。${W}x${H}。上下端は海＝縦ループ遮断。横はトーラス。\n` +
+    `// 陸橋（孤立大陸・島の1ドット連結／大西洋の継ぎ目）を含む。\n` +
+    `export const WORLD_MAP_WIDTH = ${W};\nexport const WORLD_MAP_HEIGHT = ${H};\n` +
+    `export const WORLD_MAP_ROWS: string[] = [\n` + mapRows.map((r) => `  ${JSON.stringify(r)},`).join("\n") + `\n];\n`, "utf8");
+
+  const meta = REGIONS.map((r, i) => `  { id: ${i}, code: ${JSON.stringify(r.code)}, ja: ${JSON.stringify(r.ja)}, r: ${r.display[0]}, g: ${r.display[1]}, b: ${r.display[2]} },`).join("\n");
+  fs.writeFileSync(OUT_REG,
     `// 自動生成: scripts/gen-world-regions.cjs（参考画像 aaaaaa.png より）\n` +
-    `// 各文字が大陸区分（A..J）、'.' は海。${W}x${H}。worldMap.ts の陸/海と一致。\n` +
+    `// 'A'..'J'=区分/'.'=海。${W}x${H}。worldMap.ts の陸/海と一致（陸橋含む）。\n` +
     `export type WorldRegionMeta = { id: number; code: string; ja: string; r: number; g: number; b: number };\n` +
     `export const WORLD_REGIONS: WorldRegionMeta[] = [\n${meta}\n];\n` +
-    `export const WORLD_REGION_WIDTH = ${W};\n` +
-    `export const WORLD_REGION_HEIGHT = ${H};\n` +
-    `// 'A'..'J' = WORLD_REGIONS[0..9] の区分、'.' = 海。\n` +
-    `export const WORLD_REGION_ROWS: string[] = [\n` +
-    rows.map((r) => `  ${JSON.stringify(r)},`).join("\n") + `\n];\n`;
-  fs.mkdirSync(path.dirname(OUT_TS), { recursive: true });
-  fs.writeFileSync(OUT_TS, ts, "utf8");
+    `export const WORLD_REGION_WIDTH = ${W};\nexport const WORLD_REGION_HEIGHT = ${H};\n` +
+    `export const WORLD_REGION_ROWS: string[] = [\n` + regRows.map((r) => `  ${JSON.stringify(r)},`).join("\n") + `\n];\n`, "utf8");
 
-  console.log(`land=${land}  far(dist>120)=${far}  maxDist=${maxDist.toFixed(0)}`);
+  console.log(`components: before=${comps0.length} after=${finalComps.length} (sizes: ${finalComps.slice(0, 5).map((c) => c.size).join(",")})`);
   console.log("region counts:");
-  for (const r of REGIONS) console.log(`  ${r.code.padEnd(7)} ${r.ja.padEnd(7)} ${counts[r.code] || 0}`);
-  console.log("written:", path.relative(path.join(__dirname, ".."), OUT_TS), "/", path.relative(path.join(__dirname, ".."), OUT_PNG));
+  for (const r of REGIONS) console.log(`  ${r.code.padEnd(7)} ${r.ja.padEnd(8)} ${counts[r.code] || 0}`);
 })();
