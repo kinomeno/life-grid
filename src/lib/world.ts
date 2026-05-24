@@ -338,10 +338,12 @@ export function createWorld(config: WorldConfig): World {
         seq,
       });
     }
-    let lid = founderLineageByBin.get(life.speciesId);
+    // 出自＋色ビンごとに1ルート（別出自が同じ色ビンを持っても系統が混ざらないように）。
+    const fkey = `${life.origin ?? ""}|${life.speciesId}`;
+    let lid = founderLineageByBin.get(fkey);
     if (lid === undefined) {
       lid = nextLineageId++;
-      founderLineageByBin.set(life.speciesId, lid);
+      founderLineageByBin.set(fkey, lid);
       const sln = speciesLineage.get(life.speciesId)!;
       lineageNodes.push({
         id: lid,
@@ -351,7 +353,7 @@ export function createWorld(config: WorldConfig): World {
         r: sln.r,
         g: sln.g,
         b: sln.b,
-        origin: sln.origin,
+        origin: life.origin,
         seq: sln.seq,
       });
     }
@@ -2760,7 +2762,8 @@ function reproduceLife(
         r: sln?.r ?? 128,
         g: sln?.g ?? 128,
         b: sln?.b ?? 128,
-        origin: sln?.origin ?? parent.origin,
+        // 出自は親から不変で継承（単為生殖）。色ビンの最初の出自に引きずられないようにする。
+        origin: parent.origin,
         seq: sln?.seq,
       });
     }
