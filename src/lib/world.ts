@@ -70,6 +70,7 @@ import {
   speciesColorFromGenes,
   binCenterColor,
 } from "./species";
+import { regionName } from "./maps";
 import { makeStatsSample } from "./stats";
 import type {
   DisabledGeneFlags,
@@ -185,7 +186,7 @@ export function createWorld(config: WorldConfig): World {
 
   const energy = new Float32Array(total);
   // v1.30 (あ): 25画面（観察モード）は序盤に全マップ同時枯渇で全滅しやすいので初期エネを少し増やす。
-  const initEnergyBoost = width <= 25 ? 1.4 : 1;
+  const initEnergyBoost = terrain ? 1.5 : width <= 25 ? 1.4 : 1;
   for (let i = 0; i < total; i++) {
     const v = ENERGY_INITIAL_MEAN + (rng() - 0.5) * 2 * ENERGY_INITIAL_VARIANCE;
     // ver.2: 海セルはエネルギー常時0（rng は揃えるため毎セル消費する）。
@@ -730,6 +731,9 @@ export function stepWorld(world: World): void {
   // ユニークな世界史イベント検出
   detectUniqueEvents(world);
 
+  // ver.2: 大陸（出自）の世界制覇判定（出自つき個体がいる世界地図など）
+  detectDomination(world);
+
   // 履歴サンプルを記録
   if (world.turn % HISTORY_SAMPLE_INTERVAL === 0) {
     world.history.push(makeStatsSample(world));
@@ -1100,6 +1104,32 @@ function pushEvent(world: World, ev: WorldEvent): void {
   if (world.events.length > MAX_EVENTS) {
     world.events.splice(0, world.events.length - MAX_EVENTS);
   }
+}
+
+// ver.2: 大陸（出自）の世界制覇判定（仮）。ある出自の子孫が個体数の閾値以上を占めたら一度だけ告知。
+function detectDomination(world: World): void {
+  if (world.events.some((e) => e.type === "worldDomination")) return;
+  const counts = new Map<string, number>();
+  let total = 0;
+  for (const l of world.lives) {
+    if (!l.alive || !l.origin) continue;
+    counts.set(l.origin, (counts.get(l.origin) || 0) + 1);
+    total++;
+  }
+  if (total < 100) return; // 十分な個体数があるときのみ判定
+  let topOrigin = "";
+  let topN = 0;
+  for (const [o, n] of counts) if (n > topN) { topN = n; topOrigin = o; }
+  if (!topOrigin || topN / total < 0.75) return; // 75%以上で「制覇」
+  const pct = Math.round((topN / total) * 100);
+  pushEvent(world, {
+    turn: world.turn,
+    type: "worldDomination",
+    message: {
+      ja: `🏆 ${regionName(topOrigin, "ja") ?? topOrigin}系が世界を制覇！（個体数の ${pct}%）`,
+      en: `🏆 ${regionName(topOrigin, "en") ?? topOrigin} dominates the world! (${pct}% of population)`,
+    },
+  });
 }
 
 function detectSpeciesEvents(world: World): void {
@@ -1483,8 +1513,10 @@ function updateEnergy(world: World): void {
     (turn / 2000) * Math.PI * 2 * Math.max(0, params.waveSpeed);
   const phaseBase = rawPhaseBase % (Math.PI * 2);
   // 振幅係数 0.04（旧 0.025）：背景エネルギー揺れを視覚的に分かりやすく
-  const waveAmp = ENERGY_WAVE_AMPLITUDE * 0.04 * energyScale * env.ampScale;
-  const regenPerTurn = ENERGY_REGEN_PER_TURN * energyScale * env.regenScale;
+  // ver.2: 固定地形（世界地図）は公平のためエネルギーを平坦化（波・偏り無し）。
+  const flat = !!terrain;
+  const waveAmp = flat ? 0 : ENERGY_WAVE_AMPLITUDE * 0.04 * energyScale * env.ampScale;
+  const regenPerTurn = ENERGY_REGEN_PER_TURN * energyScale * env.regenScale * (flat ? 1.35 : 1);
   // v1.21: 再生の下限。波が負のピークでも regenFloor は必ず供給され、
   // マップ全体が同時に枯渇する環境絶滅を防ぐ。
   const regenFloor = regenPerTurn * ENERGY_REGEN_FLOOR_RATIO;
@@ -1544,7 +1576,7 @@ function updateEnergy(world: World): void {
       const diffused = cur + (neighborSum * 0.25 - cur) * ENERGY_DIFFUSION;
 
       // v1.21: 再生に下限 regenFloor を保証（波が負でも完全停止しない）
-      const rawRegen = regenPerTurn * (1 + terrainBias[idx] * 0.6) + waveBuf[idx];
+      const rawRegen = regenPerTurn * (1 + terrainBias[idx] * (flat ? 0 : 0.6)) + waveBuf[idx];
       const regen = rawRegen > regenFloor ? rawRegen : regenFloor;
       let v = diffused + regen;
       if (v < 0) v = 0;

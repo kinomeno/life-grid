@@ -140,7 +140,8 @@ export type WorldEventType =
   | "predatorRise" // 捕食系（高strength）の繁栄
   | "intelligentRise" // 知的生命（高intelligence）の繁栄
   | "cataclysm" // 天変地異
-  | "totalExtinction"; // 全生物絶滅
+  | "totalExtinction" // 全生物絶滅
+  | "worldDomination"; // ver.2: 大陸（出自）の世界制覇
 
 export type WorldEvent = {
   turn: number;

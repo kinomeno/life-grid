@@ -732,8 +732,11 @@
 :global(.born-chips) {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 4px;
   margin: 4px 0;
+  /* ver.2: チップの有無で高さが変わらないよう固定（縦サイズのガタつき防止） */
+  min-height: 16px;
 }
 :global(.born-chip) {
   font-size: 10px;

@@ -1928,13 +1928,14 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
                 />
                 {/* v1.30 (H8): 誕生時の新種ハイライト（若い個体のみ）。
                     ver.2: 冗長だった「変異: 〜」チップは削除。 */}
-                {selectedLife.age < 100 && selectedLife.bornNewSpecies && (
-                  <div className="born-chips">
+                {/* ver.2: チップの有無で縦サイズがガタつかないよう枠を常時確保 */}
+                <div className="born-chips">
+                  {selectedLife.age < 100 && selectedLife.bornNewSpecies && (
                     <span className="born-chip born-newspecies">
                       {t("info.new_species")}
                     </span>
-                  </div>
-                )}
+                  )}
+                </div>
                 {/* v1.02: 自動継承の一時表示（行動ログには残さない） */}
                 {inheritedFromLabel && (
                   <div className="inherit-chip">
