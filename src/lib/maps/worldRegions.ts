@@ -1,17 +1,17 @@
 // 自動生成: scripts/gen-world-regions.cjs（参考画像 aaaaaa.png より）
 // 'A'..'J'=区分/'.'=海。200x100。worldMap.ts の陸/海と一致（陸橋含む）。
-export type WorldRegionMeta = { id: number; code: string; ja: string; r: number; g: number; b: number };
+export type WorldRegionMeta = { id: number; code: string; ja: string; en: string; r: number; g: number; b: number };
 export const WORLD_REGIONS: WorldRegionMeta[] = [
-  { id: 0, code: "NA", ja: "北アメリカ", r: 160, g: 200, b: 240 },
-  { id: 1, code: "NAsia", ja: "北アジア", r: 40, g: 80, b: 240 },
-  { id: 2, code: "EU", ja: "ヨーロッパ", r: 40, g: 200, b: 80 },
-  { id: 3, code: "EAsia", ja: "東アジア", r: 240, g: 80, b: 80 },
-  { id: 4, code: "NAfr", ja: "北アフリカ", r: 225, g: 150, b: 70 },
-  { id: 5, code: "CAsia", ja: "中央アジア", r: 200, g: 200, b: 40 },
-  { id: 6, code: "SA", ja: "南アメリカ", r: 150, g: 60, b: 160 },
-  { id: 7, code: "SAfr", ja: "南アフリカ", r: 40, g: 200, b: 240 },
-  { id: 8, code: "SEAsia", ja: "東南アジア", r: 240, g: 160, b: 240 },
-  { id: 9, code: "AU", ja: "オーストラリア", r: 140, g: 215, b: 50 },
+  { id: 0, code: "NA", ja: "北アメリカ", en: "N. America", r: 160, g: 200, b: 240 },
+  { id: 1, code: "NAsia", ja: "北アジア", en: "N. Asia", r: 40, g: 80, b: 240 },
+  { id: 2, code: "EU", ja: "ヨーロッパ", en: "Europe", r: 40, g: 200, b: 80 },
+  { id: 3, code: "EAsia", ja: "東アジア", en: "E. Asia", r: 240, g: 80, b: 80 },
+  { id: 4, code: "NAfr", ja: "北アフリカ", en: "N. Africa", r: 225, g: 150, b: 70 },
+  { id: 5, code: "CAsia", ja: "中央アジア", en: "C. Asia", r: 200, g: 200, b: 40 },
+  { id: 6, code: "SA", ja: "南アメリカ", en: "S. America", r: 150, g: 60, b: 160 },
+  { id: 7, code: "SAfr", ja: "南アフリカ", en: "S. Africa", r: 40, g: 200, b: 240 },
+  { id: 8, code: "SEAsia", ja: "東南アジア", en: "SE Asia", r: 240, g: 160, b: 240 },
+  { id: 9, code: "AU", ja: "オーストラリア", en: "Australia", r: 140, g: 215, b: 50 },
 ];
 export const WORLD_REGION_WIDTH = 200;
 export const WORLD_REGION_HEIGHT = 100;

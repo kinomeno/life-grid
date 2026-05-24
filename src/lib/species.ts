@@ -1,4 +1,5 @@
 import { SPECIES_RGB_BIN } from "./constants";
+import { regionName } from "./maps";
 import type { Genes } from "./types";
 
 export function speciesIdFromGenes(genes: Genes): string {
@@ -56,11 +57,15 @@ export function letterFromSeq(seq: number): string {
 export function speciesDisplayName(
   speciesId: string,
   node?: { origin?: string; seq?: number } | null,
-  regionJa?: (code: string) => string | undefined
+  locale: string = "ja"
 ): string {
-  if (node && node.origin != null && node.seq != null && regionJa) {
-    const ja = regionJa(node.origin);
-    if (ja) return `${ja}${letterFromSeq(node.seq)}`;
+  if (node && node.origin != null && node.seq != null) {
+    const nm = regionName(node.origin, locale);
+    if (nm) {
+      // 英語名（A-Z含む）は区切りスペース、日本語名は詰める（北アメリカA / N. America A）。
+      const sep = /[A-Za-z]/.test(nm) ? " " : "";
+      return `${nm}${sep}${letterFromSeq(node.seq)}`;
+    }
   }
   return speciesLabel(speciesId);
 }

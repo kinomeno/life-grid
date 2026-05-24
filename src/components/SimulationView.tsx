@@ -41,7 +41,7 @@ import { speciesLabel, speciesDisplayName, binCenterColor } from "@/lib/species"
 import { encodeGeneId, truncateGeneId } from "@/lib/geneId";
 import { DEFAULT_ADVANCED } from "@/lib/constants";
 import { isUnlocked } from "@/lib/unlock";
-import { getWorldTerrain, regionJaByCode } from "@/lib/maps";
+import { getWorldTerrain } from "@/lib/maps";
 import ShareXButton from "./ShareXButton";
 import PasswordPrompt from "./PasswordPrompt";
 import KinomenoLink from "./KinomenoLink";
@@ -267,8 +267,8 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
 
   const refreshDerived = useCallback((w: World) => {
     setStats(computeStats(w));
-    setTopSpecies(computeTopSpecies(w));
-  }, []);
+    setTopSpecies(computeTopSpecies(w, locale));
+  }, [locale]);
 
   useEffect(() => {
     if (worldRef.current !== null) return;
@@ -2000,7 +2000,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
                           value={speciesDisplayName(
                             selectedLife.speciesId,
                             world.speciesLineage.get(selectedLife.speciesId),
-                            regionJaByCode
+                            locale
                           )}
                         />
                         <InfoRow
@@ -2738,7 +2738,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
             {speciesDisplayName(
               hoverInfo.life.speciesId,
               world?.speciesLineage.get(hoverInfo.life.speciesId),
-              regionJaByCode
+              locale
             )}
           </span>
         </div>
@@ -3048,7 +3048,7 @@ function pickCinemaTarget(
   return { id: best.id, reasonKey: "cinema.dominant", speciesId: best.speciesId };
 }
 
-function computeTopSpecies(world: World, max = 30): SpeciesEntry[] {
+function computeTopSpecies(world: World, locale: string, max = 30): SpeciesEntry[] {
   const map = new Map<
     string,
     { count: number; r: number; g: number; b: number; archetype: string[] }
@@ -3073,7 +3073,7 @@ function computeTopSpecies(world: World, max = 30): SpeciesEntry[] {
   for (const [id, v] of map) {
     entries.push({
       id,
-      label: speciesDisplayName(id, world.speciesLineage.get(id), regionJaByCode),
+      label: speciesDisplayName(id, world.speciesLineage.get(id), locale),
       count: v.count,
       r: v.r,
       g: v.g,

@@ -38,10 +38,11 @@ function decodeRegions(rows: string[], width: number, height: number): Int8Array
   return arr;
 }
 
-// ver.2: リージョンコード → 日本語名（系統名「北アメリカA」用）。
+// ver.2: リージョンコード → 表示名（ロケール対応）。系統名「北アメリカA / N. America A」用。
 const _regionJa = new Map<string, string>(WORLD_REGIONS.map((r) => [r.code, r.ja]));
-export function regionJaByCode(code: string): string | undefined {
-  return _regionJa.get(code);
+const _regionEn = new Map<string, string>(WORLD_REGIONS.map((r) => [r.code, r.en]));
+export function regionName(code: string, locale: string): string | undefined {
+  return (locale === "en" ? _regionEn : _regionJa).get(code);
 }
 
 let _world: TerrainPreset | null = null;

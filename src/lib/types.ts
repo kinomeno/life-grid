@@ -339,6 +339,7 @@ export type RegionMeta = {
   id: number;
   code: string;
   ja: string;
+  en: string;
   r: number;
   g: number;
   b: number;

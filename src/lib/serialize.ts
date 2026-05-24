@@ -42,6 +42,8 @@ type EncodedWorld = {
   energyB64: string;
   terrainBiasB64: string;
   waveTimeScaleB64: string;
+  /** ver.2: 地形マスク（1=陸/0=海）。世界地図などで使用。無ければ全マス陸（従来）。 */
+  terrainB64?: string;
   lives: Life[];
   recentDeaths: [number, RecentDeath][];
   nextLifeId: number;
@@ -93,6 +95,24 @@ function base64ToF32(b64: string): Float32Array {
   return new Float32Array(bytes.buffer);
 }
 
+// ──── base64 ⇄ Uint8Array（地形マスク用）────
+function u8ToBase64(arr: Uint8Array): string {
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < arr.length; i += chunk) {
+    const sub = arr.subarray(i, i + chunk);
+    bin += String.fromCharCode.apply(null, sub as unknown as number[]);
+  }
+  return btoa(bin);
+}
+
+function base64ToU8(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
 /** World を保存用 JSON 文字列にする。 */
 export function serializeWorld(world: World): string {
   const encoded: EncodedWorld = {
@@ -103,6 +123,7 @@ export function serializeWorld(world: World): string {
     energyB64: f32ToBase64(world.energy),
     terrainBiasB64: f32ToBase64(world.terrainBias),
     waveTimeScaleB64: f32ToBase64(world.waveTimeScale),
+    terrainB64: world.terrain ? u8ToBase64(world.terrain) : undefined,
     lives: world.lives,
     recentDeaths: Array.from(world.recentDeaths.entries()),
     nextLifeId: world.nextLifeId,
@@ -190,6 +211,7 @@ export function deserializeWorld(json: string): World {
     energy,
     energyNext: new Float32Array(total),
     occupancy,
+    terrain: e.terrainB64 ? base64ToU8(e.terrainB64) : undefined,
     lives: e.lives,
     livesById,
     recentDeaths: new Map(e.recentDeaths),

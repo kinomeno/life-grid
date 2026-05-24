@@ -18,16 +18,16 @@ const OUT_PNG = path.join(__dirname, "..", "region-classified.png");
 const W = 200, H = 100, TH = 128, SCALE = 4;
 
 const REGIONS = [
-  { code: "NA",     ja: "北アメリカ",     match: [160, 200, 240], display: [160, 200, 240] },
-  { code: "NAsia",  ja: "北アジア",       match: [40, 80, 240],   display: [40, 80, 240] },
-  { code: "EU",     ja: "ヨーロッパ",     match: [40, 200, 80],   display: [40, 200, 80] },
-  { code: "EAsia",  ja: "東アジア",       match: [240, 80, 80],   display: [240, 80, 80] },
-  { code: "NAfr",   ja: "北アフリカ",     match: [20, 20, 20],    display: [225, 150, 70] },
-  { code: "CAsia",  ja: "中央アジア",     match: [200, 200, 40],  display: [200, 200, 40] },
-  { code: "SA",     ja: "南アメリカ",     match: [120, 40, 120],  display: [150, 60, 160] },
-  { code: "SAfr",   ja: "南アフリカ",     match: [40, 200, 240],  display: [40, 200, 240] },
-  { code: "SEAsia", ja: "東南アジア",     match: [240, 160, 240], display: [240, 160, 240] },
-  { code: "AU",     ja: "オーストラリア", match: [40, 240, 200],  display: [140, 215, 50] },
+  { code: "NA",     ja: "北アメリカ",     en: "N. America", match: [160, 200, 240], display: [160, 200, 240] },
+  { code: "NAsia",  ja: "北アジア",       en: "N. Asia",    match: [40, 80, 240],   display: [40, 80, 240] },
+  { code: "EU",     ja: "ヨーロッパ",     en: "Europe",     match: [40, 200, 80],   display: [40, 200, 80] },
+  { code: "EAsia",  ja: "東アジア",       en: "E. Asia",    match: [240, 80, 80],   display: [240, 80, 80] },
+  { code: "NAfr",   ja: "北アフリカ",     en: "N. Africa",  match: [20, 20, 20],    display: [225, 150, 70] },
+  { code: "CAsia",  ja: "中央アジア",     en: "C. Asia",    match: [200, 200, 40],  display: [200, 200, 40] },
+  { code: "SA",     ja: "南アメリカ",     en: "S. America", match: [120, 40, 120],  display: [150, 60, 160] },
+  { code: "SAfr",   ja: "南アフリカ",     en: "S. Africa",  match: [40, 200, 240],  display: [40, 200, 240] },
+  { code: "SEAsia", ja: "東南アジア",     en: "SE Asia",    match: [240, 160, 240], display: [240, 160, 240] },
+  { code: "AU",     ja: "オーストラリア", en: "Australia",  match: [40, 240, 200],  display: [140, 215, 50] },
 ];
 const CHAR = (i) => String.fromCharCode(65 + i);
 const idxOf = (c) => REGIONS.findIndex((r) => r.code === c);
@@ -280,11 +280,11 @@ function removeStrayBlobs(reg, land, maxSize) {
     `export const WORLD_MAP_WIDTH = ${W};\nexport const WORLD_MAP_HEIGHT = ${H};\n` +
     `export const WORLD_MAP_ROWS: string[] = [\n` + mapRows.map((r) => `  ${JSON.stringify(r)},`).join("\n") + `\n];\n`, "utf8");
 
-  const meta = REGIONS.map((r, i) => `  { id: ${i}, code: ${JSON.stringify(r.code)}, ja: ${JSON.stringify(r.ja)}, r: ${r.display[0]}, g: ${r.display[1]}, b: ${r.display[2]} },`).join("\n");
+  const meta = REGIONS.map((r, i) => `  { id: ${i}, code: ${JSON.stringify(r.code)}, ja: ${JSON.stringify(r.ja)}, en: ${JSON.stringify(r.en)}, r: ${r.display[0]}, g: ${r.display[1]}, b: ${r.display[2]} },`).join("\n");
   fs.writeFileSync(OUT_REG,
     `// 自動生成: scripts/gen-world-regions.cjs（参考画像 aaaaaa.png より）\n` +
     `// 'A'..'J'=区分/'.'=海。${W}x${H}。worldMap.ts の陸/海と一致（陸橋含む）。\n` +
-    `export type WorldRegionMeta = { id: number; code: string; ja: string; r: number; g: number; b: number };\n` +
+    `export type WorldRegionMeta = { id: number; code: string; ja: string; en: string; r: number; g: number; b: number };\n` +
     `export const WORLD_REGIONS: WorldRegionMeta[] = [\n${meta}\n];\n` +
     `export const WORLD_REGION_WIDTH = ${W};\nexport const WORLD_REGION_HEIGHT = ${H};\n` +
     `export const WORLD_REGION_ROWS: string[] = [\n` + regRows.map((r) => `  ${JSON.stringify(r)},`).join("\n") + `\n];\n`, "utf8");

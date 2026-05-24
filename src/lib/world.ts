@@ -70,7 +70,6 @@ import {
   speciesColorFromGenes,
   binCenterColor,
 } from "./species";
-import { regionJaByCode } from "./maps";
 import { makeStatsSample } from "./stats";
 import type {
   DisabledGeneFlags,
@@ -85,9 +84,9 @@ import type {
 
 const MAX_EVENTS = 200;
 
-// ver.2: イベント文の系統名（出生地つき「北アメリカA」、無ければ色名にフォールバック）。
-function speciesName(world: World, id: string): string {
-  return speciesDisplayName(id, world.speciesLineage.get(id), regionJaByCode);
+// ver.2: イベント文の系統名（出生地つき「北アメリカA / N. America A」、無ければ色名）。
+function speciesName(world: World, id: string, locale: string = "ja"): string {
+  return speciesDisplayName(id, world.speciesLineage.get(id), locale);
 }
 const HISTORY_SAMPLE_INTERVAL = 50;
 const MAX_HISTORY = 240;
@@ -914,7 +913,7 @@ function detectUniqueEvents(world: World): void {
           rgb: speciesColorFromGenes(oldest.genes),
           message: {
             ja: `最長寿命 ${bucket} ターン到達 — ${speciesName(world, oldest.speciesId)} の個体が長寿記録を更新`,
-            en: `Longevity ${bucket} turns reached — ${speciesName(world, oldest.speciesId)} sets a new record`,
+            en: `Longevity ${bucket} turns reached — ${speciesName(world, oldest.speciesId, "en")} sets a new record`,
           },
         });
       }
@@ -950,7 +949,7 @@ function detectUniqueEvents(world: World): void {
         rgb: sample ? speciesColorFromGenes(sample.genes) : undefined,
         message: {
           ja: `最大繁殖系統が ${speciesName(world, topId)} に交代（${topCount} 体）`,
-          en: `Top species shifted to ${speciesName(world, topId)} (${topCount} alive)`,
+          en: `Top species shifted to ${speciesName(world, topId, "en")} (${topCount} alive)`,
         },
       });
       world.prevTopSpeciesId = topId;
@@ -1003,7 +1002,7 @@ function detectUniqueEvents(world: World): void {
         rgb: sample ? speciesColorFromGenes(sample.genes) : undefined,
         message: {
           ja: `生存系統 ${speciesName(world, id)} — ${count} 体が大絶滅を生き延びた`,
-          en: `Survivor ${speciesName(world, id)} — ${count} survived the mass extinction`,
+          en: `Survivor ${speciesName(world, id, "en")} — ${count} survived the mass extinction`,
         },
       });
     }
@@ -1072,7 +1071,7 @@ function detectSpecialistSpecies(world: World): void {
         rgb: { r: a.r, g: a.g, b: a.b },
         message: {
           ja: `捕食系の繁栄 — ${speciesName(world, id)}（強さ ${avgStr.toFixed(1)} 平均, ${a.count} 体）`,
-          en: `Predator rise — ${speciesName(world, id)} (avg strength ${avgStr.toFixed(1)}, ${a.count} alive)`,
+          en: `Predator rise — ${speciesName(world, id, "en")} (avg strength ${avgStr.toFixed(1)}, ${a.count} alive)`,
         },
       });
     }
@@ -1089,7 +1088,7 @@ function detectSpecialistSpecies(world: World): void {
         rgb: { r: a.r, g: a.g, b: a.b },
         message: {
           ja: `知的生命の繁栄 — ${speciesName(world, id)}（知能 ${avgInt.toFixed(1)} 平均, ${a.count} 体）`,
-          en: `Intelligent rise — ${speciesName(world, id)} (avg intelligence ${avgInt.toFixed(1)}, ${a.count} alive)`,
+          en: `Intelligent rise — ${speciesName(world, id, "en")} (avg intelligence ${avgInt.toFixed(1)}, ${a.count} alive)`,
         },
       });
     }
@@ -1134,7 +1133,7 @@ function detectSpeciesEvents(world: World): void {
           rgb: { r: v.r, g: v.g, b: v.b },
           message: {
             ja: `新しい系統 ${speciesName(world, id)} が誕生`,
-            en: `New species ${speciesName(world, id)} emerged`,
+            en: `New species ${speciesName(world, id, "en")} emerged`,
           },
         });
       }
@@ -1193,7 +1192,7 @@ function detectSpeciesEvents(world: World): void {
           speciesId: id,
           message: {
             ja: `系統 ${speciesName(world, id)} が絶滅`,
-            en: `Species ${speciesName(world, id)} went extinct`,
+            en: `Species ${speciesName(world, id, "en")} went extinct`,
           },
         });
       }
