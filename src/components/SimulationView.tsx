@@ -1926,26 +1926,15 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
                   onDeselect={() => setSelectedLifeId(null)}
                   deselectLabel={t("info.deselect")}
                 />
-                {/* v1.30 (H8): 誕生時の新種・変異ハイライト（若い個体のみ） */}
-                {selectedLife.age < 100 &&
-                  (selectedLife.bornNewSpecies ||
-                    selectedLife.bornMutations) && (
-                    <div className="born-chips">
-                      {selectedLife.bornNewSpecies && (
-                        <span className="born-chip born-newspecies">
-                          {t("info.new_species")}
-                        </span>
-                      )}
-                      {selectedLife.bornMutations && (
-                        <span className="born-chip born-mutation">
-                          {t("info.mutated")}:{" "}
-                          {selectedLife.bornMutations
-                            .map((k) => t(k))
-                            .join(", ")}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                {/* v1.30 (H8): 誕生時の新種ハイライト（若い個体のみ）。
+                    ver.2: 冗長だった「変異: 〜」チップは削除。 */}
+                {selectedLife.age < 100 && selectedLife.bornNewSpecies && (
+                  <div className="born-chips">
+                    <span className="born-chip born-newspecies">
+                      {t("info.new_species")}
+                    </span>
+                  </div>
+                )}
                 {/* v1.02: 自動継承の一時表示（行動ログには残さない） */}
                 {inheritedFromLabel && (
                   <div className="inherit-chip">
