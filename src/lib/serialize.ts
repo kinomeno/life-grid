@@ -15,6 +15,7 @@ import type {
   AdvancedParams,
   DisabledGeneFlags,
   Life,
+  RegionMeta,
   SimulationParams,
   SpeciesLineageNode,
   StatsSample,
@@ -44,6 +45,10 @@ type EncodedWorld = {
   waveTimeScaleB64: string;
   /** ver.2: 地形マスク（1=陸/0=海）。世界地図などで使用。無ければ全マス陸（従来）。 */
   terrainB64?: string;
+  /** ver.2: 地域区分（-1=海/0..）。世界地図のみ。勢力地図・制覇判定の復元に使う。 */
+  regionsB64?: string;
+  /** ver.2: 地域メタ（コード・名前・色）。 */
+  regionMeta?: RegionMeta[];
   lives: Life[];
   recentDeaths: [number, RecentDeath][];
   nextLifeId: number;
@@ -124,6 +129,16 @@ export function serializeWorld(world: World): string {
     terrainBiasB64: f32ToBase64(world.terrainBias),
     waveTimeScaleB64: f32ToBase64(world.waveTimeScale),
     terrainB64: world.terrain ? u8ToBase64(world.terrain) : undefined,
+    regionsB64: world.regions
+      ? u8ToBase64(
+          new Uint8Array(
+            world.regions.buffer,
+            world.regions.byteOffset,
+            world.regions.byteLength
+          )
+        )
+      : undefined,
+    regionMeta: world.regionMeta,
     lives: world.lives,
     recentDeaths: Array.from(world.recentDeaths.entries()),
     nextLifeId: world.nextLifeId,
@@ -212,6 +227,10 @@ export function deserializeWorld(json: string): World {
     energyNext: new Float32Array(total),
     occupancy,
     terrain: e.terrainB64 ? base64ToU8(e.terrainB64) : undefined,
+    regions: e.regionsB64
+      ? new Int8Array(base64ToU8(e.regionsB64).buffer)
+      : undefined,
+    regionMeta: e.regionMeta,
     lives: e.lives,
     livesById,
     recentDeaths: new Map(e.recentDeaths),

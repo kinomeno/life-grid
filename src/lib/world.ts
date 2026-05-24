@@ -66,7 +66,6 @@ import {
   WORLD_FLAT_REGEN_MULT,
   FOUNDER_AGE_SPREAD_RATIO,
   REPRO_MIN_EMPTY_NEIGHBORS,
-  DOMINATION_RATIO,
   DOMINATION_STREAK_TURNS,
   DOMINATION_MIN_TOTAL,
 } from "./constants";
@@ -90,7 +89,9 @@ import type {
   WorldEvent,
 } from "./types";
 
-const MAX_EVENTS = 200;
+// ver.2: 年表をターン1近くまで遡れるよう保持上限を拡大（イベントは小さいオブジェクト）。
+// 表示側は「もっと見る」で1000件ずつ展開して描画負荷を抑える。
+const MAX_EVENTS = 2000;
 
 // ver.2: イベント文の系統名（出生地つき「北アメリカA / N. America A」、無ければ色名）。
 function speciesName(world: World, id: string, locale: string = "ja"): string {
@@ -344,6 +345,8 @@ export function createWorld(config: WorldConfig): World {
     energyNext,
     occupancy,
     terrain,
+    regions,
+    regionMeta,
     lives,
     livesById,
     recentDeaths: new Map(),
@@ -746,6 +749,8 @@ export function stepWorld(world: World): void {
 
   // ver.2: 大陸（出自）の世界制覇判定（出自つき個体がいる世界地図など）
   detectDomination(world);
+  // ver.2: 出自（大陸系統）の全滅を年表に記録（世界地図）
+  detectOriginExtinction(world);
 
   // 履歴サンプルを記録
   if (world.turn % HISTORY_SAMPLE_INTERVAL === 0) {
@@ -1006,20 +1011,22 @@ function detectUniqueEvents(world: World): void {
         en: `Mass extinction — population crashed from ${world.peakLifeCount.toLocaleString()} to ${aliveCount.toLocaleString()}`,
       },
     });
-    // 生存系統を一行ずつ列挙（上位5種まで）
-    const survivors = [...world.prevSpeciesCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
-    for (const [id, count] of survivors) {
-      const sample = world.lives.find((l) => l.alive && l.speciesId === id);
+    // ver.2: 生存系統は1行に集約（最多1系統＋生存系統数）。冗長な列挙をやめる。
+    const survivors = [...world.prevSpeciesCounts.entries()].sort(
+      (a, b) => b[1] - a[1]
+    );
+    if (survivors.length > 0) {
+      const [topId, topCount] = survivors[0];
+      const sample = world.lives.find((l) => l.alive && l.speciesId === topId);
+      const nSpecies = survivors.length;
       pushEvent(world, {
         turn: world.turn,
         type: "survival",
-        speciesId: id,
+        speciesId: topId,
         rgb: sample ? speciesColorFromGenes(sample.genes) : undefined,
         message: {
-          ja: `生存系統 ${speciesName(world, id)} — ${count} 体が大絶滅を生き延びた`,
-          en: `Survivor ${speciesName(world, id, "en")} — ${count} survived the mass extinction`,
+          ja: `生存 — ${speciesName(world, topId)} ら ${nSpecies} 系統（最多 ${topCount} 体）が生き延びた`,
+          en: `Survivors — ${speciesName(world, topId, "en")} and ${nSpecies} species (top ${topCount}) survived`,
         },
       });
     }
@@ -1119,49 +1126,97 @@ function pushEvent(world: World, ev: WorldEvent): void {
   }
 }
 
-// ver.2: 大陸（出自）の世界制覇判定。ある出自が個体数の DOMINATION_RATIO 以上を
-// DOMINATION_STREAK_TURNS ターン連続で維持したら一度だけ告知（一過性スパイクで即決させない）。
+// ver.2: 世界制覇判定（領土制＝全地域同色）。すべての地域(地理)の最多勢力(出自)が
+// 同一になり、それを DOMINATION_STREAK_TURNS ターン連続維持したら一度だけ告知する。
+// ＝勢力地図の全地域が同じ色になった状態。世界地図（regions あり）のみ。
 function detectDomination(world: World): void {
   if (world.events.some((e) => e.type === "worldDomination")) return;
-  const counts = new Map<string, number>();
+  const regions = world.regions;
+  const meta = world.regionMeta;
+  if (!regions || !meta || meta.length === 0) return; // 世界地図のみ
+  const w = world.width;
+  const regionCount = meta.length;
+  const counts: Map<string, number>[] = [];
+  for (let i = 0; i < regionCount; i++) counts.push(new Map());
   let total = 0;
   for (const l of world.lives) {
     if (!l.alive || !l.origin) continue;
-    counts.set(l.origin, (counts.get(l.origin) || 0) + 1);
+    const ri = regions[l.y * w + l.x];
+    if (ri < 0 || ri >= regionCount) continue;
+    counts[ri].set(l.origin, (counts[ri].get(l.origin) || 0) + 1);
     total++;
   }
   if (total < DOMINATION_MIN_TOTAL) {
-    // 個体数が不足：ストリークをリセット。
     world.dominationOrigin = null;
     world.dominationStreak = 0;
     return;
   }
-  let topOrigin = "";
-  let topN = 0;
-  for (const [o, n] of counts) if (n > topN) { topN = n; topOrigin = o; }
-  if (!topOrigin || topN / total < DOMINATION_RATIO) {
-    // 閾値未満：ストリーク途切れ。
+  // 全地域が「人口あり」かつ最多勢力が同一出自か判定（＝全地域が同じ色）。
+  let common = "";
+  let allSame = true;
+  for (let ri = 0; ri < regionCount; ri++) {
+    const m = counts[ri];
+    if (m.size === 0) {
+      allSame = false; // 無人地域があれば未達（全地域同色でない）
+      break;
+    }
+    let top = "";
+    let topN = 0;
+    for (const [o, n] of m) if (n > topN) { topN = n; top = o; }
+    if (common === "") common = top;
+    else if (top !== common) {
+      allSame = false;
+      break;
+    }
+  }
+  if (!allSame || !common) {
     world.dominationOrigin = null;
     world.dominationStreak = 0;
     return;
   }
-  // 同一出自が連続で閾値超え → ストリーク加算。別出自に替わったら 1 から数え直し。
-  if (world.dominationOrigin === topOrigin) {
+  // 全地域同色 → 連続維持でストリーク加算（揺らぎでの誤確定を防ぐ）。
+  if (world.dominationOrigin === common) {
     world.dominationStreak = (world.dominationStreak ?? 0) + 1;
   } else {
-    world.dominationOrigin = topOrigin;
+    world.dominationOrigin = common;
     world.dominationStreak = 1;
   }
   if ((world.dominationStreak ?? 0) < DOMINATION_STREAK_TURNS) return;
-  const pct = Math.round((topN / total) * 100);
   pushEvent(world, {
     turn: world.turn,
     type: "worldDomination",
     message: {
-      ja: `🏆 ${regionName(topOrigin, "ja") ?? topOrigin}系が世界を制覇！（個体数の ${pct}%）`,
-      en: `🏆 ${regionName(topOrigin, "en") ?? topOrigin} dominates the world! (${pct}% of population)`,
+      ja: `${regionName(common, "ja") ?? common}系が全地域を制覇！`,
+      en: `${regionName(common, "en") ?? common} controls every region!`,
     },
   });
+}
+
+// ver.2: 出自（大陸系統）の全滅検出。ある出自の総個体数が前回>0→今回0になったら年表に記録。
+// 世界地図のみ（regionMeta あり）。prevOriginCounts は毎ターン更新（保存不要・ロード後は初回スキップ）。
+function detectOriginExtinction(world: World): void {
+  if (!world.regionMeta || world.regionMeta.length === 0) return;
+  const cur = new Map<string, number>();
+  for (const l of world.lives) {
+    if (!l.alive || !l.origin) continue;
+    cur.set(l.origin, (cur.get(l.origin) || 0) + 1);
+  }
+  const prev = world.prevOriginCounts;
+  if (prev) {
+    for (const [code, pc] of prev) {
+      if (pc > 0 && (cur.get(code) || 0) === 0) {
+        pushEvent(world, {
+          turn: world.turn,
+          type: "originExtinction",
+          message: {
+            ja: `${regionName(code, "ja") ?? code}系の系統がすべて途絶えた`,
+            en: `All lineages of ${regionName(code, "en") ?? code} have died out`,
+          },
+        });
+      }
+    }
+  }
+  world.prevOriginCounts = cur;
 }
 
 function detectSpeciesEvents(world: World): void {
@@ -1871,6 +1926,8 @@ function findBestNeighborCell(
   const lx = life.x;
   const ly = life.y;
   const speciesId = life.speciesId;
+  // ver.2: 同じ出自（大陸系統）は色が違っても味方（協力関係）。
+  const myOrigin = life.origin;
   const myStrength = g.strength;
   let allyCount = 0;
   let enemyCount = 0;
@@ -1893,7 +1950,7 @@ function findBestNeighborCell(
       if (occId === -1) continue;
       const other = livesById.get(occId);
       if (!other || !other.alive) continue;
-      if (other.speciesId === speciesId) {
+      if (other.speciesId === speciesId || (myOrigin != null && other.origin === myOrigin)) {
         // v1.20: 仲間も位置を記録（wG/wL/wR の候補セル依存化のため）
         if (allyCount < ALLY_CAP) {
           _aX[allyCount] = nx;
@@ -2118,6 +2175,8 @@ export function computeDecisionField(world: World, life: Life): DecisionCell[] {
   const lx = life.x;
   const ly = life.y;
   const speciesId = life.speciesId;
+  // ver.2: 同じ出自（大陸系統）は色が違っても味方（協力関係）。
+  const myOrigin = life.origin;
   const myStrength = g.strength;
   let allyCount = 0;
   let enemyCount = 0;
@@ -2140,7 +2199,7 @@ export function computeDecisionField(world: World, life: Life): DecisionCell[] {
       if (occId === -1) continue;
       const other = livesById.get(occId);
       if (!other || !other.alive) continue;
-      if (other.speciesId === speciesId) {
+      if (other.speciesId === speciesId || (myOrigin != null && other.origin === myOrigin)) {
         if (allyCount < ALLY_CAP) {
           _aX[allyCount] = nx;
           _aY[allyCount] = ny;
@@ -2806,6 +2865,8 @@ function handleCombat(world: World, life: Life): void {
   const x = life.x;
   const y = life.y;
   const speciesId = life.speciesId;
+  // ver.2: 同じ出自（大陸系統）は色が違っても味方（協力関係）＝攻撃しない・共闘する。
+  const myOrigin = life.origin;
 
   // v1.10: 隣接 3×3 内の同系統数を数えて、戦闘時のボーナス算定に使う。
   // 仲間が多いほど戦闘力が増す（群れの戦闘力）。対数で逓減して支配的にならないように。
@@ -2823,7 +2884,10 @@ function handleCombat(world: World, life: Life): void {
     if (occId === -1) continue;
     const neighbor = livesById.get(occId);
     if (!neighbor || !neighbor.alive) continue;
-    if (neighbor.speciesId === speciesId) {
+    if (
+      neighbor.speciesId === speciesId ||
+      (myOrigin != null && neighbor.origin === myOrigin)
+    ) {
       attackerAllyCount++;
     } else {
       hasOpponent = true;
@@ -2847,8 +2911,12 @@ function handleCombat(world: World, life: Life): void {
     const opponent = livesById.get(occId);
     if (!opponent || !opponent.alive) continue;
 
-    // 同系統は常に攻撃しない（共食い禁止）
-    if (opponent.speciesId === speciesId) continue;
+    // 同系統・同出自は常に攻撃しない（共食い禁止＋大陸内は協力関係）
+    if (
+      opponent.speciesId === speciesId ||
+      (myOrigin != null && opponent.origin === myOrigin)
+    )
+      continue;
 
     // 防御側も自分の周囲の仲間数で防御力ボーナスを得る（群れの防御力）
     let defenderAllyCount = 0;
@@ -2866,7 +2934,8 @@ function handleCombat(world: World, life: Life): void {
       if (
         dneighbor &&
         dneighbor.alive &&
-        dneighbor.speciesId === opponent.speciesId
+        (dneighbor.speciesId === opponent.speciesId ||
+          (opponent.origin != null && dneighbor.origin === opponent.origin))
       ) {
         defenderAllyCount++;
       }

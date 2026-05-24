@@ -341,6 +341,7 @@ const ja: Dictionary = {
   "log.tab.chronicle": "年表",
   "log.tab.lineage": "系統樹",
   "log.chronicle_empty": "まだ大きな出来事が記録されていません。",
+  "log.show_more": "もっと見る（残り {n}）",
 };
 
 const en: Dictionary = {
@@ -665,6 +666,7 @@ const en: Dictionary = {
   "log.tab.chronicle": "Chronicle",
   "log.tab.lineage": "Lineage",
   "log.chronicle_empty": "No major events recorded yet.",
+  "log.show_more": "Show more ({n} left)",
 };
 
 const dictionaries: Record<Locale, Dictionary> = { ja, en };

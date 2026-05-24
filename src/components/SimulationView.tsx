@@ -193,6 +193,8 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
   const [showSettings, setShowSettings] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showLog, setShowLog] = useState(false);
+  // ver.2: 行動ログの選択タブを親で保持（モーダルを開閉してもリセットしない）。
+  const [logTab, setLogTab] = useState<"log" | "chronicle" | "lineage">("log");
   const [showRules, setShowRules] = useState(false);
   // v1.31 (H9): 思考ヒートマップ表示トグル（選択個体の行動評価を可視化）
   const [showThoughtHeatmap, setShowThoughtHeatmap] = useState(false);
@@ -493,6 +495,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
     let stepsSinceTpsUpdate = 0;
     let tpsWindowStart = performance.now();
     let lastRenderTime = 0;
+    let derivedTick = 0; // ver.2: 高個体数時に統計再計算を間引くカウンタ
     const FRAME_BUDGET_MS = 25;
     // 描画フレームレート: 20 FPS（負荷削減のため。シミュレーション速度には影響しない）
     const RENDER_INTERVAL_MS = 1000 / 20;
@@ -558,8 +561,11 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
         // v1.21 軽量化 A1: 大マップ高速時は補間を強制オフ（描画負荷を下げる）。
         //   200マップ: x10/x100、100マップ: x100 で補間オフ。
         const sp = speedRef.current;
+        // ver.2: 高個体数（環境設定で増やした場合含む）でも軽いよう、約3500体超で自動的に簡易描画。
         const simplified =
-          (width >= 200 && sp >= 10) || (width >= 100 && sp >= 100);
+          (width >= 200 && sp >= 10) ||
+          (width >= 100 && sp >= 100) ||
+          world.lives.length > 3500;
         setSimplifiedRender(simplified);
         const sinceStep = now - lastStepAtRef.current;
         const phase =
@@ -568,7 +574,11 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
             : 1;
         setAnimPhase(phase);
         setVersion((v) => v + 1);
-        if (didStep) refreshDerived(world);
+        // ver.2: 高個体数時は統計の再計算（O(個体数)）を3回に1回へ間引いて負荷を抑える。
+        derivedTick++;
+        if (didStep && (world.lives.length <= 3000 || derivedTick % 3 === 0)) {
+          refreshDerived(world);
+        }
         lastRenderTime = now;
       }
       const elapsed = now - tpsWindowStart;
@@ -1144,10 +1154,12 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
 
   // ver.2: 勢力地図用。各地域(地理)で最多の出自(origin)を集計し、その出自の代表色を返す。
   // 地域インデックス順の配列（個体0の地域は null＝無色）。世界地図かつトグルONのときのみ計算。
+  // 性能③: 毎フレームではなく約8ターンごとに再計算（高速時の負荷を大幅削減。見た目の遅延は無視できる）。
+  const tintTurnBucket = Math.floor(stats.turn / 8);
   const regionDominantColors = useMemo(() => {
     if (!showRegionTint) return null;
-    const regions = terrainPreset?.regions;
-    const meta = terrainPreset?.regionMeta;
+    const regions = world?.regions;
+    const meta = world?.regionMeta;
     if (!world || !regions || !meta || meta.length === 0) return null;
     const w = world.width;
     const counts: Map<string, number>[] = meta.map(() => new Map());
@@ -1166,7 +1178,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
       for (const [code, n] of m) if (n > topN) { topN = n; topCode = code; }
       return topCode ? colorByCode.get(topCode) ?? null : null;
     });
-  }, [world, version, showRegionTint, terrainPreset]);
+  }, [world, tintTurnBucket, showRegionTint]);
 
   // v1.30 (あ): 25画面＝観察モード。選択生命欄を縦スクロールさせず、全体の高さをパネルに合わせ、
   // 小さなマップは中央カラムの縦中央へ（左右カラムの高さ制限を外し、CSS .sim-observe で行を内容高に）。
@@ -1771,7 +1783,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
                   simplifiedRender={simplifiedRender}
                   selectedLifeId={selectedLifeId}
                   showThoughtHeatmap={showThoughtHeatmap}
-                  regions={terrainPreset?.regions ?? null}
+                  regions={world?.regions ?? null}
                   regionDominantColors={regionDominantColors}
                   showRegionTint={showRegionTint}
                   selectedLifePath={selectedLifePath}
@@ -1851,7 +1863,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
             🧠
           </button>
           {/* ver.2: 勢力地図トグル（地域を最大勢力＝出自の色で薄く塗る）。世界地図のみ表示。 */}
-          {terrainPreset && (
+          {world?.regionMeta && world.regionMeta.length > 0 && (
             <button
               className={`mini-btn ${showRegionTint ? "mini-btn-active" : ""}`}
               onClick={() => setShowRegionTint((v) => !v)}
@@ -2716,6 +2728,8 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
           onToggleTime={() => setLogKeepRunning((v) => !v)}
           initialOffset={logModalOffset}
           onOffsetChange={setLogModalOffset}
+          tab={logTab}
+          onTabChange={setLogTab}
         />
       )}
 
@@ -2794,7 +2808,6 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
     {dominationBanner && (
       <div className="victory-overlay" role="dialog" aria-live="assertive">
         <div className="victory-card">
-          <div className="victory-trophy">🏆</div>
           <div className="victory-msg">{dominationBanner.message[locale]}</div>
           <button
             type="button"

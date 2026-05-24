@@ -2,7 +2,7 @@
 // 'A'..'J'=区分/'.'=海。200x100。worldMap.ts の陸/海と一致（陸橋含む）。
 export type WorldRegionMeta = { id: number; code: string; ja: string; en: string; r: number; g: number; b: number };
 export const WORLD_REGIONS: WorldRegionMeta[] = [
-  { id: 0, code: "NA", ja: "北アメリカ", en: "N. America", r: 160, g: 200, b: 240 },
+  { id: 0, code: "NA", ja: "北アメリカ", en: "N. America", r: 240, g: 130, b: 40 },
   { id: 1, code: "NAsia", ja: "北アジア", en: "N. Asia", r: 40, g: 80, b: 240 },
   { id: 2, code: "EU", ja: "ヨーロッパ", en: "Europe", r: 40, g: 200, b: 80 },
   { id: 3, code: "EAsia", ja: "東アジア", en: "E. Asia", r: 240, g: 80, b: 80 },

@@ -180,7 +180,7 @@ export const COMBAT_ENERGY_LOSS_RATIO = 0.6;
 export const WORLD_FLAT_INITIAL_ENERGY = 40;
 // 世界地図のエネルギー再生倍率（flat時）。環境収容力 K を引き上げ、
 // 「色つき大陸」（約1000個体）が一気に崩壊せず維持できる水準を狙う。要実測チューニング。
-export const WORLD_FLAT_REGEN_MULT = 10;
+export const WORLD_FLAT_REGEN_MULT = 4;
 // 祖先の初期年齢のばらつき（脱同期）：age = rng × lifespan × この比。
 // 全個体が同時に出産・餓死する「崖」を防ぎ、減衰振動で K へ収束させる。
 export const FOUNDER_AGE_SPREAD_RATIO = 0.3;

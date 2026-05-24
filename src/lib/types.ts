@@ -141,7 +141,8 @@ export type WorldEventType =
   | "intelligentRise" // 知的生命（高intelligence）の繁栄
   | "cataclysm" // 天変地異
   | "totalExtinction" // 全生物絶滅
-  | "worldDomination"; // ver.2: 大陸（出自）の世界制覇
+  | "worldDomination" // ver.2: 大陸（出自）の世界制覇
+  | "originExtinction"; // ver.2: 出自（大陸系統）の全滅（年表用）
 
 export type WorldEvent = {
   turn: number;
@@ -210,6 +211,10 @@ export type World = {
   /** ver.2: 地形マスク（1=陸 / 0=海）。undefined＝全マス陸（従来挙動）。
    *  海は侵入不可・エネルギー常時0。世界地図など固定地形プリセットで使用。 */
   terrain?: Uint8Array;
+  /** ver.2: 地域(大陸)区分インデックス（-1=海/0..=区分）。世界地図のみ。勢力地図・制覇判定に使う。 */
+  regions?: Int8Array;
+  /** ver.2: 地域メタ（コード・名前・色）。regions と対。 */
+  regionMeta?: RegionMeta[];
   lives: Life[];
   /** O(1) ライフ検索用マップ（id → Life）。cullDead 毎に再構築。 */
   livesById: Map<number, Life>;
@@ -284,6 +289,8 @@ export type World = {
   dominationOrigin?: string | null;
   /** ver.2: 上記 origin が連続で閾値を超えているターン数。閾値到達で「制覇」確定。 */
   dominationStreak?: number;
+  /** ver.2: 直近の出自別生存数（出自の全滅検出用）。世界地図のみ。保存不要・派生。 */
+  prevOriginCounts?: Map<string, number>;
   params: SimulationParams;
 };
 

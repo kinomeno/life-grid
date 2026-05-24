@@ -356,7 +356,20 @@ function drawEnergyField(
       if (ri >= 0) {
         const c = regionColors[ri];
         if (c) {
-          const a = 0.32;
+          // ver.2: 地域境界（隣が別地域/海/マップ外）は濃く塗って輪郭線にする。内部は薄塗り。
+          // 全地域が同色になると輪郭も同色で統一され、制覇＝一色が一目で分かる。
+          const x = i % width;
+          const y = (i / width) | 0;
+          const boundary =
+            y === 0 ||
+            regions[i - width] !== ri ||
+            y === height - 1 ||
+            regions[i + width] !== ri ||
+            x === 0 ||
+            regions[i - 1] !== ri ||
+            x === width - 1 ||
+            regions[i + 1] !== ri;
+          const a = boundary ? 0.82 : 0.3;
           const inv = 1 - a;
           rr = (shade * inv + c.r * a) | 0;
           gg = (shade * inv + c.g * a) | 0;
@@ -513,6 +526,22 @@ function drawLives(
     if (expansion > prev) expandMap.set(f.attackerLifeId, expansion);
   }
 
+  // ver.2: 出自（大陸系統）→代表色（リング描画用）。世界地図のみ・極小セル/高速時は省略（負荷軽減）。
+  let originColorByCode:
+    | Map<string, { r: number; g: number; b: number }>
+    | null = null;
+  if (
+    cellSize >= 3 &&
+    !simplifiedRender &&
+    world.regionMeta &&
+    world.regionMeta.length > 0
+  ) {
+    originColorByCode = new Map();
+    for (const m of world.regionMeta) {
+      originColorByCode.set(m.code, { r: m.r, g: m.g, b: m.b });
+    }
+  }
+
   for (const life of world.lives) {
     if (!life.alive) continue;
     // v1.30 (H4 再設計): 表示色は「種代表色」（生 RGB をビン中心に量子化）。
@@ -540,6 +569,18 @@ function drawLives(
     const shape = useShapes ? getLifeShape(life) : "circle";
     const expansion = expandMap.get(life.id) ?? 1.0;
     drawLifeShape(ctx, shape, cxp, cyp, radius * expansion);
+
+    // ver.2: 出自リング（体色＝種、リング＝大陸系統）。色が違っても出自で判別できる。
+    if (originColorByCode && life.origin) {
+      const oc = originColorByCode.get(life.origin);
+      if (oc) {
+        ctx.strokeStyle = `rgb(${oc.r}, ${oc.g}, ${oc.b})`;
+        ctx.lineWidth = Math.max(1, cellSize * 0.16);
+        ctx.beginPath();
+        ctx.arc(cxp, cyp, radius * expansion, 0, TWO_PI);
+        ctx.stroke();
+      }
+    }
 
     if (isTracking && isTracked) {
       ctx.strokeStyle = "rgba(0, 0, 0, 0.5)";

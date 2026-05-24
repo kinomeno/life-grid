@@ -25,6 +25,43 @@ function origins(w: World): { m: Map<string, number>; total: number } {
   return { m, total };
 }
 
+// ver.2: 地域(地理)ごとの最多勢力(出自)を集計し、首位出自が支配する地域数を返す。
+// 全地域制覇に近づいているか（leadCount → regionCount）を観察する。
+function regionControl(w: World): {
+  lead: string;
+  leadCount: number;
+  populated: number;
+  regionCount: number;
+} {
+  const regions = w.regions;
+  const meta = w.regionMeta;
+  if (!regions || !meta) return { lead: "", leadCount: 0, populated: 0, regionCount: 0 };
+  const rc = meta.length;
+  const counts: Map<string, number>[] = [];
+  for (let i = 0; i < rc; i++) counts.push(new Map());
+  for (const l of w.lives) {
+    if (!l.alive || !l.origin) continue;
+    const ri = regions[l.y * w.width + l.x];
+    if (ri < 0 || ri >= rc) continue;
+    counts[ri].set(l.origin, (counts[ri].get(l.origin) || 0) + 1);
+  }
+  let populated = 0;
+  const leadByOrigin = new Map<string, number>();
+  for (let ri = 0; ri < rc; ri++) {
+    const mp = counts[ri];
+    if (mp.size === 0) continue;
+    populated++;
+    let top = "";
+    let tn = 0;
+    for (const [o, n] of mp) if (n > tn) { tn = n; top = o; }
+    leadByOrigin.set(top, (leadByOrigin.get(top) || 0) + 1);
+  }
+  let lead = "";
+  let leadCount = 0;
+  for (const [o, n] of leadByOrigin) if (n > leadCount) { leadCount = n; lead = o; }
+  return { lead, leadCount, populated, regionCount: rc };
+}
+
 const tp = getWorldTerrain();
 let landCells = 0;
 for (let i = 0; i < tp.terrain.length; i++) if (tp.terrain[i] === 1) landCells++;
@@ -62,8 +99,9 @@ for (let i = 0; i < TURNS; i++) {
     let tn = 0;
     for (const [o, n] of m) if (n > tn) { tn = n; top = o; }
     const pct = total ? Math.round((tn / total) * 100) : 0;
+    const rcInfo = regionControl(world);
     console.log(
-      `t${world.turn}\talive=${a}\torigins=${m.size}\ttop=${top}(${pct}%)\tstreak=${world.dominationStreak ?? 0}`
+      `t${world.turn}\talive=${a}\torigins=${m.size}\ttop=${top}(${pct}%)\tregions=${rcInfo.lead}:${rcInfo.leadCount}/${rcInfo.regionCount}(pop${rcInfo.populated})\tstreak=${world.dominationStreak ?? 0}`
     );
   }
   if (world.events.some((e) => e.type === "worldDomination")) {

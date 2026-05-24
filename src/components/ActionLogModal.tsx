@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   Life,
   SpeciesLineageNode,
@@ -24,7 +24,11 @@ const CHRONICLE_TYPES = new Set<WorldEventType>([
   "milestone",
   "longevity",
   "topSpecies",
+  "worldDomination",
+  "originExtinction",
 ]);
+
+type LogTab = "log" | "chronicle" | "lineage";
 
 type Props = {
   events: WorldEvent[];
@@ -39,7 +43,13 @@ type Props = {
   // v1.20: モーダル位置記録
   initialOffset?: DragOffset;
   onOffsetChange?: (o: DragOffset) => void;
+  /** ver.2: 選択タブ（親で保持＝モーダルを開閉してもリセットされない）。 */
+  tab: LogTab;
+  onTabChange: (t: LogTab) => void;
 };
+
+// ver.2: 一度に表示する件数（描画負荷を抑え、超過分は「もっと見る」で展開）。
+const PAGE = 1000;
 
 export default function ActionLogModal({
   events,
@@ -51,6 +61,8 @@ export default function ActionLogModal({
   onToggleTime,
   initialOffset,
   onOffsetChange,
+  tab,
+  onTabChange,
 }: Props) {
   const { t, locale } = useLocale();
   // v1.11/v1.20: モーダルドラッグ + 位置記録
@@ -58,12 +70,20 @@ export default function ActionLogModal({
     initialOffset,
     onOffsetChange
   );
-  // v1.30 (H7): ログ（全件・新しい順）／年表（主要イベント・古い順＝時系列）。
-  const [tab, setTab] = useState<"log" | "chronicle" | "lineage">("log");
+  const setTab = onTabChange;
   const hasLineage = !!lineage;
+  // ver.2: ログ・年表とも「新しい順（最新が上）」に統一。
   const ordered = [...events].reverse();
-  const chronicle = events.filter((e) => CHRONICLE_TYPES.has(e.type));
+  const chronicle = [...events]
+    .filter((e) => CHRONICLE_TYPES.has(e.type))
+    .reverse();
   const shown = tab === "chronicle" ? chronicle : ordered;
+  // ver.2: 1000件ずつ表示。タブ切替で先頭に戻す。
+  const [visibleCount, setVisibleCount] = useState(PAGE);
+  useEffect(() => {
+    setVisibleCount(PAGE);
+  }, [tab]);
+  const visible = shown.slice(0, visibleCount);
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
@@ -122,8 +142,9 @@ export default function ActionLogModal({
               {tab === "chronicle" ? t("log.chronicle_empty") : t("log.empty")}
             </p>
           ) : (
+            <>
             <ul className="log-list">
-              {shown.map((ev, i) => {
+              {visible.map((ev, i) => {
                 const isClickable =
                   ev.speciesId &&
                   onSpeciesClick &&
@@ -161,6 +182,16 @@ export default function ActionLogModal({
                 );
               })}
             </ul>
+            {shown.length > visibleCount && (
+              <button
+                type="button"
+                className="btn log-more"
+                onClick={() => setVisibleCount((n) => n + PAGE)}
+              >
+                {t("log.show_more", { n: shown.length - visibleCount })}
+              </button>
+            )}
+            </>
           )}
         </section>
       </div>
