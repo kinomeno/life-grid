@@ -1465,6 +1465,24 @@
   border-bottom: 1px solid var(--line-soft);
 }
 
+/* ver.2: 「その他の設定」折りたたみ（初期生命遺伝子・シード値） */
+:global(.start-other) {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 6px;
+}
+:global(.start-other-summary) {
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-soft);
+  padding: 2px 0;
+  user-select: none;
+}
+:global(.start-other[open] .start-other-summary) {
+  margin-bottom: 6px;
+}
+
 :global(.start-actions) {
   display: flex;
   justify-content: flex-end;

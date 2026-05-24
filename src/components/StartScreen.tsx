@@ -38,6 +38,8 @@ type MapPreset = {
   label: string;
   width: number;
   height: number;
+  /** ver.2: ロケール対応の表示名キー（あれば label より優先して t() で表示）。 */
+  labelKey?: string;
   /** ver.2: 地形プリセット識別子（指定時は固定地形＝海あり）。 */
   terrainId?: string;
   locked?: boolean;
@@ -47,7 +49,7 @@ const MAP_PRESETS: MapPreset[] = [
   { id: "s50", label: "50 × 50", width: 50, height: 50 },
   { id: "s100", label: "100 × 100", width: 100, height: 100 },
   { id: "s200", label: "200 × 200", width: 200, height: 200, locked: true },
-  { id: "world", label: "🌍 世界地図", width: 200, height: 100, terrainId: "world" },
+  { id: "world", label: "🌍 世界地図", labelKey: "start.map_world", width: 200, height: 100, terrainId: "world" },
 ];
 
 const LIFE_COUNT_OPTIONS = [10, 20, 40, 50, 100];
@@ -196,7 +198,7 @@ export default function StartScreen({
                   title={locked ? t("common.locked_hint") : undefined}
                 >
                   {locked && <span className="btn-lock-glyph">🔒</span>}
-                  {p.label}
+                  {p.labelKey ? t(p.labelKey) : p.label}
                 </button>
               );
             })}
@@ -221,37 +223,43 @@ export default function StartScreen({
           ) : null}
         </section>
 
-        <section className="start-section">
-          <h3 className="start-section-title">{t("start.initial_genes")}</h3>
-          <input
-            type="text"
-            className="seed-input gene-form"
-            placeholder={t("start.placeholder.random")}
-            value={geneText}
-            onChange={(e) => {
-              setGeneText(e.target.value);
-              setGeneError(null);
-            }}
-          />
-          {geneError ? (
-            <p className="gene-error">{geneError}</p>
-          ) : (
-            <p className="empty-sub">
-              {t("start.gene_hint", { n: GENE_ID_LENGTH })}
-            </p>
-          )}
-        </section>
+        {/* ver.2: 初期生命遺伝子・シード値は「その他の設定」に折りたたみ（既定は閉） */}
+        <details className="start-other">
+          <summary className="start-other-summary">
+            {t("start.other_settings")}
+          </summary>
+          <section className="start-section">
+            <h3 className="start-section-title">{t("start.initial_genes")}</h3>
+            <input
+              type="text"
+              className="seed-input gene-form"
+              placeholder={t("start.placeholder.random")}
+              value={geneText}
+              onChange={(e) => {
+                setGeneText(e.target.value);
+                setGeneError(null);
+              }}
+            />
+            {geneError ? (
+              <p className="gene-error">{geneError}</p>
+            ) : (
+              <p className="empty-sub">
+                {t("start.gene_hint", { n: GENE_ID_LENGTH })}
+              </p>
+            )}
+          </section>
 
-        <section className="start-section">
-          <h3 className="start-section-title">{t("start.seed")}</h3>
-          <input
-            type="text"
-            className="seed-input"
-            placeholder={t("start.placeholder.seed")}
-            value={seedText}
-            onChange={(e) => setSeedText(e.target.value)}
-          />
-        </section>
+          <section className="start-section">
+            <h3 className="start-section-title">{t("start.seed")}</h3>
+            <input
+              type="text"
+              className="seed-input"
+              placeholder={t("start.placeholder.seed")}
+              value={seedText}
+              onChange={(e) => setSeedText(e.target.value)}
+            />
+          </section>
+        </details>
 
         <div className="start-actions">
           <button className="btn" onClick={() => setShowRules(true)}>
