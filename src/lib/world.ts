@@ -95,6 +95,8 @@ import type {
 // ver.2: 年表をターン1近くまで遡れるよう保持上限を拡大（イベントは小さいオブジェクト）。
 // 表示側は「もっと見る」で1000件ずつ展開して描画負荷を抑える。
 const MAX_EVENTS = 2000;
+// ver.2: 系統樹ノードがこの数を超えたら剪定（生存系統＋祖先＝幹のみ残す）。長期プレイの肥大化対策。
+const LINEAGE_PRUNE_THRESHOLD = 3000;
 
 // ver.2: イベント文の系統名（出生地つき「北アメリカA / N. America A」、無ければ色名）。
 function speciesName(world: World, id: string, locale: string = "ja"): string {
@@ -782,6 +784,8 @@ export function stepWorld(world: World): void {
   detectDomination(world);
   // ver.2: 出自（大陸系統）の全滅を年表に記録（世界地図）
   detectOriginExtinction(world);
+  // ver.2: 系統樹の肥大化対策（生存系統＋祖先＝幹のみに定期剪定）。
+  if (world.turn % 200 === 0) pruneLineage(world);
 
   // 履歴サンプルを記録
   if (world.turn % HISTORY_SAMPLE_INTERVAL === 0) {
@@ -1258,6 +1262,28 @@ function detectOriginExtinction(world: World): void {
     }
   }
   world.prevOriginCounts = cur;
+}
+
+// ver.2: 系統樹の肥大化対策。生存系統とその祖先（＝幹）だけを残し、完全絶滅した枝を除去する。
+// 生存個体の lineageId から親をたどって到達できるノードのみ keep（反復＝深い樹でもスタック安全）。
+function pruneLineage(world: World): void {
+  const nodes = world.lineageNodes;
+  if (nodes.length <= LINEAGE_PRUNE_THRESHOLD) return;
+  const byId = new Map<number, LineageNode>();
+  for (const n of nodes) byId.set(n.id, n);
+  const keep = new Set<number>();
+  for (const l of world.lives) {
+    if (!l.alive || l.lineageId == null) continue;
+    let cur: number | null = l.lineageId;
+    while (cur != null && !keep.has(cur)) {
+      keep.add(cur);
+      const node = byId.get(cur);
+      cur = node ? node.parentId : null;
+    }
+  }
+  if (keep.size < nodes.length) {
+    world.lineageNodes = nodes.filter((n) => keep.has(n.id));
+  }
 }
 
 function detectSpeciesEvents(world: World): void {
