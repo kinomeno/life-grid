@@ -25,6 +25,8 @@ type Props = {
   regionDominantColors?: ({ r: number; g: number; b: number } | null)[] | null;
   /** ver.2: 勢力地図（地域ティント）を描画するか。 */
   showRegionTint?: boolean;
+  /** ver.2: 地域名オーバーレイ（各地域の重心に地域名を描画）。null/空＝描画しない。 */
+  regionLabels?: { x: number; y: number; text: string }[] | null;
   /** v1.02: 選択生命の最近の移動座標列（古い順、最大 60 点）。空配列なら描画しない。 */
   selectedLifePath?: { x: number; y: number }[];
   trackedSpeciesId?: string | null;
@@ -45,6 +47,7 @@ export default function SimulationCanvas({
   regions = null,
   regionDominantColors = null,
   showRegionTint = false,
+  regionLabels = null,
   selectedLifePath = [],
   trackedSpeciesId = null,
   onCellClick,
@@ -104,6 +107,9 @@ export default function SimulationCanvas({
     drawCataclysm(ctx, world, cellSize);
     drawBirthFlashes(ctx, world, cellSize);
     drawShareFlashes(ctx, world, cellSize, animPhase, speed);
+    if (regionLabels && regionLabels.length > 0) {
+      drawRegionLabels(ctx, regionLabels, cellSize);
+    }
   }, [
     world,
     cellSize,
@@ -116,6 +122,7 @@ export default function SimulationCanvas({
     regions,
     regionDominantColors,
     showRegionTint,
+    regionLabels,
     selectedLifePath,
     trackedSpeciesId,
   ]);
@@ -315,6 +322,29 @@ function drawThoughtHeatmap(
       cellSize - lw,
       cellSize - lw
     );
+  }
+  ctx.restore();
+}
+
+// ver.2: 地域名オーバーレイ。各地域の重心に地域名を白縁つきで描画（勢力地図の補助）。
+function drawRegionLabels(
+  ctx: CanvasRenderingContext2D,
+  labels: { x: number; y: number; text: string }[],
+  cellSize: number
+) {
+  const fontPx = Math.max(11, Math.min(20, cellSize * 3));
+  ctx.save();
+  ctx.font = `600 ${fontPx}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.92)";
+  ctx.fillStyle = "rgba(20, 20, 30, 0.92)";
+  for (const l of labels) {
+    const x = l.x * cellSize;
+    const y = l.y * cellSize;
+    ctx.strokeText(l.text, x, y);
+    ctx.fillText(l.text, x, y);
   }
   ctx.restore();
 }

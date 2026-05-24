@@ -201,6 +201,8 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
   const [showThoughtHeatmap, setShowThoughtHeatmap] = useState(false);
   // ver.2: 勢力地図（地域を最大勢力＝出自の色で薄く塗る）。世界地図のみ有効・初期ON。
   const [showRegionTint, setShowRegionTint] = useState(true);
+  // ver.2: 地域名オーバーレイ（世界地図のみ）。既定OFF（必要時にトグル）。
+  const [showRegionNames, setShowRegionNames] = useState(false);
   // ver.2: 世界制覇の勝利バナー（表示中はそのイベント、null=非表示）。
   const [dominationBanner, setDominationBanner] = useState<WorldEvent | null>(
     null
@@ -1184,6 +1186,35 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
     });
   }, [world, tintTurnBucket, showRegionTint]);
 
+  // ver.2: 地域名オーバーレイ用。各地域の重心(セル平均)＋ロケール名。重心は静的なので軽い。
+  const regionLabels = useMemo(() => {
+    if (!showRegionNames) return null;
+    const regions = world?.regions;
+    const meta = world?.regionMeta;
+    if (!world || !regions || !meta || meta.length === 0) return null;
+    const w = world.width;
+    const sumX = new Array(meta.length).fill(0);
+    const sumY = new Array(meta.length).fill(0);
+    const cnt = new Array(meta.length).fill(0);
+    for (let i = 0; i < regions.length; i++) {
+      const ri = regions[i];
+      if (ri < 0 || ri >= meta.length) continue;
+      sumX[ri] += i % w;
+      sumY[ri] += (i / w) | 0;
+      cnt[ri]++;
+    }
+    const out: { x: number; y: number; text: string }[] = [];
+    for (let ri = 0; ri < meta.length; ri++) {
+      if (cnt[ri] === 0) continue;
+      out.push({
+        x: sumX[ri] / cnt[ri] + 0.5,
+        y: sumY[ri] / cnt[ri] + 0.5,
+        text: locale === "en" ? meta[ri].en : meta[ri].ja,
+      });
+    }
+    return out;
+  }, [world, showRegionNames, locale]);
+
   // v1.30 (あ): 25画面＝観察モード。選択生命欄を縦スクロールさせず、全体の高さをパネルに合わせ、
   // 小さなマップは中央カラムの縦中央へ（左右カラムの高さ制限を外し、CSS .sim-observe で行を内容高に）。
   const observeMode = !!world && world.width <= 25;
@@ -1790,6 +1821,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
                   regions={world?.regions ?? null}
                   regionDominantColors={regionDominantColors}
                   showRegionTint={showRegionTint}
+                  regionLabels={regionLabels}
                   selectedLifePath={selectedLifePath}
                   trackedSpeciesId={trackedSpeciesId}
                   onCellClick={handleCellClick}
@@ -1876,6 +1908,18 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
               aria-pressed={showRegionTint}
             >
               🗺️
+            </button>
+          )}
+          {/* ver.2: 地域名オーバーレイのトグル。世界地図のみ表示。 */}
+          {world?.regionMeta && world.regionMeta.length > 0 && (
+            <button
+              className={`mini-btn ${showRegionNames ? "mini-btn-active" : ""}`}
+              onClick={() => setShowRegionNames((v) => !v)}
+              title={t("ctrl.region_names")}
+              aria-label={t("ctrl.region_names")}
+              aria-pressed={showRegionNames}
+            >
+              🏷️
             </button>
           )}
           {/* G1: エネルギー投入 */}
