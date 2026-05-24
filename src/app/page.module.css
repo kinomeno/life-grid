@@ -1873,6 +1873,13 @@
   margin-right: 6px;
 }
 
+/* ver.2.01: モバイルではセーブ/ロードを非表示（iOS でファイル/localStorage 操作が不安定なため）。 */
+@media (max-width: 640px) {
+  :global(.saveload-menu) {
+    display: none;
+  }
+}
+
 :global(.saveload-btn) {
   font-size: 10px;
   letter-spacing: 0.06em;
