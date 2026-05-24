@@ -132,6 +132,16 @@ for (let i = 0; i < TURNS; i++) {
     `lineage: nodes=${world.lineageNodes.length} roots=${roots} orphans=${orphans} nextId=${world.nextLineageId}`
   );
 }
+{
+  let iSum = 0;
+  let iN = 0;
+  for (const l of world.lives) {
+    if (!l.alive) continue;
+    iSum += l.genes.intelligence;
+    iN++;
+  }
+  console.log(`avgIntelligence=${iN ? (iSum / iN).toFixed(1) : 0}`);
+}
 console.log(
   `END turn=${world.turn} alive=${aliveCount(world)} peak=${peak} trough=${trough}@t${troughTurn}`
 );
