@@ -29,6 +29,8 @@ const ja: Dictionary = {
   // 開始画面
   "start.map_size": "マップサイズ",
   "start.life_count": "初期生命数",
+  "start.life_count_preset_note":
+    "世界地図など固定地形では、各大陸に祖先を自動配置するため、この設定は無効です。",
   "start.initial_genes": "初期生命遺伝子",
   "start.seed": "シード値（任意）",
   "start.placeholder.random": "ランダム",
@@ -346,6 +348,8 @@ const en: Dictionary = {
   // Start screen
   "start.map_size": "Map Size",
   "start.life_count": "Initial Life Count",
+  "start.life_count_preset_note":
+    "On fixed-terrain maps (e.g. World), founders are auto-placed per continent, so this setting is ignored.",
   "start.initial_genes": "Initial Genes",
   "start.seed": "Seed (optional)",
   "start.placeholder.random": "Random",

@@ -11,7 +11,7 @@ export const WORLD_REGIONS: WorldRegionMeta[] = [
   { id: 6, code: "SA", ja: "南アメリカ", r: 150, g: 60, b: 160 },
   { id: 7, code: "SAfr", ja: "南アフリカ", r: 40, g: 200, b: 240 },
   { id: 8, code: "SEAsia", ja: "東南アジア", r: 240, g: 160, b: 240 },
-  { id: 9, code: "AU", ja: "オーストラリア", r: 40, g: 240, b: 200 },
+  { id: 9, code: "AU", ja: "オーストラリア", r: 140, g: 215, b: 50 },
 ];
 export const WORLD_REGION_WIDTH = 200;
 export const WORLD_REGION_HEIGHT = 100;

@@ -2376,7 +2376,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
                         label={t("settings.adv.cost_base")}
                         value={params.advanced.costBaseMul}
                         min={0}
-                        max={3}
+                        max={10}
                         step={0.1}
                         onChange={(v) =>
                           setParams((p) => ({
@@ -2389,7 +2389,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
                         label={t("settings.adv.cost_vision")}
                         value={params.advanced.costVisionMul}
                         min={0}
-                        max={3}
+                        max={10}
                         step={0.1}
                         onChange={(v) =>
                           setParams((p) => ({
@@ -2402,7 +2402,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
                         label={t("settings.adv.cost_speed")}
                         value={params.advanced.costSpeedMul}
                         min={0}
-                        max={3}
+                        max={10}
                         step={0.1}
                         onChange={(v) =>
                           setParams((p) => ({
@@ -2415,7 +2415,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
                         label={t("settings.adv.cost_strength")}
                         value={params.advanced.costStrengthMul}
                         min={0}
-                        max={3}
+                        max={10}
                         step={0.1}
                         onChange={(v) =>
                           setParams((p) => ({
@@ -2428,7 +2428,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
                         label={t("settings.adv.cost_intelligence")}
                         value={params.advanced.costIntelligenceMul}
                         min={0}
-                        max={3}
+                        max={10}
                         step={0.1}
                         onChange={(v) =>
                           setParams((p) => ({
@@ -2735,7 +2735,11 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
           />
           <strong>ID {hoverInfo.life.id}</strong>
           <span className="hover-pop-species">
-            {speciesLabel(hoverInfo.life.speciesId)}
+            {speciesDisplayName(
+              hoverInfo.life.speciesId,
+              world?.speciesLineage.get(hoverInfo.life.speciesId),
+              regionJaByCode
+            )}
           </span>
         </div>
         <div className="hover-pop-row hover-pop-stats">

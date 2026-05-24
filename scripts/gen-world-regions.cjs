@@ -27,7 +27,7 @@ const REGIONS = [
   { code: "SA",     ja: "南アメリカ",     match: [120, 40, 120],  display: [150, 60, 160] },
   { code: "SAfr",   ja: "南アフリカ",     match: [40, 200, 240],  display: [40, 200, 240] },
   { code: "SEAsia", ja: "東南アジア",     match: [240, 160, 240], display: [240, 160, 240] },
-  { code: "AU",     ja: "オーストラリア", match: [40, 240, 200],  display: [40, 240, 200] },
+  { code: "AU",     ja: "オーストラリア", match: [40, 240, 200],  display: [140, 215, 50] },
 ];
 const CHAR = (i) => String.fromCharCode(65 + i);
 const idxOf = (c) => REGIONS.findIndex((r) => r.code === c);

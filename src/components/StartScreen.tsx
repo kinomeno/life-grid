@@ -216,6 +216,9 @@ export default function StartScreen({
               </option>
             ))}
           </select>
+          {selectedPreset.terrainId ? (
+            <p className="empty-sub">{t("start.life_count_preset_note")}</p>
+          ) : null}
         </section>
 
         <section className="start-section">
