@@ -24,7 +24,8 @@ const SECTIONS_JA: Section[] = [
         heading: "ゲームの目的",
         lines: [
           "単純なルールから発生する生命進化と生態変化を観察するシミュレーション。",
-          "勝利条件なし。観察者として環境を調整し、進化の物語を見守る。",
+          "通常マップは勝利条件なし。観察者として環境を調整し、進化の物語を見守る。",
+          "世界地図モードには勝利条件がある（全地域を一つの出自が制覇）。下記「世界地図モード」参照。",
         ],
       },
       {
@@ -60,6 +61,45 @@ const SECTIONS_JA: Section[] = [
           "世界は一面のエネルギー場。生命はここから食べて生きる。",
           "エネルギーは絶えず回復し、波のように広がり、移動していく。",
           "豊かな場所と乏しい場所が移り変わるため、回遊や移住が生まれる。",
+        ],
+      },
+    ],
+  },
+  {
+    key: "worldmap",
+    label: "世界地図モード",
+    body: [
+      {
+        heading: "世界地図とは",
+        lines: [
+          "実在の世界地図を模した固定マップ。海は壁（侵入・繁殖・エネルギー無し）、陸が生息域。",
+          "孤立した大陸・島は1ドット幅の橋でつながり行き来できる。左右はつながる（大西洋）。",
+          "各大陸は出自（系統の故郷）として色分けされ、複数の祖先種が配置される。",
+          "エネルギーは全陸で均一（地域差なし＝公平）。",
+        ],
+      },
+      {
+        heading: "大陸の協力と競争",
+        lines: [
+          "・同じ出自の生命は、体色（種）が違っても味方＝攻撃せず共闘する（大陸対抗）。",
+          "・ただし自分の本拠地（出自の地域）の中では、同出自どうしでも競争する（内部競争）。",
+          "・別の出自とは戦う（色が似ていても敵）。",
+        ],
+      },
+      {
+        heading: "勝利＝全地域制覇",
+        lines: [
+          "勢力地図（各地域を最大勢力の出自の色で塗る）が全地域とも同じ色になれば「制覇」。",
+          "制覇すると再生が一時停止し、勝利演出（所要ターン等）が出る。閉じれば観察を続行できる。",
+          "制覇後は一定期間「治世」となり覇者以外は戦闘が弱る。耐え抜いて別の出自が再統一すると「革命」。",
+        ],
+      },
+      {
+        heading: "表示の操作（下部バー）",
+        lines: [
+          "・🗺️ 勢力地図：地域を最大勢力の色で薄く塗り、輪郭線を引く（初期ON）。",
+          "・🏷️ 地域名：各地域の名前を地図に重ねる。",
+          "・系統名は出自つき（例「北アメリカA」）。系統樹は行動ログ内のタブ＋「画像保存」。",
         ],
       },
     ],
@@ -450,7 +490,8 @@ const SECTIONS_EN: Section[] = [
         heading: "Purpose",
         lines: [
           "A simulation of life evolution and ecological change emerging from simple rules.",
-          "No win condition. As an observer, tune the environment and watch the story of evolution unfold.",
+          "Standard maps have no win condition; observe and tune the environment.",
+          "World Map mode has a win condition: one origin dominates every region. See \"World Map mode\" below.",
         ],
       },
       {
@@ -489,6 +530,45 @@ const SECTIONS_EN: Section[] = [
           "The world is one vast energy field. Life feeds on it to survive.",
           "Energy constantly regenerates, spreads like waves, and shifts around.",
           "Rich and poor regions keep changing, driving migration.",
+        ],
+      },
+    ],
+  },
+  {
+    key: "worldmap",
+    label: "World Map mode",
+    body: [
+      {
+        heading: "What it is",
+        lines: [
+          "A fixed map shaped like the real world. Sea is a wall (no entry/breeding/energy); land is habitable.",
+          "Isolated continents/islands connect via 1-cell bridges; left and right wrap (Atlantic).",
+          "Each continent is an origin (a lineage's homeland), color-coded, seeded with several founder species.",
+          "Energy is uniform across all land (no regional bias = fair).",
+        ],
+      },
+      {
+        heading: "Continental cooperation & rivalry",
+        lines: [
+          "・Same-origin lives are allies even if their color (species) differs — they don't fight and battle together.",
+          "・But within their home region, same-origin lives still compete (internal rivalry).",
+          "・Different origins fight (enemies even if similar in color).",
+        ],
+      },
+      {
+        heading: "Victory = control every region",
+        lines: [
+          "When the territory map (each region tinted by its dominant origin) becomes one color, that origin wins.",
+          "On victory, the sim pauses and shows a result card (turns taken, etc.). Close it to keep watching.",
+          "After victory a \"reign\" weakens non-rulers for a while; if another origin reunifies, a \"Revolution\" occurs.",
+        ],
+      },
+      {
+        heading: "Display controls (bottom bar)",
+        lines: [
+          "・🗺️ Territory map: tint each region by its dominant origin and draw outlines (on by default).",
+          "・🏷️ Region names: overlay each region's name on the map.",
+          "・Lineage names include origin (e.g. \"N. America A\"). The lineage tree is a tab in the action log with \"Save PNG\".",
         ],
       },
     ],
