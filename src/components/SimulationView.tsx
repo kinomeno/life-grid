@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -484,7 +485,9 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
   // 直前の更新がコミットされるまで次の setState を出さないことで追い越しを防ぐ。
   const renderPendingRef = useRef(false);
   // version が変化＝React が RAF 由来更新をコミットした、とみなしてフラグ解除。
-  useEffect(() => {
+  // useLayoutEffect でコミット直後（描画前・次フレームのRAFより前）に確実に解除し、
+  // RAF が React のコミットを追い越して "Maximum update depth" を起こすのを防ぐ。
+  useLayoutEffect(() => {
     renderPendingRef.current = false;
   }, [version]);
 

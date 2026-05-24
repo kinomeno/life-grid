@@ -40,19 +40,26 @@ export function useDraggablePanel(
     onOffsetChangeRef.current = onOffsetChange;
   }, [onOffsetChange]);
 
-  // 親に通知するラッパ（onOffsetChange はオプション）
+  // 親への通知は「描画中の親 setState」を避けるため effect で行う（初回マウントは除外）。
+  // 旧実装は setOffsetState の updater 内で onOffsetChange を呼んでおり、これが
+  // 「Cannot update a component while rendering」＝無限再描画(Maximum update depth)の原因だった。
+  const firstOffsetRef = useRef(true);
+  useEffect(() => {
+    if (firstOffsetRef.current) {
+      firstOffsetRef.current = false;
+      return;
+    }
+    onOffsetChangeRef.current?.(offset);
+  }, [offset]);
+
+  // offset を更新するラッパ（副作用なし＝純粋な setState）。
   const setOffset = useCallback(
     (updater: DragOffset | ((prev: DragOffset) => DragOffset)) => {
-      setOffsetState((prev) => {
-        const next =
-          typeof updater === "function"
-            ? (updater as (p: DragOffset) => DragOffset)(prev)
-            : updater;
-        if (next.x !== prev.x || next.y !== prev.y) {
-          onOffsetChangeRef.current?.(next);
-        }
-        return next;
-      });
+      setOffsetState((prev) =>
+        typeof updater === "function"
+          ? (updater as (p: DragOffset) => DragOffset)(prev)
+          : updater
+      );
     },
     []
   );
