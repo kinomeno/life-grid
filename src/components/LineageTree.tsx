@@ -1,17 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Life, SpeciesLineageNode } from "@/lib/types";
+import type { Life, LineageNode } from "@/lib/types";
 import { speciesDisplayName } from "@/lib/species";
 import { useLocale } from "./LocaleProvider";
 
 type Props = {
-  lineage: SpeciesLineageNode[];
+  lineage: LineageNode[];
   lives: Life[];
   onSelect?: (speciesId: string) => void;
 };
 
-type TreeNode = SpeciesLineageNode & {
+type TreeNode = LineageNode & {
   children: TreeNode[];
   aliveCount: number;
   /** 自身か子孫に現存種がいるか（＝生存サブツリー＝幹）。 */
@@ -28,12 +28,12 @@ export default function LineageTree({ lineage, lives, onSelect }: Props) {
   const [showExtinct, setShowExtinct] = useState(false);
 
   const { roots, totalCount, aliveSpecies, hiddenCount } = useMemo(() => {
-    const counts = new Map<string, number>();
+    const counts = new Map<number, number>();
     for (const l of lives) {
-      if (!l.alive) continue;
-      counts.set(l.speciesId, (counts.get(l.speciesId) ?? 0) + 1);
+      if (!l.alive || l.lineageId == null) continue;
+      counts.set(l.lineageId, (counts.get(l.lineageId) ?? 0) + 1);
     }
-    const byId = new Map<string, TreeNode>();
+    const byId = new Map<number, TreeNode>();
     for (const n of lineage) {
       byId.set(n.id, {
         ...n,
@@ -75,7 +75,7 @@ export default function LineageTree({ lineage, lives, onSelect }: Props) {
   }, [lineage, lives]);
 
   const rows: React.ReactElement[] = [];
-  const visited = new Set<string>();
+  const visited = new Set<number>();
   const pushNode = (node: TreeNode, depth: number) => {
     if (visited.has(node.id)) return;
     visited.add(node.id);
@@ -89,13 +89,13 @@ export default function LineageTree({ lineage, lives, onSelect }: Props) {
           onSelect ? "lineage-clickable" : ""
         }`}
         style={{ paddingLeft: `${depth * 16 + 4}px` }}
-        onClick={() => onSelect?.(node.id)}
+        onClick={() => onSelect?.(node.speciesId)}
       >
         <span
           className="lineage-dot"
           style={{ backgroundColor: `rgb(${node.r}, ${node.g}, ${node.b})` }}
         />
-        <span className="lineage-name">{speciesDisplayName(node.id, node, locale)}</span>
+        <span className="lineage-name">{speciesDisplayName(node.speciesId, node, locale)}</span>
         <span className="lineage-born">T{node.birthTurn.toLocaleString()}</span>
         <span className="lineage-pop">
           {isAlive ? `×${node.aliveCount}` : t("lineage.extinct")}

@@ -113,6 +113,19 @@ for (let i = 0; i < TURNS; i++) {
     break;
   }
 }
+// ver.2: 系統樹の妥当性（全 parentId が存在＝本物の樹／孤児0が正常）。
+{
+  const ids = new Set(world.lineageNodes.map((n) => n.id));
+  let roots = 0;
+  let orphans = 0;
+  for (const n of world.lineageNodes) {
+    if (n.parentId == null) roots++;
+    else if (!ids.has(n.parentId)) orphans++;
+  }
+  console.log(
+    `lineage: nodes=${world.lineageNodes.length} roots=${roots} orphans=${orphans} nextId=${world.nextLineageId}`
+  );
+}
 console.log(
   `END turn=${world.turn} alive=${aliveCount(world)} peak=${peak} trough=${trough}@t${troughTurn}`
 );

@@ -2717,7 +2717,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
       {showLog && world && (
         <ActionLogModal
           events={world.events}
-          lineage={Array.from(world.speciesLineage.values())}
+          lineage={world.lineageNodes}
           lives={world.lives}
           onClose={() => setShowLog(false)}
           onSpeciesClick={(id) => {

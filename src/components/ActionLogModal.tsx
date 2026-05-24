@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type {
   Life,
-  SpeciesLineageNode,
+  LineageNode,
   WorldEvent,
   WorldEventType,
 } from "@/lib/types";
@@ -32,8 +32,8 @@ type LogTab = "log" | "chronicle" | "lineage";
 
 type Props = {
   events: WorldEvent[];
-  /** v1.31 (A5): 系統樹タブ用。系統ノードと現存個体。 */
-  lineage?: SpeciesLineageNode[];
+  /** v1.31 (A5)/ver.2: 系統樹タブ用。一意系統IDの系統ノードと現存個体。 */
+  lineage?: LineageNode[];
   lives?: Life[];
   onClose: () => void;
   onSpeciesClick?: (speciesId: string) => void;

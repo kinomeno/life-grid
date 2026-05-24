@@ -82,6 +82,7 @@ import type {
   DisabledGeneFlags,
   Genes,
   Life,
+  LineageNode,
   SimulationParams,
   SpeciesLineageNode,
   World,
@@ -308,8 +309,12 @@ export function createWorld(config: WorldConfig): World {
   // 初期生命の系統を knownSpecies に登録
   const knownSpecies = new Set<string>();
   const livesById = new Map<number, Life>();
-  // v1.31 (A5): 系統樹の初期ノード（初期種は親 null・誕生ターン 0）。
+  // v1.31 (A5): 命名・色用の種登録（色ビン → ノード）。
   const speciesLineage = new Map<string, SpeciesLineageNode>();
+  // ver.2 (系統樹): 一意な系統IDの系統樹。初期種は色ビンごとに1つのルート系統に束ねる。
+  const lineageNodes: LineageNode[] = [];
+  const founderLineageByBin = new Map<string, number>();
+  let nextLineageId = 0;
   for (const life of lives) {
     knownSpecies.add(life.speciesId);
     livesById.set(life.id, life);
@@ -331,6 +336,24 @@ export function createWorld(config: WorldConfig): World {
         seq,
       });
     }
+    let lid = founderLineageByBin.get(life.speciesId);
+    if (lid === undefined) {
+      lid = nextLineageId++;
+      founderLineageByBin.set(life.speciesId, lid);
+      const sln = speciesLineage.get(life.speciesId)!;
+      lineageNodes.push({
+        id: lid,
+        parentId: null,
+        birthTurn: 0,
+        speciesId: life.speciesId,
+        r: sln.r,
+        g: sln.g,
+        b: sln.b,
+        origin: sln.origin,
+        seq: sln.seq,
+      });
+    }
+    life.lineageId = lid;
   }
 
   // updateEnergy 用バッファ（毎フレームのアロケーション回避）
@@ -358,6 +381,8 @@ export function createWorld(config: WorldConfig): World {
     eraTime: 0,
     knownSpecies,
     speciesLineage,
+    lineageNodes,
+    nextLineageId,
     prevSpeciesCounts: new Map(),
     prevEraIndex: 0,
     events: [],
@@ -2684,6 +2709,23 @@ function reproduceLife(
         seq,
       });
     }
+    // ver.2 (系統樹): 種分化のたびに新しい系統ノードを親の系統IDの下に作る（色ビン再利用に強い）。
+    let childLineageId = parent.lineageId ?? 0;
+    if (childSpeciesId !== parent.speciesId) {
+      const sln = world.speciesLineage.get(childSpeciesId);
+      childLineageId = world.nextLineageId++;
+      world.lineageNodes.push({
+        id: childLineageId,
+        parentId: parent.lineageId ?? null,
+        birthTurn: world.turn,
+        speciesId: childSpeciesId,
+        r: sln?.r ?? 128,
+        g: sln?.g ?? 128,
+        b: sln?.b ?? 128,
+        origin: sln?.origin ?? parent.origin,
+        seq: sln?.seq,
+      });
+    }
     // v1.30 (H8): 誕生時に変異した主要遺伝子と「新種か」を記録（観察用ハイライト）。
     const pg = parent.genes;
     const muts: string[] = [];
@@ -2722,6 +2764,8 @@ function reproduceLife(
       bornNewSpecies: childSpeciesId !== parent.speciesId || undefined,
       // ver.2: 出生地は親から不変で継承（祖先の出自）。
       origin: parent.origin,
+      // ver.2 (系統樹): 系統IDを継承（種分化時は上で発行した新ID）。
+      lineageId: childLineageId,
     };
     world.lives.push(childLife);
     world.livesById.set(childLife.id, childLife);

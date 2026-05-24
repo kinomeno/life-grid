@@ -15,6 +15,7 @@ import type {
   AdvancedParams,
   DisabledGeneFlags,
   Life,
+  LineageNode,
   RegionMeta,
   SimulationParams,
   SpeciesLineageNode,
@@ -57,6 +58,9 @@ type EncodedWorld = {
   eraTime: number;
   knownSpecies: string[];
   speciesLineage: SpeciesLineageNode[];
+  /** ver.2 (系統樹): 一意系統IDの系統ノード列＋次ID。 */
+  lineageNodes?: LineageNode[];
+  nextLineageId?: number;
   prevSpeciesCounts: [string, number][];
   prevEraIndex: number;
   events: WorldEvent[];
@@ -147,6 +151,8 @@ export function serializeWorld(world: World): string {
     eraTime: world.eraTime,
     knownSpecies: Array.from(world.knownSpecies),
     speciesLineage: Array.from(world.speciesLineage.values()),
+    lineageNodes: world.lineageNodes,
+    nextLineageId: world.nextLineageId,
     prevSpeciesCounts: Array.from(world.prevSpeciesCounts.entries()),
     prevEraIndex: world.prevEraIndex,
     events: world.events,
@@ -242,6 +248,8 @@ export function deserializeWorld(json: string): World {
     eraTime: e.eraTime,
     knownSpecies: new Set(e.knownSpecies),
     speciesLineage,
+    lineageNodes: e.lineageNodes ?? [],
+    nextLineageId: e.nextLineageId ?? 0,
     prevSpeciesCounts: new Map(e.prevSpeciesCounts),
     prevEraIndex: e.prevEraIndex,
     events: e.events,

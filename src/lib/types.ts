@@ -63,6 +63,8 @@ export type Life = {
   bornNewSpecies?: boolean;
   /** ver.2: 出生地（大陸リージョンのコード, 例 "NA"）。子へ不変で継承＝祖先の出自。世界地図のみ。 */
   origin?: string;
+  /** ver.2 (系統樹): 一意な系統ID。種分化のたびに新IDを発行し親IDの下に連結＝本物の樹。 */
+  lineageId?: number;
 };
 
 /** 日本語と英語の両方を保持するメッセージ。表示時にロケールで選択。 */
@@ -199,6 +201,21 @@ export type SpeciesLineageNode = {
   seq?: number;
 };
 
+/** ver.2 (系統樹リファクタ): 一意な系統ID基準の系統樹ノード。色ビン再利用に強く、
+ *  常に実際の親(parentId=親の系統ID)から枝分かれする。表示色・名前は speciesId 由来。 */
+export type LineageNode = {
+  id: number;
+  parentId: number | null;
+  birthTurn: number;
+  /** 色ビン（表示色・名前用）。 */
+  speciesId: string;
+  r: number;
+  g: number;
+  b: number;
+  origin?: string;
+  seq?: number;
+};
+
 export type World = {
   width: number;
   height: number;
@@ -242,8 +259,12 @@ export type World = {
   eraTime: number;
   /** 既出系統の追跡（誕生イベント記録用）。 */
   knownSpecies: Set<string>;
-  /** v1.31 (A5): 種分化の系統記録（種ID → ノード）。色ビンは有界（最大216）。 */
+  /** v1.31 (A5): 種分化の系統記録（種ID → ノード）。色ビンは有界（最大216）。命名・色用。 */
   speciesLineage: Map<string, SpeciesLineageNode>;
+  /** ver.2 (系統樹): 一意な系統IDの系統樹ノード列。色ビン再利用に強い本物の樹。 */
+  lineageNodes: LineageNode[];
+  /** ver.2: 次に発行する系統ID。 */
+  nextLineageId: number;
   /** 直近の系統別生物数（絶滅イベント記録用）。 */
   prevSpeciesCounts: Map<string, number>;
   /** 直近の時代インデックス（紀元変化検出用）。 */
