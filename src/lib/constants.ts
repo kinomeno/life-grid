@@ -73,9 +73,6 @@ export const OFFSPRING_GENE_ENABLED = true;
 // v1.10: mutationRate 遺伝子は廃止。全個体共通の固定突然変異率を使う。
 // 環境設定の mutationRateMultiplier（0 まで設定可）で全体倍率を制御。
 export const BASE_MUTATION_RATE = 0.08;
-// 環境設定 UI の表示レンジ（参考値）
-export const GENE_MUTATION_MIN = 0.04;
-export const GENE_MUTATION_MAX = 0.12;
 export const GENE_LIFESPAN_MIN = 200;
 export const GENE_LIFESPAN_MAX = 600;
 
@@ -187,8 +184,7 @@ export const FOUNDER_AGE_SPREAD_RATIO = 0.3;
 // 密度依存出産（世界地図のみ）：周囲8セルの空き陸がこの数未満なら出産しない。
 // 密集した群れ内部の出産を抑え、フロンティア（辺縁）駆動の logistic 成長にする。
 export const REPRO_MIN_EMPTY_NEIGHBORS = 2;
-// 世界制覇（勝利）判定。ある origin（出自）が個体数のこの比率以上を占め、
-export const DOMINATION_RATIO = 0.75;
+// 世界制覇（勝利）判定。全地域（地理リージョン）の最大勢力が同一 origin になり、
 // 連続このターン数だけ維持し続けたら「制覇」確定（一過性スパイクで即決させない）。
 export const DOMINATION_STREAK_TURNS = 100;
 // 制覇判定に必要な最小総個体数（出自つき個体の合計）。

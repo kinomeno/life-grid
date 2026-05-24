@@ -380,6 +380,10 @@ export type RegionMeta = {
   r: number;
   g: number;
   b: number;
+  /** ver.2: 地域名ラベルの表示位置（セル座標）。海をまたぐ等で自動重心が不適切な地域のみ指定。
+   *  未指定なら全セルの重心を使う。 */
+  labelX?: number;
+  labelY?: number;
 };
 
 export type WorldConfig = {

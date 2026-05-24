@@ -61,7 +61,6 @@ type Props = {
   initialWorld?: World;
   /** ver.2: 地形プリセット識別子（"world"=世界地図）。未指定＝従来のトーラス全面陸。 */
   terrainId?: string;
-  onBackToTitle?: () => void;
 };
 
 type Speed = 0 | 1 | 10 | 100;
@@ -96,7 +95,6 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
       initialParams,
       initialWorld,
       terrainId,
-      onBackToTitle,
     }: Props,
     ref
   ) {
@@ -1206,10 +1204,14 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
     const out: { x: number; y: number; text: string }[] = [];
     for (let ri = 0; ri < meta.length; ri++) {
       if (cnt[ri] === 0) continue;
+      const m = meta[ri];
+      // labelX/labelY 指定地域（例: ヨーロッパ）は固定アンカーを使う。
+      // 未指定は全セル重心。海をまたぐ地域で重心が海へ落ちるのを防ぐ。
+      const hasOverride = m.labelX != null && m.labelY != null;
       out.push({
-        x: sumX[ri] / cnt[ri] + 0.5,
-        y: sumY[ri] / cnt[ri] + 0.5,
-        text: locale === "en" ? meta[ri].en : meta[ri].ja,
+        x: hasOverride ? m.labelX! + 0.5 : sumX[ri] / cnt[ri] + 0.5,
+        y: hasOverride ? m.labelY! + 0.5 : sumY[ri] / cnt[ri] + 0.5,
+        text: locale === "en" ? m.en : m.ja,
       });
     }
     return out;

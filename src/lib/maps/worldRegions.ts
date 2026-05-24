@@ -1,10 +1,12 @@
 // 自動生成: scripts/gen-world-regions.cjs（参考画像 aaaaaa.png より）
 // 'A'..'J'=区分/'.'=海。200x100。worldMap.ts の陸/海と一致（陸橋含む）。
-export type WorldRegionMeta = { id: number; code: string; ja: string; en: string; r: number; g: number; b: number };
+export type WorldRegionMeta = { id: number; code: string; ja: string; en: string; r: number; g: number; b: number; labelX?: number; labelY?: number };
 export const WORLD_REGIONS: WorldRegionMeta[] = [
   { id: 0, code: "NA", ja: "北アメリカ", en: "N. America", r: 240, g: 130, b: 40 },
   { id: 1, code: "NAsia", ja: "北アジア", en: "N. Asia", r: 40, g: 80, b: 240 },
-  { id: 2, code: "EU", ja: "ヨーロッパ", en: "Europe", r: 40, g: 200, b: 80 },
+  // EU は北極の陸地で実ヨーロッパ(左)とグリーンランド(右)が繋がり、全セル重心が海(中央)に来る。
+  // ラベルは実ヨーロッパ(左塊・全EUセルの過半 471/796, 重心(22.8,28.4))上に固定。
+  { id: 2, code: "EU", ja: "ヨーロッパ", en: "Europe", r: 40, g: 200, b: 80, labelX: 23, labelY: 28 },
   { id: 3, code: "EAsia", ja: "東アジア", en: "E. Asia", r: 240, g: 80, b: 80 },
   { id: 4, code: "NAfr", ja: "北アフリカ", en: "N. Africa", r: 225, g: 150, b: 70 },
   { id: 5, code: "CAsia", ja: "中央アジア", en: "C. Asia", r: 200, g: 200, b: 40 },

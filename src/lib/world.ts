@@ -1799,8 +1799,8 @@ function actLife(world: World, life: Life): void {
   // v1.10: 今ターンの実移動を「向き」として記録（判断材料・描画用）。
   // トーラス境界跨ぎを考慮して短い方の向きを採用。
   if (steps > 0) {
-    let mdx = wrapDelta(life.x - startX, width);
-    let mdy = wrapDelta(life.y - startY, height);
+    const mdx = wrapDelta(life.x - startX, width);
+    const mdy = wrapDelta(life.y - startY, height);
     // 単位ベクトル化（小さな値で十分）
     life.dx = Math.sign(mdx);
     life.dy = Math.sign(mdy);
@@ -2972,7 +2972,7 @@ function shareEnergyPhase(world: World): void {
 }
 
 function handleCombat(world: World, life: Life): void {
-  const { width, height, occupancy, energy, livesById } = world;
+  const { width, height, occupancy, livesById } = world;
   const x = life.x;
   const y = life.y;
   const speciesId = life.speciesId;
