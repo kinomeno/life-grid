@@ -66,10 +66,11 @@ import {
 import { mulberry32, randomInt, randomRange, type RNG } from "./random";
 import {
   speciesIdFromGenes,
-  speciesLabel,
+  speciesDisplayName,
   speciesColorFromGenes,
   binCenterColor,
 } from "./species";
+import { regionJaByCode } from "./maps";
 import { makeStatsSample } from "./stats";
 import type {
   DisabledGeneFlags,
@@ -83,6 +84,11 @@ import type {
 } from "./types";
 
 const MAX_EVENTS = 200;
+
+// ver.2: イベント文の系統名（出生地つき「北アメリカA」、無ければ色名にフォールバック）。
+function speciesName(world: World, id: string): string {
+  return speciesDisplayName(id, world.speciesLineage.get(id), regionJaByCode);
+}
 const HISTORY_SAMPLE_INTERVAL = 50;
 const MAX_HISTORY = 240;
 
@@ -209,7 +215,8 @@ export function createWorld(config: WorldConfig): World {
     //   各区分 = 同系色の祖先 FOUNDERS 種、それぞれ INDIV 体のコロニー。
     //   能力は祖先ごとにランダム → 区分ごとの力量差を平準化＆内部競争。
     const FOUNDERS_PER_REGION = 3;
-    const INDIV_PER_FOUNDER = 4;
+    // 各区分の総個体数＝タイトルの初期生命数（「各地域で○○個体」）。祖先3種に巡回割り当て。
+    const perRegion = Math.max(FOUNDERS_PER_REGION, initialLifeCount);
     const cellsByRegion: number[][] = regionMeta.map(() => []);
     for (let i = 0; i < total; i++) {
       const rg = regions[i];
@@ -222,30 +229,33 @@ export function createWorld(config: WorldConfig): World {
       const cells = cellsByRegion[rgi];
       if (!cells || cells.length === 0) continue;
       const colors = founderColors(meta.r, meta.g, meta.b, FOUNDERS_PER_REGION);
-      for (const col of colors) {
-        let template = randomGenes(rng);
-        template.r = col[0];
-        template.g = col[1];
-        template.b = col[2];
-        template = applyDisabledGenes(template, params.disabledGenes);
-        const sid = speciesIdFromGenes(template);
-        for (let k = 0; k < INDIV_PER_FOUNDER; k++) {
-          for (let t = 0; t < 30; t++) {
-            const idx = cells[Math.floor(rng() * cells.length)];
-            if (occupancy[idx] !== -1) continue;
-            const x = idx % width;
-            const y = (idx / width) | 0;
-            const genes = { ...template };
-            const life: Life = {
-              id: nextId++, x, y, prevX: x, prevY: y,
-              energy: genes.size * 0.5, age: 0,
-              speciesId: sid, genes, alive: true,
-              moveAccum: 0, dx: 0, dy: 0, origin: meta.code,
-            };
-            lives.push(life);
-            occupancy[idx] = life.id;
-            break;
-          }
+      // 祖先テンプレ（同系色・能力ランダム）を用意。
+      const templates = colors.map((col) => {
+        let g = randomGenes(rng);
+        g.r = col[0];
+        g.g = col[1];
+        g.b = col[2];
+        g = applyDisabledGenes(g, params.disabledGenes);
+        return { genes: g, sid: speciesIdFromGenes(g) };
+      });
+      // 区分内に perRegion 体を配置（祖先テンプレを巡回割り当て）。
+      for (let k = 0; k < perRegion; k++) {
+        const tmpl = templates[k % templates.length];
+        for (let t = 0; t < 30; t++) {
+          const idx = cells[Math.floor(rng() * cells.length)];
+          if (occupancy[idx] !== -1) continue;
+          const x = idx % width;
+          const y = (idx / width) | 0;
+          const genes = { ...tmpl.genes };
+          const life: Life = {
+            id: nextId++, x, y, prevX: x, prevY: y,
+            energy: genes.size * 0.5, age: 0,
+            speciesId: tmpl.sid, genes, alive: true,
+            moveAccum: 0, dx: 0, dy: 0, origin: meta.code,
+          };
+          lives.push(life);
+          occupancy[idx] = life.id;
+          break;
         }
       }
     }
@@ -903,12 +913,8 @@ function detectUniqueEvents(world: World): void {
           speciesId: oldest.speciesId,
           rgb: speciesColorFromGenes(oldest.genes),
           message: {
-            ja: `最長寿命 ${bucket} ターン到達 — ${speciesLabel(
-              oldest.speciesId
-            )} の個体が長寿記録を更新`,
-            en: `Longevity ${bucket} turns reached — ${speciesLabel(
-              oldest.speciesId
-            )} sets a new record`,
+            ja: `最長寿命 ${bucket} ターン到達 — ${speciesName(world, oldest.speciesId)} の個体が長寿記録を更新`,
+            en: `Longevity ${bucket} turns reached — ${speciesName(world, oldest.speciesId)} sets a new record`,
           },
         });
       }
@@ -943,8 +949,8 @@ function detectUniqueEvents(world: World): void {
         speciesId: topId,
         rgb: sample ? speciesColorFromGenes(sample.genes) : undefined,
         message: {
-          ja: `最大繁殖系統が ${speciesLabel(topId)} に交代（${topCount} 体）`,
-          en: `Top species shifted to ${speciesLabel(topId)} (${topCount} alive)`,
+          ja: `最大繁殖系統が ${speciesName(world, topId)} に交代（${topCount} 体）`,
+          en: `Top species shifted to ${speciesName(world, topId)} (${topCount} alive)`,
         },
       });
       world.prevTopSpeciesId = topId;
@@ -996,8 +1002,8 @@ function detectUniqueEvents(world: World): void {
         speciesId: id,
         rgb: sample ? speciesColorFromGenes(sample.genes) : undefined,
         message: {
-          ja: `生存系統 ${speciesLabel(id)} — ${count} 体が大絶滅を生き延びた`,
-          en: `Survivor ${speciesLabel(id)} — ${count} survived the mass extinction`,
+          ja: `生存系統 ${speciesName(world, id)} — ${count} 体が大絶滅を生き延びた`,
+          en: `Survivor ${speciesName(world, id)} — ${count} survived the mass extinction`,
         },
       });
     }
@@ -1065,8 +1071,8 @@ function detectSpecialistSpecies(world: World): void {
         speciesId: id,
         rgb: { r: a.r, g: a.g, b: a.b },
         message: {
-          ja: `捕食系の繁栄 — ${speciesLabel(id)}（強さ ${avgStr.toFixed(1)} 平均, ${a.count} 体）`,
-          en: `Predator rise — ${speciesLabel(id)} (avg strength ${avgStr.toFixed(1)}, ${a.count} alive)`,
+          ja: `捕食系の繁栄 — ${speciesName(world, id)}（強さ ${avgStr.toFixed(1)} 平均, ${a.count} 体）`,
+          en: `Predator rise — ${speciesName(world, id)} (avg strength ${avgStr.toFixed(1)}, ${a.count} alive)`,
         },
       });
     }
@@ -1082,8 +1088,8 @@ function detectSpecialistSpecies(world: World): void {
         speciesId: id,
         rgb: { r: a.r, g: a.g, b: a.b },
         message: {
-          ja: `知的生命の繁栄 — ${speciesLabel(id)}（知能 ${avgInt.toFixed(1)} 平均, ${a.count} 体）`,
-          en: `Intelligent rise — ${speciesLabel(id)} (avg intelligence ${avgInt.toFixed(1)}, ${a.count} alive)`,
+          ja: `知的生命の繁栄 — ${speciesName(world, id)}（知能 ${avgInt.toFixed(1)} 平均, ${a.count} 体）`,
+          en: `Intelligent rise — ${speciesName(world, id)} (avg intelligence ${avgInt.toFixed(1)}, ${a.count} alive)`,
         },
       });
     }
@@ -1127,8 +1133,8 @@ function detectSpeciesEvents(world: World): void {
           speciesId: id,
           rgb: { r: v.r, g: v.g, b: v.b },
           message: {
-            ja: `新しい系統 ${speciesLabel(id)} が誕生`,
-            en: `New species ${speciesLabel(id)} emerged`,
+            ja: `新しい系統 ${speciesName(world, id)} が誕生`,
+            en: `New species ${speciesName(world, id)} emerged`,
           },
         });
       }
@@ -1186,8 +1192,8 @@ function detectSpeciesEvents(world: World): void {
           type: "extinction",
           speciesId: id,
           message: {
-            ja: `系統 ${speciesLabel(id)} が絶滅`,
-            en: `Species ${speciesLabel(id)} went extinct`,
+            ja: `系統 ${speciesName(world, id)} が絶滅`,
+            en: `Species ${speciesName(world, id)} went extinct`,
           },
         });
       }

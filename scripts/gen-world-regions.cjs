@@ -191,6 +191,17 @@ function removeStrayBlobs(reg, land, maxSize) {
   }
   if (iceCells.length && euArea.length) { const [ia, ib] = nearestPair(iceCells, euArea); drawBridge(land, ia, ib); }
 
+  // グリーンランド（欧州色の右上塊・x>140）→ ヨーロッパ本土（x<60）。北大西洋・継ぎ目またぎ。
+  const EU2 = idxOf("EU");
+  const grnCells = [], euMain = [];
+  for (let i = 0; i < W * H; i++) {
+    if (!land[i] || reg[i] !== EU2) continue;
+    const x = i % W;
+    if (x > 140) grnCells.push(i);
+    else if (x < 60) euMain.push(i);
+  }
+  if (grnCells.length && euMain.length) { const [ga, gb] = nearestPair(grnCells, euMain); drawBridge(land, ga, gb); }
+
   // 残りの孤立塊を最大連結塊へ最近傍で連結（反復）
   for (let iter = 0; iter < 40; iter++) {
     const cs = components(land);
