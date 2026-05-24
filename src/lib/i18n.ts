@@ -22,7 +22,7 @@ type Dictionary = Record<string, string>;
 const ja: Dictionary = {
   "app.title": "LIFE GRID",
   "app.subtitle": "生命進化シミュレーター",
-  "app.version": "ver 1.32",
+  "app.version": "ver 2.0",
   "lang.toggle.ja": "JA",
   "lang.toggle.en": "EN",
 
@@ -226,6 +226,9 @@ const ja: Dictionary = {
   "ctrl.lightning": "投入：クリックでエネルギー注入",
   "ctrl.cinema": "シネマ追尾：注目個体にカメラが寄って追従",
   "ctrl.thought_heatmap": "思考ヒートマップ：選択個体が次にどこへ動きたいかを色で表示",
+  "ctrl.region_tint": "勢力地図：各地域を最大勢力（出自）の色で薄く塗る。全地域が同色＝世界制覇",
+  "victory.close": "閉じる",
+  "victory.hint": "▶ を押すと観察を続けられます",
   "ctrl.lineage_tree": "系統樹",
   "ctrl.save": "セーブ",
   "ctrl.save_hint": "現在の世界をファイルに保存（続きから同じ進化を再現できます）",
@@ -343,7 +346,7 @@ const ja: Dictionary = {
 const en: Dictionary = {
   "app.title": "LIFE GRID",
   "app.subtitle": "Life Evolution Simulator",
-  "app.version": "ver 1.32",
+  "app.version": "ver 2.0",
   "lang.toggle.ja": "JA",
   "lang.toggle.en": "EN",
 
@@ -547,6 +550,9 @@ const en: Dictionary = {
   "ctrl.lightning": "Inject: click to add energy",
   "ctrl.cinema": "Cinema follow: camera zooms in and tracks a notable life",
   "ctrl.thought_heatmap": "Thought heatmap: shows where the selected life wants to move next",
+  "ctrl.region_tint": "Territory map: tint each region by its dominant origin. All regions one color = world domination",
+  "victory.close": "Close",
+  "victory.hint": "Press ▶ to keep watching",
   "ctrl.lineage_tree": "Lineage Tree",
   "ctrl.save": "Save",
   "ctrl.save_hint": "Save the current world to a file (resume the same evolution)",

@@ -280,6 +280,10 @@ export type World = {
   combatFlashes: CombatFlash[];
   /** v1.30 (案1/B): エネルギー提供エフェクト（小○がドナー→受け手へ流れる）。 */
   shareFlashes: ShareFlash[];
+  /** ver.2: 世界制覇判定のストリーク。連続で閾値超えしている出自（origin）。途切れたら null。 */
+  dominationOrigin?: string | null;
+  /** ver.2: 上記 origin が連続で閾値を超えているターン数。閾値到達で「制覇」確定。 */
+  dominationStreak?: number;
   params: SimulationParams;
 };
 

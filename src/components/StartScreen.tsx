@@ -194,6 +194,9 @@ export default function StartScreen({
                       return;
                     }
                     setSelectedId(p.id);
+                    // ver.2: 世界地図は「各地域で○○個体」。既定 40/地域（=10地域で約400）。
+                    // これは環境収容力 K 付近で、開始直後の崩壊を避けつつ各大陸が生き残る値。
+                    if (p.terrainId) setLifeCount(40);
                   }}
                   title={locked ? t("common.locked_hint") : undefined}
                 >

@@ -196,6 +196,14 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
   const [showRules, setShowRules] = useState(false);
   // v1.31 (H9): 思考ヒートマップ表示トグル（選択個体の行動評価を可視化）
   const [showThoughtHeatmap, setShowThoughtHeatmap] = useState(false);
+  // ver.2: 勢力地図（地域を最大勢力＝出自の色で薄く塗る）。世界地図のみ有効・初期ON。
+  const [showRegionTint, setShowRegionTint] = useState(true);
+  // ver.2: 世界制覇の勝利バナー（表示中はそのイベント、null=非表示）。
+  const [dominationBanner, setDominationBanner] = useState<WorldEvent | null>(
+    null
+  );
+  // 制覇で「一度だけ」一時停止するためのフラグ（新ワールドでリセット）。
+  const dominationPausedRef = useRef(false);
   // 統計／ログ画面の「時間進行 ON/OFF」トグル（初期 OFF＝停止）
   const [statsKeepRunning, setStatsKeepRunning] = useState(false);
   const [logKeepRunning, setLogKeepRunning] = useState(false);
@@ -950,7 +958,22 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
     if (ev.type === "totalExtinction" && speedRef.current !== 0) {
       setSpeed(0);
     }
+    // ver.2: 世界制覇で一時停止＋勝利演出（1回だけ）。バナーを閉じても ▶ で続行できる。
+    if (!dominationPausedRef.current) {
+      const dom = world.events.find((e) => e.type === "worldDomination");
+      if (dom) {
+        dominationPausedRef.current = true;
+        setDominationBanner(dom);
+        if (speedRef.current !== 0) setSpeed(0);
+      }
+    }
   }, [version, world, setSpeed]);
+
+  // ver.2: 新しいワールド（リスタート/ロード）で制覇の一時停止状態をリセット。
+  useEffect(() => {
+    dominationPausedRef.current = false;
+    setDominationBanner(null);
+  }, [world]);
 
   // ズーム倍率（A 案：CSS transform でスケール。0.5〜3.0 倍）
   const [zoom, setZoom] = useState(1.0);
@@ -1054,11 +1077,6 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
     { x: number; y: number }[]
   >([]);
 
-  // v1.02: 自動継承の一時表示用ラベル（例：「← Y-12 から継承」）。
-  // 5 秒で自動的にクリア。行動ログには残さない仕様。
-  const [inheritedFromLabel, setInheritedFromLabel] = useState<string | null>(
-    null
-  );
   // v1.02: 選択中の生命のスナップショット（生きてた最後の状態）。
   // cullDead で世界の lives 配列から削除された後でも、findHeir に渡すために保持する。
   // x10/x100 高速時、死亡同フレーム内に cullDead で消されるケースに対応。
@@ -1114,6 +1132,41 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
     const border = 2; // viewport 枠
     return canvasH + newsBlock + padding + border;
   }, [cellSize, height, params.newsEnabled]);
+
+  // ズーム>1 時のマップ表示領域（.canvas-viewport）の縦上限。
+  // 中央カラムからニュース帯・下部バー等のクローム（≒270px）を除いた「マップ用の残り高さ」。
+  // cellSize 算出時の availH と同じ式（screenHeight−270）なので、ここまで拡張しても
+  // 全体枠（フレーム）が画面を超えず、これを上回ると縦スクロールバーが出る。
+  const zoomViewportMaxH = useMemo(
+    () => Math.max(160, screenHeight - 270),
+    [screenHeight]
+  );
+
+  // ver.2: 勢力地図用。各地域(地理)で最多の出自(origin)を集計し、その出自の代表色を返す。
+  // 地域インデックス順の配列（個体0の地域は null＝無色）。世界地図かつトグルONのときのみ計算。
+  const regionDominantColors = useMemo(() => {
+    if (!showRegionTint) return null;
+    const regions = terrainPreset?.regions;
+    const meta = terrainPreset?.regionMeta;
+    if (!world || !regions || !meta || meta.length === 0) return null;
+    const w = world.width;
+    const counts: Map<string, number>[] = meta.map(() => new Map());
+    for (const l of world.lives) {
+      if (!l.alive || !l.origin) continue;
+      const ri = regions[l.y * w + l.x];
+      if (ri < 0 || ri >= meta.length) continue;
+      const m = counts[ri];
+      m.set(l.origin, (m.get(l.origin) ?? 0) + 1);
+    }
+    const colorByCode = new Map<string, { r: number; g: number; b: number }>();
+    for (const mm of meta) colorByCode.set(mm.code, { r: mm.r, g: mm.g, b: mm.b });
+    return counts.map((m) => {
+      let topCode = "";
+      let topN = 0;
+      for (const [code, n] of m) if (n > topN) { topN = n; topCode = code; }
+      return topCode ? colorByCode.get(topCode) ?? null : null;
+    });
+  }, [world, version, showRegionTint, terrainPreset]);
 
   // v1.30 (あ): 25画面＝観察モード。選択生命欄を縦スクロールさせず、全体の高さをパネルに合わせ、
   // 小さなマップは中央カラムの縦中央へ（左右カラムの高さ制限を外し、CSS .sim-observe で行を内容高に）。
@@ -1341,17 +1394,9 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
       setSelectedLifeId(null);
       return;
     }
-    // 「Y-12 から継承」ラベル（一時表示用、行動ログには残さない）
-    setInheritedFromLabel(speciesLabel(dead.speciesId));
+    // ver.2: 「〜から継承」ラベル表示は削除。継承動作（後継個体の自動選択）のみ維持。
     setSelectedLifeId(heir.id);
   }, [stats.turn, version, selectedLifeId, params.inheritOnDeath]);
-
-  // 自動継承の一時表示を 5 秒で自動消去
-  useEffect(() => {
-    if (!inheritedFromLabel) return;
-    const t = setTimeout(() => setInheritedFromLabel(null), 5000);
-    return () => clearTimeout(t);
-  }, [inheritedFromLabel]);
 
   // ズーム > 1 ＋ 生命選択中：選択生命を viewport の中心に追従させる
   useEffect(() => {
@@ -1654,7 +1699,13 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
                 }
               : {
                   width: `${cellSize * width}px`,
-                  height: `${cellSize * height}px`,
+                  // ズーム>1: マップ表示領域の縦を「中央カラムの残り高さ(zoomViewportMaxH)」まで
+                  // 拡張する。拡大後マップ高がそれ未満なら内容ぴったり、超えたら縦スクロール。
+                  // 横は等倍幅のまま＝はみ出しは横スクロール（現状どおり）。等倍(<=1)はマップ実寸。
+                  height:
+                    zoom > 1
+                      ? `${Math.min(cellSize * height * zoom, zoomViewportMaxH)}px`
+                      : `${cellSize * height}px`,
                   // ズーム時のみスクロールバー出現。等倍はバー無し。
                   overflow: zoom > 1 ? "auto" : "hidden",
                 }
@@ -1720,6 +1771,9 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
                   simplifiedRender={simplifiedRender}
                   selectedLifeId={selectedLifeId}
                   showThoughtHeatmap={showThoughtHeatmap}
+                  regions={terrainPreset?.regions ?? null}
+                  regionDominantColors={regionDominantColors}
+                  showRegionTint={showRegionTint}
                   selectedLifePath={selectedLifePath}
                   trackedSpeciesId={trackedSpeciesId}
                   onCellClick={handleCellClick}
@@ -1796,6 +1850,18 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
           >
             🧠
           </button>
+          {/* ver.2: 勢力地図トグル（地域を最大勢力＝出自の色で薄く塗る）。世界地図のみ表示。 */}
+          {terrainPreset && (
+            <button
+              className={`mini-btn ${showRegionTint ? "mini-btn-active" : ""}`}
+              onClick={() => setShowRegionTint((v) => !v)}
+              title={t("ctrl.region_tint")}
+              aria-label={t("ctrl.region_tint")}
+              aria-pressed={showRegionTint}
+            >
+              🗺️
+            </button>
+          )}
           {/* G1: エネルギー投入 */}
           <button
             className={`mini-btn ${interactionMode === "lightning" ? "mini-btn-active" : ""}`}
@@ -1926,22 +1992,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
                   onDeselect={() => setSelectedLifeId(null)}
                   deselectLabel={t("info.deselect")}
                 />
-                {/* v1.30 (H8): 誕生時の新種ハイライト（若い個体のみ）。
-                    ver.2: 冗長だった「変異: 〜」チップは削除。 */}
-                {/* ver.2: チップの有無で縦サイズがガタつかないよう枠を常時確保 */}
-                <div className="born-chips">
-                  {selectedLife.age < 100 && selectedLife.bornNewSpecies && (
-                    <span className="born-chip born-newspecies">
-                      {t("info.new_species")}
-                    </span>
-                  )}
-                </div>
-                {/* v1.02: 自動継承の一時表示（行動ログには残さない） */}
-                {inheritedFromLabel && (
-                  <div className="inherit-chip">
-                    ← {inheritedFromLabel} {t("info.inherited_from")}
-                  </div>
-                )}
+                {/* ver.2: 「新種誕生」チップ・「〜から継承」表示は冗長なため削除。 */}
                 {/* 遺伝子 ID（コピー可） */}
                 <GeneIdRow life={selectedLife} />
                 {/* G3 保護トグル */}
@@ -2736,6 +2787,23 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
           E {hoverInfo.life.energy.toFixed(0)} · Age {hoverInfo.life.age} · Str{" "}
           {Math.round(hoverInfo.life.genes.strength)} · Int{" "}
           {hoverInfo.life.genes.intelligence}
+        </div>
+      </div>
+    )}
+    {/* ver.2: 世界制覇の勝利演出（再生は自動一時停止。閉じても ▶ で観察を続行可能）。 */}
+    {dominationBanner && (
+      <div className="victory-overlay" role="dialog" aria-live="assertive">
+        <div className="victory-card">
+          <div className="victory-trophy">🏆</div>
+          <div className="victory-msg">{dominationBanner.message[locale]}</div>
+          <button
+            type="button"
+            className="btn btn-primary victory-btn"
+            onClick={() => setDominationBanner(null)}
+          >
+            {t("victory.close")}
+          </button>
+          <div className="victory-hint">{t("victory.hint")}</div>
         </div>
       </div>
     )}

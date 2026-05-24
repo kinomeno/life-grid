@@ -19,6 +19,12 @@ type Props = {
   selectedLifeId?: number | null;
   /** v1.31 (H9): 選択個体の思考ヒートマップを重ねるか。 */
   showThoughtHeatmap?: boolean;
+  /** ver.2: 地域(地理)区分インデックス（-1=海/0..=区分）。勢力地図ティント用。 */
+  regions?: Int8Array | null;
+  /** ver.2: 地域ごとの最大勢力（出自）の代表色。地域インデックス順。個体0は null。 */
+  regionDominantColors?: ({ r: number; g: number; b: number } | null)[] | null;
+  /** ver.2: 勢力地図（地域ティント）を描画するか。 */
+  showRegionTint?: boolean;
   /** v1.02: 選択生命の最近の移動座標列（古い順、最大 60 点）。空配列なら描画しない。 */
   selectedLifePath?: { x: number; y: number }[];
   trackedSpeciesId?: string | null;
@@ -36,6 +42,9 @@ export default function SimulationCanvas({
   simplifiedRender = false,
   selectedLifeId = null,
   showThoughtHeatmap = false,
+  regions = null,
+  regionDominantColors = null,
+  showRegionTint = false,
   selectedLifePath = [],
   trackedSpeciesId = null,
   onCellClick,
@@ -77,7 +86,15 @@ export default function SimulationCanvas({
       imgRef.current = oc ? oc.createImageData(world.width, world.height) : null;
     }
 
-    drawEnergyField(ctx, world, cellSize, off, imgRef.current);
+    drawEnergyField(
+      ctx,
+      world,
+      cellSize,
+      off,
+      imgRef.current,
+      regions,
+      showRegionTint ? regionDominantColors : null
+    );
     if (showThoughtHeatmap) {
       drawThoughtHeatmap(ctx, world, cellSize, selectedLifeId);
     }
@@ -96,6 +113,9 @@ export default function SimulationCanvas({
     simplifiedRender,
     selectedLifeId,
     showThoughtHeatmap,
+    regions,
+    regionDominantColors,
+    showRegionTint,
     selectedLifePath,
     trackedSpeciesId,
   ]);
@@ -304,7 +324,9 @@ function drawEnergyField(
   world: World,
   cellSize: number,
   off: HTMLCanvasElement,
-  img: ImageData | null
+  img: ImageData | null,
+  regions: Int8Array | null = null,
+  regionColors: ({ r: number; g: number; b: number } | null)[] | null = null
 ) {
   const { width, height, energy, terrain } = world;
   if (!img) return;
@@ -325,9 +347,26 @@ function drawEnergyField(
     const t = Math.min(1, Math.max(0, v));
     const quantized = Math.floor(t * levels) / levels;
     const shade = Math.round(250 - quantized * 90);
-    data[o] = shade;
-    data[o + 1] = shade;
-    data[o + 2] = shade;
+    // ver.2: 勢力地図ティント。地域の最大勢力（出自）の代表色を薄く重ねる。
+    let rr = shade;
+    let gg = shade;
+    let bb = shade;
+    if (regionColors && regions) {
+      const ri = regions[i];
+      if (ri >= 0) {
+        const c = regionColors[ri];
+        if (c) {
+          const a = 0.32;
+          const inv = 1 - a;
+          rr = (shade * inv + c.r * a) | 0;
+          gg = (shade * inv + c.g * a) | 0;
+          bb = (shade * inv + c.b * a) | 0;
+        }
+      }
+    }
+    data[o] = rr;
+    data[o + 1] = gg;
+    data[o + 2] = bb;
     data[o + 3] = 255;
   }
 

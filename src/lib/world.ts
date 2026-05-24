@@ -62,6 +62,13 @@ import {
   INITIAL_ENERGY_RATIO,
   MIN_REPRODUCTIVE_AGE_RATIO,
   OFFSPRING_GENE_ENABLED,
+  WORLD_FLAT_INITIAL_ENERGY,
+  WORLD_FLAT_REGEN_MULT,
+  FOUNDER_AGE_SPREAD_RATIO,
+  REPRO_MIN_EMPTY_NEIGHBORS,
+  DOMINATION_RATIO,
+  DOMINATION_STREAK_TURNS,
+  DOMINATION_MIN_TOTAL,
 } from "./constants";
 import { mulberry32, randomInt, randomRange, type RNG } from "./random";
 import {
@@ -186,17 +193,19 @@ export function createWorld(config: WorldConfig): World {
 
   const energy = new Float32Array(total);
   // v1.30 (あ): 25画面（観察モード）は序盤に全マップ同時枯渇で全滅しやすいので初期エネを少し増やす。
-  const initEnergyBoost = terrain ? 1.5 : width <= 25 ? 1.4 : 1;
+  const initEnergyBoost = width <= 25 ? 1.4 : 1;
   for (let i = 0; i < total; i++) {
+    // rng は毎セル消費する（地形の有無で乱数列がずれないように揃える）。
     const v = ENERGY_INITIAL_MEAN + (rng() - 0.5) * 2 * ENERGY_INITIAL_VARIANCE;
-    // ver.2: 海セルはエネルギー常時0（rng は揃えるため毎セル消費する）。
-    energy[i] =
-      terrain && terrain[i] === 0
-        ? 0
-        : Math.min(
-            ENERGY_MAX,
-            (clamp(v, 0, ENERGY_MAX) * INITIAL_ENERGY_RATIO + 5) * initEnergyBoost
-          );
+    if (terrain) {
+      // ver.2: 完全平準化。陸は全マス同値（公平・決定的）、海は常時0。
+      energy[i] = terrain[i] === 0 ? 0 : WORLD_FLAT_INITIAL_ENERGY;
+    } else {
+      energy[i] = Math.min(
+        ENERGY_MAX,
+        (clamp(v, 0, ENERGY_MAX) * INITIAL_ENERGY_RATIO + 5) * initEnergyBoost
+      );
+    }
   }
 
   const terrainBias = createTerrainBias(width, height, rng);
@@ -249,7 +258,9 @@ export function createWorld(config: WorldConfig): World {
           const genes = { ...tmpl.genes };
           const life: Life = {
             id: nextId++, x, y, prevX: x, prevY: y,
-            energy: genes.size * 0.5, age: 0,
+            energy: genes.size * 0.5,
+            // ver.2: 脱同期。祖先の初期年齢を散らし、出産・寿命死が同時に来る「崖」を防ぐ。
+            age: Math.floor(rng() * tmpl.genes.lifespan * FOUNDER_AGE_SPREAD_RATIO),
             speciesId: tmpl.sid, genes, alive: true,
             moveAccum: 0, dx: 0, dy: 0, origin: meta.code,
           };
@@ -362,6 +373,8 @@ export function createWorld(config: WorldConfig): World {
     birthFlashes: [],
     combatFlashes: [],
     shareFlashes: [],
+    dominationOrigin: null,
+    dominationStreak: 0,
     params,
   };
 }
@@ -1106,7 +1119,8 @@ function pushEvent(world: World, ev: WorldEvent): void {
   }
 }
 
-// ver.2: 大陸（出自）の世界制覇判定（仮）。ある出自の子孫が個体数の閾値以上を占めたら一度だけ告知。
+// ver.2: 大陸（出自）の世界制覇判定。ある出自が個体数の DOMINATION_RATIO 以上を
+// DOMINATION_STREAK_TURNS ターン連続で維持したら一度だけ告知（一過性スパイクで即決させない）。
 function detectDomination(world: World): void {
   if (world.events.some((e) => e.type === "worldDomination")) return;
   const counts = new Map<string, number>();
@@ -1116,11 +1130,29 @@ function detectDomination(world: World): void {
     counts.set(l.origin, (counts.get(l.origin) || 0) + 1);
     total++;
   }
-  if (total < 100) return; // 十分な個体数があるときのみ判定
+  if (total < DOMINATION_MIN_TOTAL) {
+    // 個体数が不足：ストリークをリセット。
+    world.dominationOrigin = null;
+    world.dominationStreak = 0;
+    return;
+  }
   let topOrigin = "";
   let topN = 0;
   for (const [o, n] of counts) if (n > topN) { topN = n; topOrigin = o; }
-  if (!topOrigin || topN / total < 0.75) return; // 75%以上で「制覇」
+  if (!topOrigin || topN / total < DOMINATION_RATIO) {
+    // 閾値未満：ストリーク途切れ。
+    world.dominationOrigin = null;
+    world.dominationStreak = 0;
+    return;
+  }
+  // 同一出自が連続で閾値超え → ストリーク加算。別出自に替わったら 1 から数え直し。
+  if (world.dominationOrigin === topOrigin) {
+    world.dominationStreak = (world.dominationStreak ?? 0) + 1;
+  } else {
+    world.dominationOrigin = topOrigin;
+    world.dominationStreak = 1;
+  }
+  if ((world.dominationStreak ?? 0) < DOMINATION_STREAK_TURNS) return;
   const pct = Math.round((topN / total) * 100);
   pushEvent(world, {
     turn: world.turn,
@@ -1516,7 +1548,7 @@ function updateEnergy(world: World): void {
   // ver.2: 固定地形（世界地図）は公平のためエネルギーを平坦化（波・偏り無し）。
   const flat = !!terrain;
   const waveAmp = flat ? 0 : ENERGY_WAVE_AMPLITUDE * 0.04 * energyScale * env.ampScale;
-  const regenPerTurn = ENERGY_REGEN_PER_TURN * energyScale * env.regenScale * (flat ? 1.35 : 1);
+  const regenPerTurn = ENERGY_REGEN_PER_TURN * energyScale * env.regenScale * (flat ? WORLD_FLAT_REGEN_MULT : 1);
   // v1.21: 再生の下限。波が負のピークでも regenFloor は必ず供給され、
   // マップ全体が同時に枯渇する環境絶滅を防ぐ。
   const regenFloor = regenPerTurn * ENERGY_REGEN_FLOOR_RATIO;
@@ -1728,13 +1760,15 @@ function actLife(world: World, life: Life): void {
   }
 
   if (life.alive && shouldReproduce(life)) {
-    // v1.11: 多産対応。出産数遺伝子に応じて最大 N 体まで空きセルを探す。
-    const wanted = Math.max(
-      1,
-      Math.min(GENE_OFFSPRING_MAX, Math.round(g.offspringCount))
-    );
-    const emptyNeighbors = findEmptyNeighbors(world, life, wanted);
-    if (emptyNeighbors.length > 0) {
+    // 周囲の空き陸セルを列挙（reproduceLife 側で出産数遺伝子に応じて使用数を決める）。
+    const emptyNeighbors = findEmptyNeighbors(world, life);
+    // ver.2: 密度依存出産（世界地図のみ）。周囲の空き陸が REPRO_MIN_EMPTY_NEIGHBORS 未満なら
+    // 過密とみなして出産を見送る → フロンティア（辺縁）駆動の logistic 成長になり、
+    // 開始直後のオーバーシュート＆クラッシュを抑える。
+    const dense =
+      world.terrain != null &&
+      emptyNeighbors.length < REPRO_MIN_EMPTY_NEIGHBORS;
+    if (emptyNeighbors.length > 0 && !dense) {
       reproduceLife(world, life, emptyNeighbors);
     }
   }
@@ -2485,19 +2519,19 @@ function shouldReproduce(life: Life): boolean {
 }
 
 /**
- * v1.11: 周囲 8 セルの空きを最大 `wanted` 個まで列挙する。
- * 多産（offspringCount > 1）対応。空きがなければ空配列。
+ * 周囲 8 セルの「空き陸セル」をすべて列挙する（最大 8）。
+ * 多産（offspringCount > 1）対応。実際の使用数は reproduceLife 側で出産数遺伝子に応じて決める。
+ * ver.2: 戻り値の length は密度依存出産（過密判定）にも使う。空きがなければ空配列。
  */
 function findEmptyNeighbors(
   world: World,
-  life: Life,
-  wanted: number
+  life: Life
 ): { x: number; y: number }[] {
   const { width, height, occupancy, terrain } = world;
   const result: { x: number; y: number }[] = [];
   const x = life.x;
   const y = life.y;
-  for (let i = 0; i < 8 && result.length < wanted; i++) {
+  for (let i = 0; i < 8; i++) {
     let nx = x + NEIGHBOR_DX[i];
     if (nx < 0) nx += width;
     else if (nx >= width) nx -= width;

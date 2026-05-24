@@ -174,6 +174,26 @@ export const MIN_REPRODUCTIVE_AGE_RATIO = 0.2;
 // 確率戦闘では期待値が減るため、元の 0.6 に戻して維持可能性を確保。
 export const COMBAT_ENERGY_LOSS_RATIO = 0.6;
 
+// ──── ver.2 世界地図（固定地形）バランス ────
+// すべて世界地図（terrain あり）専用。従来マップ（トーラス）には影響しない。
+// 完全平準化：陸セルの初期エネルギーは全マス同値（公平・決定的）。海は常時0。
+export const WORLD_FLAT_INITIAL_ENERGY = 40;
+// 世界地図のエネルギー再生倍率（flat時）。環境収容力 K を引き上げ、
+// 「色つき大陸」（約1000個体）が一気に崩壊せず維持できる水準を狙う。要実測チューニング。
+export const WORLD_FLAT_REGEN_MULT = 10;
+// 祖先の初期年齢のばらつき（脱同期）：age = rng × lifespan × この比。
+// 全個体が同時に出産・餓死する「崖」を防ぎ、減衰振動で K へ収束させる。
+export const FOUNDER_AGE_SPREAD_RATIO = 0.3;
+// 密度依存出産（世界地図のみ）：周囲8セルの空き陸がこの数未満なら出産しない。
+// 密集した群れ内部の出産を抑え、フロンティア（辺縁）駆動の logistic 成長にする。
+export const REPRO_MIN_EMPTY_NEIGHBORS = 2;
+// 世界制覇（勝利）判定。ある origin（出自）が個体数のこの比率以上を占め、
+export const DOMINATION_RATIO = 0.75;
+// 連続このターン数だけ維持し続けたら「制覇」確定（一過性スパイクで即決させない）。
+export const DOMINATION_STREAK_TURNS = 100;
+// 制覇判定に必要な最小総個体数（出自つき個体の合計）。
+export const DOMINATION_MIN_TOTAL = 100;
+
 // ──── v1.30 (案1/B): 仲間へのエネルギー提供（血縁淘汰・利他の進化）────
 // 隣接3x3の同種(speciesId一致=近縁)のうち最も困窮した個体へ、余剰エネルギーを分配する。
 // wShare 遺伝子で利他性が進化。知能(accuracy)が高いほど転送効率が上がる（ロスが減る）。
