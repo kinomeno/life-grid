@@ -310,6 +310,10 @@ export type World = {
   dominationOrigin?: string | null;
   /** ver.2: 上記 origin が連続で閾値を超えているターン数。閾値到達で「制覇」確定。 */
   dominationStreak?: number;
+  /** ver.2 革命: 現在の覇者(出自)。制覇/革命で更新。null=まだ覇者なし。 */
+  reignOrigin?: string | null;
+  /** ver.2 革命: 治世の終了ターン（これ未満は非覇者の戦闘が弱体化）。 */
+  reignUntilTurn?: number;
   /** ver.2: 直近の出自別生存数（出自の全滅検出用）。世界地図のみ。保存不要・派生。 */
   prevOriginCounts?: Map<string, number>;
   params: SimulationParams;

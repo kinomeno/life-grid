@@ -68,6 +68,8 @@ import {
   REPRO_MIN_EMPTY_NEIGHBORS,
   DOMINATION_STREAK_TURNS,
   DOMINATION_MIN_TOTAL,
+  REIGN_TURNS,
+  REIGN_ATK_PENALTY,
 } from "./constants";
 import { mulberry32, randomInt, randomRange, type RNG } from "./random";
 import {
@@ -403,6 +405,8 @@ export function createWorld(config: WorldConfig): World {
     shareFlashes: [],
     dominationOrigin: null,
     dominationStreak: 0,
+    reignOrigin: null,
+    reignUntilTurn: 0,
     params,
   };
 }
@@ -1155,7 +1159,6 @@ function pushEvent(world: World, ev: WorldEvent): void {
 // 同一になり、それを DOMINATION_STREAK_TURNS ターン連続維持したら一度だけ告知する。
 // ＝勢力地図の全地域が同じ色になった状態。世界地図（regions あり）のみ。
 function detectDomination(world: World): void {
-  if (world.events.some((e) => e.type === "worldDomination")) return;
   const regions = world.regions;
   const meta = world.regionMeta;
   if (!regions || !meta || meta.length === 0) return; // 世界地図のみ
@@ -1207,13 +1210,24 @@ function detectDomination(world: World): void {
     world.dominationStreak = 1;
   }
   if ((world.dominationStreak ?? 0) < DOMINATION_STREAK_TURNS) return;
+  // 同じ覇者が治世を継続中なら再宣言しない。
+  if (world.reignOrigin === common) return;
+  // ver.2 革命: 初回は「制覇」、覇者交代は「革命」。治世(REIGN_TURNS)を開始する。
+  const isRevolution = world.reignOrigin != null;
+  world.reignOrigin = common;
+  world.reignUntilTurn = world.turn + REIGN_TURNS;
   pushEvent(world, {
     turn: world.turn,
     type: "worldDomination",
-    message: {
-      ja: `${regionName(common, "ja") ?? common}系が全地域を制覇！`,
-      en: `${regionName(common, "en") ?? common} controls every region!`,
-    },
+    message: isRevolution
+      ? {
+          ja: `${regionName(common, "ja") ?? common}系が革命！世界を再統一した`,
+          en: `Revolution! ${regionName(common, "en") ?? common} reunifies the world`,
+        }
+      : {
+          ja: `${regionName(common, "ja") ?? common}系が全地域を制覇！`,
+          en: `${regionName(common, "en") ?? common} controls every region!`,
+        },
   });
 }
 
@@ -3038,7 +3052,15 @@ function handleCombat(world: World, life: Life): void {
     if (opponent.protected) continue;
     const atkIntelBonus = Math.max(0, (life.genes.intelligence - 100) / 200) * 5;
     const defIntelBonus = Math.max(0, (opponent.genes.intelligence - 100) / 200) * 5;
-    const effectiveAtk = life.genes.strength + allyBonus + atkIntelBonus;
+    let effectiveAtk = life.genes.strength + allyBonus + atkIntelBonus;
+    // ver.2 革命: 治世中は覇者以外の攻撃を弱める（非覇者は戦闘で勝ちにくい＝防御的に）。
+    if (
+      world.reignOrigin != null &&
+      world.turn < (world.reignUntilTurn ?? 0) &&
+      life.origin !== world.reignOrigin
+    ) {
+      effectiveAtk *= REIGN_ATK_PENALTY;
+    }
     const effectiveDef = opponent.genes.strength + defAllyBonus + defIntelBonus;
     if (effectiveAtk > effectiveDef) {
       // v1.01: 確率戦闘を廃止し決定論に。強さの差は実効値として直接勝敗を決め、

@@ -193,6 +193,11 @@ export const DOMINATION_RATIO = 0.75;
 export const DOMINATION_STREAK_TURNS = 100;
 // 制覇判定に必要な最小総個体数（出自つき個体の合計）。
 export const DOMINATION_MIN_TOTAL = 100;
+// ver.2 革命システム: 制覇後の「治世」期間（ターン）。この間は覇者以外の戦闘を弱める。
+export const REIGN_TURNS = 1000;
+// 治世中の非覇者の攻撃力倍率（<1で弱体化＝防御的に）。耐え抜き別出自が再制覇すると「革命」。
+// 革命は隠し要素で必須ではない（1系統以外全滅でも問題ない）。
+export const REIGN_ATK_PENALTY = 0.4;
 
 // ──── v1.30 (案1/B): 仲間へのエネルギー提供（血縁淘汰・利他の進化）────
 // 隣接3x3の同種(speciesId一致=近縁)のうち最も困窮した個体へ、余剰エネルギーを分配する。

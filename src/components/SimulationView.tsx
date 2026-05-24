@@ -204,8 +204,8 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
   const [dominationBanner, setDominationBanner] = useState<WorldEvent | null>(
     null
   );
-  // 制覇で「一度だけ」一時停止するためのフラグ（新ワールドでリセット）。
-  const dominationPausedRef = useRef(false);
+  // 制覇/革命イベントごとに一時停止するため、最後に処理した制覇イベントのターンを記録（新ワールドで -1）。
+  const lastDomTurnRef = useRef(-1);
   // 統計／ログ画面の「時間進行 ON/OFF」トグル（初期 OFF＝停止）
   const [statsKeepRunning, setStatsKeepRunning] = useState(false);
   const [logKeepRunning, setLogKeepRunning] = useState(false);
@@ -968,12 +968,13 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
     if (ev.type === "totalExtinction" && speedRef.current !== 0) {
       setSpeed(0);
     }
-    // ver.2: 世界制覇で一時停止＋勝利演出（1回だけ）。バナーを閉じても ▶ で続行できる。
-    if (!dominationPausedRef.current) {
-      const dom = world.events.find((e) => e.type === "worldDomination");
-      if (dom) {
-        dominationPausedRef.current = true;
-        setDominationBanner(dom);
+    // ver.2: 制覇/革命イベントごとに一時停止＋勝利演出。バナーを閉じても ▶ で続行できる。
+    const doms = world.events.filter((e) => e.type === "worldDomination");
+    if (doms.length > 0) {
+      const lastDom = doms[doms.length - 1];
+      if (lastDom.turn > lastDomTurnRef.current) {
+        lastDomTurnRef.current = lastDom.turn;
+        setDominationBanner(lastDom);
         if (speedRef.current !== 0) setSpeed(0);
       }
     }
@@ -981,7 +982,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
 
   // ver.2: 新しいワールド（リスタート/ロード）で制覇の一時停止状態をリセット。
   useEffect(() => {
-    dominationPausedRef.current = false;
+    lastDomTurnRef.current = -1;
     setDominationBanner(null);
   }, [world]);
 
@@ -2805,21 +2806,73 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
       </div>
     )}
     {/* ver.2: 世界制覇の勝利演出（再生は自動一時停止。閉じても ▶ で観察を続行可能）。 */}
-    {dominationBanner && (
-      <div className="victory-overlay" role="dialog" aria-live="assertive">
-        <div className="victory-card">
-          <div className="victory-msg">{dominationBanner.message[locale]}</div>
-          <button
-            type="button"
-            className="btn btn-primary victory-btn"
-            onClick={() => setDominationBanner(null)}
-          >
-            {t("victory.close")}
-          </button>
-          <div className="victory-hint">{t("victory.hint")}</div>
+    {dominationBanner && world && (() => {
+      // 勝利統計：所要ターン／勝者(出自)の平均知能・系統数／総個体数。
+      const winner = world.reignOrigin ?? null;
+      let winPop = 0;
+      let intSum = 0;
+      let total = 0;
+      const winSpecies = new Set<string>();
+      for (const l of world.lives) {
+        if (!l.alive) continue;
+        total++;
+        if (winner && l.origin === winner) {
+          winPop++;
+          intSum += l.genes.intelligence;
+          winSpecies.add(l.speciesId);
+        }
+      }
+      const avgInt = winPop ? Math.round(intSum / winPop) : 0;
+      const shareText = `${dominationBanner.message[locale]} (T${dominationBanner.turn.toLocaleString()}) #LIFEGRID`;
+      return (
+        <div className="victory-overlay" role="dialog" aria-live="assertive">
+          <div className="victory-card">
+            <svg
+              className="victory-mark"
+              viewBox="0 0 24 24"
+              width="40"
+              height="40"
+              aria-hidden="true"
+            >
+              <path
+                d="M3 8l4 3.5L12 4l5 7.5L21 8l-2 11H5L3 8z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <div className="victory-msg">{dominationBanner.message[locale]}</div>
+            <div className="victory-stats">
+              <span>
+                {t("victory.turns")}:{" "}
+                <b>{dominationBanner.turn.toLocaleString()}</b>
+              </span>
+              <span>
+                {t("victory.avg_int")}: <b>{avgInt}</b>
+              </span>
+              <span>
+                {t("victory.species")}: <b>{winSpecies.size}</b>
+              </span>
+              <span>
+                {t("victory.population")}: <b>{total.toLocaleString()}</b>
+              </span>
+            </div>
+            <div className="victory-actions">
+              <ShareXButton text={shareText} className="victory-share" />
+              <button
+                type="button"
+                className="btn btn-primary victory-btn"
+                onClick={() => setDominationBanner(null)}
+              >
+                {t("victory.close")}
+              </button>
+            </div>
+            <div className="victory-hint">{t("victory.hint")}</div>
+          </div>
         </div>
-      </div>
-    )}
+      );
+    })()}
     </>
   );
   }

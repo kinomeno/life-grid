@@ -85,6 +85,7 @@ console.log(
 let peak = start;
 let trough = start;
 let troughTurn = 0;
+let lastDomTurn = -1; // 直近の制覇/革命イベントのターン（革命は複数回起こりうる）
 for (let i = 0; i < TURNS; i++) {
   stepWorld(world);
   const a = aliveCount(world);
@@ -104,9 +105,14 @@ for (let i = 0; i < TURNS; i++) {
       `t${world.turn}\talive=${a}\torigins=${m.size}\ttop=${top}(${pct}%)\tregions=${rcInfo.lead}:${rcInfo.leadCount}/${rcInfo.regionCount}(pop${rcInfo.populated})\tstreak=${world.dominationStreak ?? 0}`
     );
   }
-  if (world.events.some((e) => e.type === "worldDomination")) {
-    console.log(`>>> DOMINATION confirmed at turn ${world.turn}`);
-    break;
+  // 制覇/革命イベントを観察（制覇後も継続して革命の有無を見る）。
+  const doms = world.events.filter((e) => e.type === "worldDomination");
+  if (doms.length > 0) {
+    const last = doms[doms.length - 1];
+    if (last.turn > lastDomTurn) {
+      lastDomTurn = last.turn;
+      console.log(`>>> turn ${world.turn}: ${last.message.ja}`);
+    }
   }
   if (a === 0) {
     console.log(`>>> EXTINCT at turn ${world.turn}`);
