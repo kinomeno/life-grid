@@ -74,15 +74,21 @@ export default function LineageTree({ lineage, lives, onSelect }: Props) {
     };
   }, [lineage, lives]);
 
-  const rows: React.ReactElement[] = [];
+  // 表示対象ノードを DFS 順で収集（絶滅枝は既定で畳む）。JSX と PNG 書き出しで共用する。
+  const visibleNodes: { node: TreeNode; depth: number }[] = [];
   const visited = new Set<number>();
-  const pushNode = (node: TreeNode, depth: number) => {
+  const collect = (node: TreeNode, depth: number) => {
     if (visited.has(node.id)) return;
     visited.add(node.id);
-    // 既定では純絶滅枝（生存子孫なし）を畳む。
     if (!showExtinct && !node.living) return;
+    visibleNodes.push({ node, depth });
+    for (const c of node.children) collect(c, depth + 1);
+  };
+  for (const r of roots) collect(r, 0);
+
+  const rows = visibleNodes.map(({ node, depth }) => {
     const isAlive = node.aliveCount > 0;
-    rows.push(
+    return (
       <li
         key={node.id}
         className={`lineage-row ${isAlive ? "lineage-alive" : "lineage-extinct"} ${
@@ -95,16 +101,92 @@ export default function LineageTree({ lineage, lives, onSelect }: Props) {
           className="lineage-dot"
           style={{ backgroundColor: `rgb(${node.r}, ${node.g}, ${node.b})` }}
         />
-        <span className="lineage-name">{speciesDisplayName(node.speciesId, node, locale)}</span>
+        <span className="lineage-name">
+          {speciesDisplayName(node.speciesId, node, locale)}
+        </span>
         <span className="lineage-born">T{node.birthTurn.toLocaleString()}</span>
         <span className="lineage-pop">
           {isAlive ? `×${node.aliveCount}` : t("lineage.extinct")}
         </span>
       </li>
     );
-    for (const c of node.children) pushNode(c, depth + 1);
+  });
+
+  // ver.2: 表示中の系統樹を PNG として書き出す（色ドット＋親子接続線＋ラベルのキャンバス描画）。
+  const exportPng = () => {
+    if (visibleNodes.length === 0) return;
+    const ROW_H = 22;
+    const COL_W = 26;
+    const PAD = 16;
+    const DOT_R = 5;
+    const FONT = 13;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.font = `${FONT}px sans-serif`;
+    const labeled = visibleNodes.map(({ node, depth }) => {
+      const name = speciesDisplayName(node.speciesId, node, locale);
+      const pop =
+        node.aliveCount > 0 ? `×${node.aliveCount}` : t("lineage.extinct");
+      const text = `${name}  T${node.birthTurn.toLocaleString()}  ${pop}`;
+      const x = PAD + depth * COL_W;
+      const right = x + DOT_R * 2 + 6 + ctx.measureText(text).width;
+      return { node, x, text, right };
+    });
+    const W = Math.ceil(Math.max(...labeled.map((l) => l.right)) + PAD);
+    const H = visibleNodes.length * ROW_H + PAD * 2;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.font = `${FONT}px sans-serif`;
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, W, H);
+    const pos = new Map<number, { x: number; y: number }>();
+    labeled.forEach((l, i) => {
+      pos.set(l.node.id, { x: l.x, y: PAD + i * ROW_H + ROW_H / 2 });
+    });
+    // 親→子の接続線（エルボ）。
+    ctx.strokeStyle = "#c8c8c8";
+    ctx.lineWidth = 1;
+    for (const l of labeled) {
+      if (l.node.parentId == null) continue;
+      const p = pos.get(l.node.parentId);
+      const c = pos.get(l.node.id);
+      if (!p || !c) continue;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x, c.y);
+      ctx.lineTo(c.x, c.y);
+      ctx.stroke();
+    }
+    // ノード（色ドット＋ラベル）。絶滅はグレー。
+    labeled.forEach((l, i) => {
+      const y = PAD + i * ROW_H + ROW_H / 2;
+      const alive = l.node.aliveCount > 0;
+      ctx.beginPath();
+      ctx.arc(l.x, y, DOT_R, 0, Math.PI * 2);
+      ctx.fillStyle = `rgb(${l.node.r}, ${l.node.g}, ${l.node.b})`;
+      ctx.fill();
+      if (!alive) {
+        ctx.strokeStyle = "#aaaaaa";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      ctx.fillStyle = alive ? "#222222" : "#999999";
+      ctx.fillText(l.text, l.x + DOT_R + 6, y);
+    });
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "lineage-tree.png";
+      a.click();
+      URL.revokeObjectURL(url);
+    }, "image/png");
   };
-  for (const r of roots) pushNode(r, 0);
 
   return (
     <div className="lineage-wrap">
@@ -121,6 +203,15 @@ export default function LineageTree({ lineage, lives, onSelect }: Props) {
             {showExtinct
               ? t("lineage.hide_extinct")
               : t("lineage.show_extinct", { n: hiddenCount })}
+          </button>
+        )}
+        {visibleNodes.length > 0 && (
+          <button
+            type="button"
+            className="btn lineage-toggle"
+            onClick={exportPng}
+          >
+            {t("lineage.save_png")}
           </button>
         )}
       </div>
