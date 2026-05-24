@@ -42,7 +42,11 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
       const saved = window.localStorage.getItem(LOCALE_STORAGE_KEY);
       if (saved && isSupportedLocale(saved)) {
         setLocaleState(saved);
+        return;
       }
+      // ver.2: 保存された選択が無ければブラウザ言語で自動判定（ja系→日本語、その他→英語）。
+      const nav = (navigator.language || "").toLowerCase();
+      setLocaleState(nav.startsWith("ja") ? "ja" : "en");
     } catch {
       // ignore
     }
