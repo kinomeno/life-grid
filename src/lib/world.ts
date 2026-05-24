@@ -1899,6 +1899,20 @@ const _aX = new Int16Array(ALLY_CAP);
 const _aY = new Int16Array(ALLY_CAP);
 const _aEnergy = new Float32Array(ALLY_CAP);
 
+// ver.2: 出自コード→本拠地リージョンID（キャッシュ）。本拠地内かどうかの判定に使う。
+let _homeIdMeta: World["regionMeta"];
+let _homeIdMap: Map<string, number> | null = null;
+function homeRegionIdOf(world: World, code: string | undefined): number {
+  if (code == null) return -2; // 該当なし（海 -1 とも区別）
+  if (_homeIdMeta !== world.regionMeta) {
+    _homeIdMeta = world.regionMeta;
+    _homeIdMap = new Map();
+    if (world.regionMeta)
+      for (const m of world.regionMeta) _homeIdMap.set(m.code, m.id);
+  }
+  return _homeIdMap?.get(code) ?? -2;
+}
+
 function findBestNeighborCell(
   world: World,
   life: Life
@@ -1953,6 +1967,11 @@ function findBestNeighborCell(
   const speciesId = life.speciesId;
   // ver.2: 同じ出自（大陸系統）は色が違っても味方（協力関係）。
   const myOrigin = life.origin;
+  // ver.2: 本拠地（自分の出自地域）の中にいる間は同出自でも競争（敵）＝内部競争。外では協力。
+  const iAmHome =
+    myOrigin != null &&
+    world.regions != null &&
+    world.regions[life.y * width + life.x] === homeRegionIdOf(world, myOrigin);
   const myStrength = g.strength;
   let allyCount = 0;
   let enemyCount = 0;
@@ -1975,7 +1994,7 @@ function findBestNeighborCell(
       if (occId === -1) continue;
       const other = livesById.get(occId);
       if (!other || !other.alive) continue;
-      if (other.speciesId === speciesId || (myOrigin != null && other.origin === myOrigin)) {
+      if (other.speciesId === speciesId || (myOrigin != null && other.origin === myOrigin && !iAmHome)) {
         // v1.20: 仲間も位置を記録（wG/wL/wR の候補セル依存化のため）
         if (allyCount < ALLY_CAP) {
           _aX[allyCount] = nx;
@@ -2202,6 +2221,11 @@ export function computeDecisionField(world: World, life: Life): DecisionCell[] {
   const speciesId = life.speciesId;
   // ver.2: 同じ出自（大陸系統）は色が違っても味方（協力関係）。
   const myOrigin = life.origin;
+  // ver.2: 本拠地（自分の出自地域）の中にいる間は同出自でも競争（敵）＝内部競争。外では協力。
+  const iAmHome =
+    myOrigin != null &&
+    world.regions != null &&
+    world.regions[life.y * width + life.x] === homeRegionIdOf(world, myOrigin);
   const myStrength = g.strength;
   let allyCount = 0;
   let enemyCount = 0;
@@ -2224,7 +2248,7 @@ export function computeDecisionField(world: World, life: Life): DecisionCell[] {
       if (occId === -1) continue;
       const other = livesById.get(occId);
       if (!other || !other.alive) continue;
-      if (other.speciesId === speciesId || (myOrigin != null && other.origin === myOrigin)) {
+      if (other.speciesId === speciesId || (myOrigin != null && other.origin === myOrigin && !iAmHome)) {
         if (allyCount < ALLY_CAP) {
           _aX[allyCount] = nx;
           _aY[allyCount] = ny;
@@ -2911,6 +2935,11 @@ function handleCombat(world: World, life: Life): void {
   const speciesId = life.speciesId;
   // ver.2: 同じ出自（大陸系統）は色が違っても味方（協力関係）＝攻撃しない・共闘する。
   const myOrigin = life.origin;
+  // ver.2: 本拠地（自分の出自地域）の中にいる間は同出自でも競争（敵）＝内部競争。外では協力。
+  const iAmHome =
+    myOrigin != null &&
+    world.regions != null &&
+    world.regions[life.y * width + life.x] === homeRegionIdOf(world, myOrigin);
 
   // v1.10: 隣接 3×3 内の同系統数を数えて、戦闘時のボーナス算定に使う。
   // 仲間が多いほど戦闘力が増す（群れの戦闘力）。対数で逓減して支配的にならないように。
@@ -2930,7 +2959,7 @@ function handleCombat(world: World, life: Life): void {
     if (!neighbor || !neighbor.alive) continue;
     if (
       neighbor.speciesId === speciesId ||
-      (myOrigin != null && neighbor.origin === myOrigin)
+      (myOrigin != null && neighbor.origin === myOrigin && !iAmHome)
     ) {
       attackerAllyCount++;
     } else {
@@ -2955,12 +2984,19 @@ function handleCombat(world: World, life: Life): void {
     const opponent = livesById.get(occId);
     if (!opponent || !opponent.alive) continue;
 
-    // 同系統・同出自は常に攻撃しない（共食い禁止＋大陸内は協力関係）
+    // 同系統は常に攻撃しない（共食い禁止）。同出自は本拠地外でのみ味方（本拠地内は競争＝攻撃可）。
     if (
       opponent.speciesId === speciesId ||
-      (myOrigin != null && opponent.origin === myOrigin)
+      (myOrigin != null && opponent.origin === myOrigin && !iAmHome)
     )
       continue;
+
+    // ver.2: 防御側(opponent)が自分の本拠地内にいるか。本拠地内では同出自を味方に数えない。
+    const oppHome =
+      opponent.origin != null &&
+      world.regions != null &&
+      world.regions[opponent.y * width + opponent.x] ===
+        homeRegionIdOf(world, opponent.origin);
 
     // 防御側も自分の周囲の仲間数で防御力ボーナスを得る（群れの防御力）
     let defenderAllyCount = 0;
@@ -2979,7 +3015,9 @@ function handleCombat(world: World, life: Life): void {
         dneighbor &&
         dneighbor.alive &&
         (dneighbor.speciesId === opponent.speciesId ||
-          (opponent.origin != null && dneighbor.origin === opponent.origin))
+          (opponent.origin != null &&
+            dneighbor.origin === opponent.origin &&
+            !oppHome))
       ) {
         defenderAllyCount++;
       }
