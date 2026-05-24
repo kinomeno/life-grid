@@ -53,13 +53,11 @@ function components(land) {
     while (st.length) {
       const c = st.pop(); cells.push(c);
       const cx = c % W, cy = (c / W) | 0;
-      for (let dy = -1; dy <= 1; dy++)
-        for (let dx = -1; dx <= 1; dx++) {
-          if (!dx && !dy) continue;
-          const ny = cy + dy; if (ny < 0 || ny >= H) continue;
-          const ni = ny * W + ((cx + dx + W) % W);
-          if (land[ni] && comp[ni] === -1) { comp[ni] = id; st.push(ni); }
-        }
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ny = cy + dy; if (ny < 0 || ny >= H) continue;
+        const ni = ny * W + ((cx + dx + W) % W);
+        if (land[ni] && comp[ni] === -1) { comp[ni] = id; st.push(ni); }
+      }
     }
     list.push({ id, cells, size: cells.length });
   }
@@ -67,15 +65,39 @@ function components(land) {
   return list;
 }
 
+// 4連結の階段状で橋を引く（移動は上下左右のみ＝斜めは渡れないため）。
 function drawBridge(land, a, b) {
-  const ax = a % W, ay = (a / W) | 0, bx = b % W, by = (b / W) | 0;
-  const dx = wrapDX(ax, bx), dy = by - ay;
-  const steps = Math.max(Math.abs(dx), Math.abs(dy), 1);
-  for (let s = 0; s <= steps; s++) {
-    const t = s / steps;
-    const x = (Math.round(ax + dx * t) % W + W) % W;
-    const y = Math.round(ay + dy * t);
-    if (y >= 1 && y < H - 1) land[y * W + x] = 1;
+  let x = a % W, y = (a / W) | 0;
+  const bx = b % W, by = (b / W) | 0;
+  const set = () => { if (y >= 1 && y < H - 1) land[y * W + x] = 1; };
+  set();
+  let guard = 0;
+  while ((x !== bx || y !== by) && guard++ < 2000) {
+    const ddx = wrapDX(x, bx), ddy = by - y;
+    if (ddx !== 0 && (Math.abs(ddx) >= Math.abs(ddy) || ddy === 0)) {
+      x = (x + Math.sign(ddx) + W) % W;
+    } else {
+      y += Math.sign(ddy);
+    }
+    set();
+  }
+}
+
+// 斜めだけで接する陸（直交コーナーが両方海）を1マス埋めて4連結化する。
+function fix4Connectivity(land) {
+  for (let pass = 0; pass < 4; pass++) {
+    let changed = 0;
+    for (let y = 1; y < H - 1; y++)
+      for (let x = 0; x < W; x++) {
+        if (!land[y * W + x]) continue;
+        for (const [dx, dy] of [[1, 1], [1, -1]]) {
+          const ny = y + dy; if (ny < 1 || ny >= H - 1) continue;
+          const nx = (x + dx + W) % W;
+          if (!land[ny * W + nx]) continue;          // 斜め先が陸
+          if (!land[y * W + nx] && !land[ny * W + x]) { land[y * W + nx] = 1; changed++; }
+        }
+      }
+    if (!changed) break;
   }
 }
 
@@ -167,7 +189,8 @@ function removeStrayBlobs(reg, land, maxSize) {
   const EU = idxOf("EU");
   for (let y = 4; y <= 12; y++) for (let x = 6; x <= 22; x++) if (land[y * W + x]) reg[y * W + x] = EU;
 
-  // ---- 陸橋 ----
+  // ---- 陸橋（移動は4方向なので 4連結 で扱う）----
+  fix4Connectivity(land); // 大陸内の斜めピンチを4連結化
   const comps0 = components(land);
   // 大西洋橋：南米東岸(右下) → アフリカ西岸(左・中緯度)。継ぎ目を跨ぐ。
   const americas = comps0[1]; // 2番目に大きい＝南北アメリカ
@@ -203,7 +226,7 @@ function removeStrayBlobs(reg, land, maxSize) {
   if (grnCells.length && euMain.length) { const [ga, gb] = nearestPair(grnCells, euMain); drawBridge(land, ga, gb); }
 
   // 残りの孤立塊を最大連結塊へ最近傍で連結（反復）
-  for (let iter = 0; iter < 40; iter++) {
+  for (let iter = 0; iter < 80; iter++) {
     const cs = components(land);
     if (cs.length <= 1) break;
     const main = cs[0].cells;
@@ -212,6 +235,7 @@ function removeStrayBlobs(reg, land, maxSize) {
     if (a < 0) break;
     drawBridge(land, a, b);
   }
+  fix4Connectivity(land); // 橋追加後の念のための4連結化
   const finalComps = components(land);
 
   // 橋で増えた陸セル(reg==-1)に最近傍リージョンを割当て
