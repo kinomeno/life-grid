@@ -22,7 +22,7 @@ type Dictionary = Record<string, string>;
 const ja: Dictionary = {
   "app.title": "LIFE GRID",
   "app.subtitle": "生命進化シミュレーター",
-  "app.version": "ver 2.01",
+  "app.version": "ver 2.02",
   "lang.toggle.ja": "JA",
   "lang.toggle.en": "EN",
 
@@ -228,6 +228,7 @@ const ja: Dictionary = {
   "ctrl.thought_heatmap": "思考ヒートマップ：選択個体が次にどこへ動きたいかを色で表示",
   "ctrl.region_tint": "勢力地図：各地域を最大勢力（出自）の色で薄く塗る。全地域が同色＝世界制覇",
   "ctrl.region_names": "地域名を表示（地図に各地域の名前を重ねる）",
+  "ctrl.life_color": "生命の色：出自（大陸）の色で表示。OFFで本来の体色＋出自の枠（世界地図のみ）",
   "victory.close": "閉じる",
   "victory.hint": "▶ を押すと観察を続けられます",
   "victory.turns": "所要ターン",
@@ -353,7 +354,7 @@ const ja: Dictionary = {
 const en: Dictionary = {
   "app.title": "LIFE GRID",
   "app.subtitle": "Life Evolution Simulator",
-  "app.version": "ver 2.01",
+  "app.version": "ver 2.02",
   "lang.toggle.ja": "JA",
   "lang.toggle.en": "EN",
 
@@ -559,6 +560,7 @@ const en: Dictionary = {
   "ctrl.thought_heatmap": "Thought heatmap: shows where the selected life wants to move next",
   "ctrl.region_tint": "Territory map: tint each region by its dominant origin. All regions one color = world domination",
   "ctrl.region_names": "Show region names (overlay each region's name on the map)",
+  "ctrl.life_color": "Life color: paint by origin (continent). Off = body color + origin ring (world map only)",
   "victory.close": "Close",
   "victory.hint": "Press ▶ to keep watching",
   "victory.turns": "Turns",

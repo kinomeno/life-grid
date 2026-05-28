@@ -19,6 +19,9 @@ type Props = {
   selectedLifeId?: number | null;
   /** v1.31 (H9): 選択個体の思考ヒートマップを重ねるか。 */
   showThoughtHeatmap?: boolean;
+  /** ver.2(色トグル): 生命の塗り色。"origin"=出自(大陸)の色 / "species"=本来の体色＋出自リング。
+   *  既定 origin・世界地図のみ有効。出自は life.origin（個体の真の祖先）を使う。 */
+  lifeColorMode?: "origin" | "species";
   /** ver.2: 地域(地理)区分インデックス（-1=海/0..=区分）。勢力地図ティント用。 */
   regions?: Int8Array | null;
   /** ver.2: 地域ごとの最大勢力（出自）の代表色。地域インデックス順。個体0は null。 */
@@ -44,6 +47,7 @@ export default function SimulationCanvas({
   simplifiedRender = false,
   selectedLifeId = null,
   showThoughtHeatmap = false,
+  lifeColorMode = "origin",
   regions = null,
   regionDominantColors = null,
   showRegionTint = false,
@@ -102,7 +106,7 @@ export default function SimulationCanvas({
       drawThoughtHeatmap(ctx, world, cellSize, selectedLifeId);
     }
     drawSelectedPath(ctx, selectedLifePath, cellSize, world.width, world.height);
-    drawLives(ctx, world, cellSize, trackedSpeciesId, selectedLifeId, animPhase, simplifiedRender);
+    drawLives(ctx, world, cellSize, trackedSpeciesId, selectedLifeId, animPhase, simplifiedRender, lifeColorMode);
     drawCombatFlashes(ctx, world, cellSize, animPhase);
     drawCataclysm(ctx, world, cellSize);
     drawBirthFlashes(ctx, world, cellSize);
@@ -119,6 +123,7 @@ export default function SimulationCanvas({
     simplifiedRender,
     selectedLifeId,
     showThoughtHeatmap,
+    lifeColorMode,
     regions,
     regionDominantColors,
     showRegionTint,
@@ -519,7 +524,8 @@ function drawLives(
   trackedSpeciesId: string | null,
   selectedLifeId: number | null,
   animPhase: number,
-  simplifiedRender = false
+  simplifiedRender = false,
+  lifeColorMode: "origin" | "species" = "origin"
 ) {
   const inset = Math.max(0, Math.floor(cellSize * 0.15));
   const drawSize = Math.max(1, cellSize - inset * 2);
@@ -556,21 +562,26 @@ function drawLives(
     if (expansion > prev) expandMap.set(f.attackerLifeId, expansion);
   }
 
-  // ver.2: 出自（大陸系統）→代表色（リング描画用）。世界地図のみ・極小セル/高速時は省略（負荷軽減）。
+  // ver.2: 出自（大陸系統）→代表色。世界地図のみ。life.origin は親から不変継承された真の祖先。
+  //  - 出自色モード: 体の塗り色に使う（極小セル/高速でも使用＝全世界ビューで大陸対抗を一目に。塗りは軽い）。
+  //  - 体色モード: 体色＝種に「出自リング」を重ねる（リングは極小セル/高速では省略＝負荷軽減）。
   let originColorByCode:
     | Map<string, { r: number; g: number; b: number }>
     | null = null;
-  if (
-    cellSize >= 3 &&
-    !simplifiedRender &&
-    world.regionMeta &&
-    world.regionMeta.length > 0
-  ) {
+  if (world.regionMeta && world.regionMeta.length > 0) {
     originColorByCode = new Map();
     for (const m of world.regionMeta) {
       originColorByCode.set(m.code, { r: m.r, g: m.g, b: m.b });
     }
   }
+  // 出自色で塗るモード（世界地図かつ lifeColorMode==="origin"）。
+  const originFillMode = lifeColorMode === "origin" && originColorByCode !== null;
+  // 出自リングを描く条件（体色モードのみ・極小セル/高速時は省略）。
+  const drawOriginRing =
+    lifeColorMode === "species" &&
+    originColorByCode !== null &&
+    cellSize >= 3 &&
+    !simplifiedRender;
 
   for (const life of world.lives) {
     if (!life.alive) continue;
@@ -578,9 +589,18 @@ function drawLives(
     // 同種は画面上まったく同色になり、「色＝仲間」を明快にする。生 RGB は仲間タグとして
     // 内部で微ドリフトし、ビンを越えた瞬間が種分化＝表示色のジャンプになる。
     const gr = life.genes;
-    const r = binCenterColor(gr.r);
-    const g = binCenterColor(gr.g);
-    const b = binCenterColor(gr.b);
+    // 表示色：体色モード＝種代表色（生RGBをビン中心に量子化）／出自色モード＝life.origin の地域代表色。
+    let r = binCenterColor(gr.r);
+    let g = binCenterColor(gr.g);
+    let b = binCenterColor(gr.b);
+    if (originFillMode && originColorByCode && life.origin) {
+      const oc = originColorByCode.get(life.origin);
+      if (oc) {
+        r = oc.r;
+        g = oc.g;
+        b = oc.b;
+      }
+    }
     const isTracked =
       !isTracking || life.speciesId === trackedSpeciesId;
     const fadeAlpha = fadeMap.get(life.id);
@@ -600,8 +620,8 @@ function drawLives(
     const expansion = expandMap.get(life.id) ?? 1.0;
     drawLifeShape(ctx, shape, cxp, cyp, radius * expansion);
 
-    // ver.2: 出自リング（体色＝種、リング＝大陸系統）。色が違っても出自で判別できる。
-    if (originColorByCode && life.origin) {
+    // ver.2: 出自リング（体色モードのみ）。体色＝種、リング＝大陸系統。
+    if (drawOriginRing && originColorByCode && life.origin) {
       const oc = originColorByCode.get(life.origin);
       if (oc) {
         ctx.strokeStyle = `rgb(${oc.r}, ${oc.g}, ${oc.b})`;

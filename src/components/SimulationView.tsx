@@ -201,6 +201,9 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
   const [showRegionTint, setShowRegionTint] = useState(true);
   // ver.2: 地域名オーバーレイ（世界地図のみ）。既定OFF（必要時にトグル）。
   const [showRegionNames, setShowRegionNames] = useState(false);
+  // ver.2(色トグル): 生命の色モード。"origin"=出自(大陸)色（life.origin → 地域色）／
+  //   "species"=本来の体色＋出自枠。既定 origin。世界地図のみ有効。
+  const [lifeColorMode, setLifeColorMode] = useState<"origin" | "species">("origin");
   // ver.2: 世界制覇の勝利バナー（表示中はそのイベント、null=非表示）。
   const [dominationBanner, setDominationBanner] = useState<WorldEvent | null>(
     null
@@ -1823,6 +1826,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
                   regions={world?.regions ?? null}
                   regionDominantColors={regionDominantColors}
                   showRegionTint={showRegionTint}
+                  lifeColorMode={lifeColorMode}
                   regionLabels={regionLabels}
                   selectedLifePath={selectedLifePath}
                   trackedSpeciesId={trackedSpeciesId}
@@ -1903,7 +1907,7 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
           {/* ver.2: 勢力地図トグル（地域を最大勢力＝出自の色で薄く塗る）。世界地図のみ表示。 */}
           {world?.regionMeta && world.regionMeta.length > 0 && (
             <button
-              className={`mini-btn ${showRegionTint ? "mini-btn-active" : ""}`}
+              className={`mini-btn obs-toggle ${showRegionTint ? "mini-btn-active" : ""}`}
               onClick={() => setShowRegionTint((v) => !v)}
               title={t("ctrl.region_tint")}
               aria-label={t("ctrl.region_tint")}
@@ -1915,13 +1919,27 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
           {/* ver.2: 地域名オーバーレイのトグル。世界地図のみ表示。 */}
           {world?.regionMeta && world.regionMeta.length > 0 && (
             <button
-              className={`mini-btn ${showRegionNames ? "mini-btn-active" : ""}`}
+              className={`mini-btn obs-toggle ${showRegionNames ? "mini-btn-active" : ""}`}
               onClick={() => setShowRegionNames((v) => !v)}
               title={t("ctrl.region_names")}
               aria-label={t("ctrl.region_names")}
               aria-pressed={showRegionNames}
             >
               🏷️
+            </button>
+          )}
+          {/* ver.2(色トグル): 生命の色 = 出自(大陸)色 / 本来の体色＋出自枠 を切替。世界地図のみ表示。 */}
+          {world?.regionMeta && world.regionMeta.length > 0 && (
+            <button
+              className={`mini-btn obs-toggle ${lifeColorMode === "origin" ? "mini-btn-active" : ""}`}
+              onClick={() =>
+                setLifeColorMode((m) => (m === "origin" ? "species" : "origin"))
+              }
+              title={t("ctrl.life_color")}
+              aria-label={t("ctrl.life_color")}
+              aria-pressed={lifeColorMode === "origin"}
+            >
+              🎨
             </button>
           )}
           {/* G1: エネルギー投入 */}
@@ -2102,7 +2120,14 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
                           label={t("info.species")}
                           value={speciesDisplayName(
                             selectedLife.speciesId,
-                            world.speciesLineage.get(selectedLife.speciesId),
+                            // 既存バグ修正: 個体の真の祖先(lineageNodes 経由)で命名する。
+                            //   speciesLineage は「色ビンの最初の出自」で固定なので、色ビン再利用が
+                            //   起きると「ヨーロッパZ なのに祖先は中央アジア」のような乖離が出ていた。
+                            //   life.lineageId → lineageNodes は親から不変継承（line 2791-2792 のコメント
+                            //   "色ビンの最初の出自に引きずられないようにする" の意図と一致）。
+                            //   lineageId が無い／見つからない場合のみ speciesLineage にフォールバック。
+                            world.lineageNodes.find((n) => n.id === selectedLife.lineageId) ??
+                              world.speciesLineage.get(selectedLife.speciesId),
                             locale
                           )}
                         />
@@ -2842,7 +2867,11 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
           <span className="hover-pop-species">
             {speciesDisplayName(
               hoverInfo.life.speciesId,
-              world?.speciesLineage.get(hoverInfo.life.speciesId),
+              // 同根の panel 修正に合わせる：個体の真の祖先(lineageNodes 経由)で命名。
+              //   speciesLineage(色ビン最初の出自)経由だと色ビン再利用時に別出自名になり、
+              //   選択生命パネルの「系統」表示と食い違うため。
+              world?.lineageNodes.find((n) => n.id === hoverInfo.life.lineageId) ??
+                world?.speciesLineage.get(hoverInfo.life.speciesId),
               locale
             )}
           </span>

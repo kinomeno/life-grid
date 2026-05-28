@@ -2354,8 +2354,9 @@
   :global(.top-status) {
     display: none !important;
   }
-  /* マップ操作モード（⚡☄🌵🌸）を非表示 */
-  :global(.map-bar .mini-btn) {
+  /* マップ操作モード（⚡☄🌵🌸）・シネマ・思考ヒートマップ・全画面は非表示。
+     観察トグル（🗺️勢力地図 / 🏷️地域名 / 🎨生命の色 ＝ .obs-toggle）はモバイルでも残す。 */
+  :global(.map-bar .mini-btn:not(.obs-toggle)) {
     display: none;
   }
   /* 中間速度 ×10 を非表示（×1 と ×100 のみ） */
