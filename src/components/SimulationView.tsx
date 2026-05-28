@@ -2069,6 +2069,12 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
                 {/* ヘッダ：色＋ID＋選択解除（ID 右に配置） */}
                 <SelectedLifeBlock
                   life={selectedLife}
+                  displayName={speciesDisplayName(
+                    selectedLife.speciesId,
+                    world?.lineageNodes.find((n) => n.id === selectedLife.lineageId) ??
+                      world?.speciesLineage.get(selectedLife.speciesId),
+                    locale,
+                  )}
                   onDeselect={() => setSelectedLifeId(null)}
                   deselectLabel={t("info.deselect")}
                 />
@@ -2833,7 +2839,12 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
       <ShareXButton
         text={
           selectedLife
-            ? `LIFE GRID で最強の生き物できた！🧬 ${speciesLabel(selectedLife.speciesId)}`
+            ? `LIFE GRID で最強の生き物できた！🧬 ${speciesDisplayName(
+                selectedLife.speciesId,
+                world?.lineageNodes.find((n) => n.id === selectedLife.lineageId) ??
+                  world?.speciesLineage.get(selectedLife.speciesId),
+                locale,
+              )}`
             : `LIFE GRID で世界を観察中 🌍 (T${stats.turn.toLocaleString()})`
         }
         className="x-share-fixed"
@@ -2990,10 +3001,12 @@ function GeneIdRow({ life }: { life: Life }) {
 
 function SelectedLifeBlock({
   life,
+  displayName,
   onDeselect,
   deselectLabel,
 }: {
   life: Life;
+  displayName: string;
   onDeselect: () => void;
   deselectLabel: string;
 }) {
@@ -3013,7 +3026,7 @@ function SelectedLifeBlock({
           </button>
         </div>
         <div className="selected-pos">
-          {speciesLabel(life.speciesId)} · ({life.x}, {life.y})
+          {displayName} · ({life.x}, {life.y})
         </div>
       </div>
     </div>
