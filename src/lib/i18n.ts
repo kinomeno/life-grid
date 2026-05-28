@@ -22,7 +22,7 @@ type Dictionary = Record<string, string>;
 const ja: Dictionary = {
   "app.title": "LIFE GRID",
   "app.subtitle": "生命進化シミュレーター",
-  "app.version": "ver 2.02",
+  "app.version": "ver 2.03",
   "lang.toggle.ja": "JA",
   "lang.toggle.en": "EN",
 
@@ -257,8 +257,10 @@ const ja: Dictionary = {
   "lineage.extinct": "絶滅",
   "lineage.summary": "記録された種：{total}（現存：{alive}）",
   "lineage.show_extinct": "絶滅系統も表示（+{n}）",
+  "lineage.show_small": "×1-5も表示（+{n}）",
   "lineage.save_png": "画像保存",
   "lineage.hide_extinct": "絶滅系統を隠す",
+  "lineage.hide_small": "×1-5を隠す",
   "cinema.dominant": "最大勢力",
   "cinema.oldest": "最古参",
   "cinema.strongest": "最強",
@@ -354,7 +356,7 @@ const ja: Dictionary = {
 const en: Dictionary = {
   "app.title": "LIFE GRID",
   "app.subtitle": "Life Evolution Simulator",
-  "app.version": "ver 2.02",
+  "app.version": "ver 2.03",
   "lang.toggle.ja": "JA",
   "lang.toggle.en": "EN",
 
@@ -589,8 +591,10 @@ const en: Dictionary = {
   "lineage.extinct": "extinct",
   "lineage.summary": "Species recorded: {total} (alive: {alive})",
   "lineage.show_extinct": "Show extinct (+{n})",
+  "lineage.show_small": "Show ×1-5 (+{n})",
   "lineage.save_png": "Save PNG",
   "lineage.hide_extinct": "Hide extinct",
+  "lineage.hide_small": "Hide ×1-5",
   "cinema.dominant": "Dominant",
   "cinema.oldest": "Oldest",
   "cinema.strongest": "Strongest",

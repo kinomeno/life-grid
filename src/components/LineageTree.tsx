@@ -16,7 +16,13 @@ type TreeNode = LineageNode & {
   aliveCount: number;
   /** 自身か子孫に現存種がいるか（＝生存サブツリー＝幹）。 */
   living: boolean;
+  /** 自身か子孫に aliveCount > SMALL_THRESHOLD の節がいるか（＝有意なサブツリー）。
+   *  小枝畳みフィルタ用。大きな枝の親は tiny でも構造として残るが、末端 tiny 枝は畳める。 */
+  significant: boolean;
 };
+
+/** 小さな系統（現存×N≤この値）を畳むフィルタの閾値。 */
+const SMALL_THRESHOLD = 5;
 
 /**
  * v1.31 (A5): 系統樹（行動ログのタブ内に表示する提示用コンポーネント）。
@@ -26,8 +32,10 @@ type TreeNode = LineageNode & {
 export default function LineageTree({ lineage, lives, onSelect }: Props) {
   const { t, locale } = useLocale();
   const [showExtinct, setShowExtinct] = useState(false);
+  // 小さな系統（現存×N≤SMALL_THRESHOLD）を畳むフィルタ。既定 false（＝畳んだ状態＝フィルタON）。
+  const [showSmall, setShowSmall] = useState(false);
 
-  const { roots, totalCount, aliveSpecies, hiddenCount } = useMemo(() => {
+  const { roots, totalCount, aliveSpecies, hiddenCount, smallCount } = useMemo(() => {
     const counts = new Map<number, number>();
     for (const l of lives) {
       if (!l.alive || l.lineageId == null) continue;
@@ -40,6 +48,7 @@ export default function LineageTree({ lineage, lives, onSelect }: Props) {
         children: [],
         aliveCount: counts.get(n.id) ?? 0,
         living: false,
+        significant: false,
       });
     }
     const roots: TreeNode[] = [];
@@ -64,13 +73,30 @@ export default function LineageTree({ lineage, lives, onSelect }: Props) {
       return any;
     };
     for (const r of roots) markLiving(r);
+    // 「ある程度大きい」サブツリー判定（post-order）。自身か子孫に aliveCount > SMALL_THRESHOLD が
+    // あれば significant=true。これで tiny な末端枝（全て×N≤5）はまとめて畳めるが、大きな枝の親は
+    // tiny でも構造として残る（祖先表示の連続性を保つため）。
+    const markSignificant = (node: TreeNode): boolean => {
+      let any = node.aliveCount > SMALL_THRESHOLD;
+      for (const c of node.children) {
+        if (markSignificant(c)) any = true;
+      }
+      node.significant = any;
+      return any;
+    };
+    for (const r of roots) markSignificant(r);
     let hidden = 0;
-    for (const n of byId.values()) if (!n.living) hidden++;
+    let small = 0;
+    for (const n of byId.values()) {
+      if (!n.living) hidden++;
+      if (n.aliveCount > 0 && n.aliveCount <= SMALL_THRESHOLD) small++;
+    }
     return {
       roots,
       totalCount: byId.size,
       aliveSpecies: counts.size,
       hiddenCount: hidden,
+      smallCount: small,
     };
   }, [lineage, lives]);
 
@@ -81,6 +107,9 @@ export default function LineageTree({ lineage, lives, onSelect }: Props) {
     if (visited.has(node.id)) return;
     visited.add(node.id);
     if (!showExtinct && !node.living) return;
+    // 小フィルタ：subtree に「ある程度大きい(>SMALL_THRESHOLD)」現存系統が無ければ畳む。
+    // 大きな枝の親(tiny でも significant=true)は構造として残る。
+    if (!showSmall && !node.significant) return;
     visibleNodes.push({ node, depth });
     for (const c of node.children) collect(c, depth + 1);
   };
@@ -203,6 +232,17 @@ export default function LineageTree({ lineage, lives, onSelect }: Props) {
             {showExtinct
               ? t("lineage.hide_extinct")
               : t("lineage.show_extinct", { n: hiddenCount })}
+          </button>
+        )}
+        {smallCount > 0 && (
+          <button
+            type="button"
+            className="btn lineage-toggle"
+            onClick={() => setShowSmall((v) => !v)}
+          >
+            {showSmall
+              ? t("lineage.hide_small")
+              : t("lineage.show_small", { n: smallCount })}
           </button>
         )}
         {visibleNodes.length > 0 && (
