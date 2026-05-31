@@ -284,6 +284,13 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
     setTopSpecies(computeTopSpecies(w, locale));
   }, [locale]);
 
+  // ver 2.07: locale 変更時に種族リストのラベルを即座に再計算（ポーズ中でも英語化が反映される）。
+  // 再生中は tick ループの refreshDerived が毎step呼ばれるので問題ないが、
+  // ポーズ中は state にラベル文字列が焼き込まれて locale 変更が反映されなかった。
+  useEffect(() => {
+    if (worldRef.current) refreshDerived(worldRef.current);
+  }, [locale, refreshDerived]);
+
   useEffect(() => {
     if (worldRef.current !== null) return;
     // v1.31: 保存データから読み込んだ World があればそれで開始（タイトルから再開）。
