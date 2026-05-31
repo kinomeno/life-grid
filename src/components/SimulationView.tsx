@@ -1161,13 +1161,22 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
 
   // ver.2: 勢力地図用。各地域(地理)で最多の出自(origin)を集計し、その出自の代表色を返す。
   // 地域インデックス順の配列（個体0の地域は null＝無色）。世界地図かつトグルONのときのみ計算。
-  // 性能③: 毎フレームではなく約8ターンごとに再計算（高速時の負荷を大幅削減。見た目の遅延は無視できる）。
-  const tintTurnBucket = Math.floor(stats.turn / 8);
+  // ver 2.05: 毎ターン再計算で遅延ゼロ＋ヒステリシス導入。
+  //   - 旧仕様：8ターンごとに再計算（負荷軽減）／同点・微差でチラつき・突然色変。
+  //   - 新仕様：毎ターン計算（O(N alive)なので軽い）＋前覇者を記憶し、新候補が
+  //     現覇者の HYSTERESIS 倍を超えて初めて切替（拮抗時の入れ替わりを抑制）。
+  const prevDominantRef = useRef<Map<number, string>>(new Map());
+  const prevDominantWorldRef = useRef<World | null>(null);
   const regionDominantColors = useMemo(() => {
     if (!showRegionTint) return null;
     const regions = world?.regions;
     const meta = world?.regionMeta;
     if (!world || !regions || !meta || meta.length === 0) return null;
+    // 世界が切り替わったら前覇者メモリをリセット（古い世界の状態を引きずらない）。
+    if (prevDominantWorldRef.current !== world) {
+      prevDominantRef.current = new Map();
+      prevDominantWorldRef.current = world;
+    }
     const w = world.width;
     const counts: Map<string, number>[] = meta.map(() => new Map());
     for (const l of world.lives) {
@@ -1179,13 +1188,31 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
     }
     const colorByCode = new Map<string, { r: number; g: number; b: number }>();
     for (const mm of meta) colorByCode.set(mm.code, { r: mm.r, g: mm.g, b: mm.b });
-    return counts.map((m) => {
+    // ヒステリシス係数：新候補が現覇者の HYSTERESIS 倍を超えて初めて切替。
+    //   1.10 = 10% 以上差が付かないと切替らない（同点・1〜2体差では維持）。
+    const HYSTERESIS = 1.1;
+    return counts.map((m, ri) => {
+      if (m.size === 0) {
+        prevDominantRef.current.delete(ri);
+        return null;
+      }
       let topCode = "";
       let topN = 0;
-      for (const [code, n] of m) if (n > topN) { topN = n; topCode = code; }
-      return topCode ? colorByCode.get(topCode) ?? null : null;
+      for (const [code, n] of m) {
+        if (n > topN) { topN = n; topCode = code; }
+      }
+      const prevCode = prevDominantRef.current.get(ri);
+      if (prevCode && prevCode !== topCode) {
+        const prevN = m.get(prevCode) ?? 0;
+        // 前覇者がまだ存命で、新候補が「1.1倍超」でないなら前覇者を維持。
+        if (prevN > 0 && topN <= prevN * HYSTERESIS) {
+          topCode = prevCode;
+        }
+      }
+      prevDominantRef.current.set(ri, topCode);
+      return colorByCode.get(topCode) ?? null;
     });
-  }, [world, tintTurnBucket, showRegionTint]);
+  }, [world, stats.turn, showRegionTint]);
 
   // ver.2: 地域名オーバーレイ用。各地域の重心(セル平均)＋ロケール名。重心は静的なので軽い。
   const regionLabels = useMemo(() => {
