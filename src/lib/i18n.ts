@@ -22,7 +22,7 @@ type Dictionary = Record<string, string>;
 const ja: Dictionary = {
   "app.title": "LIFE GRID",
   "app.subtitle": "生命進化シミュレーター",
-  "app.version": "ver 2.05",
+  "app.version": "ver 2.06",
   "lang.toggle.ja": "JA",
   "lang.toggle.en": "EN",
 
@@ -220,6 +220,8 @@ const ja: Dictionary = {
   "ctrl.share_url": "URLコピー",
   "ctrl.share_url_copied": "コピー済",
   "ctrl.share_url_hint": "この世界を共有する URL をコピー",
+  "ctrl.share_image_copied": "画像をコピーしました。投稿欄にペーストして添付してください",
+  "ctrl.share_image_fallback": "画像をダウンロードしてから投稿欄に添付してください",
   "modal.time_on": "時間進行中",
   "modal.time_off": "時間停止中",
   "modal.time_hint": "クリックで時間進行を切替（初期は停止）",
@@ -356,7 +358,7 @@ const ja: Dictionary = {
 const en: Dictionary = {
   "app.title": "LIFE GRID",
   "app.subtitle": "Life Evolution Simulator",
-  "app.version": "ver 2.05",
+  "app.version": "ver 2.06",
   "lang.toggle.ja": "JA",
   "lang.toggle.en": "EN",
 
@@ -554,6 +556,8 @@ const en: Dictionary = {
   "ctrl.share_url": "Copy URL",
   "ctrl.share_url_copied": "Copied",
   "ctrl.share_url_hint": "Copy a URL that shares this world",
+  "ctrl.share_image_copied": "Image copied. Paste it into your post to attach.",
+  "ctrl.share_image_fallback": "Download the image and attach it to your post.",
   "modal.time_on": "Time running",
   "modal.time_off": "Time paused",
   "modal.time_hint": "Click to toggle time progress (default: paused)",

@@ -682,70 +682,78 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
     URL.revokeObjectURL(url);
   }, [seed]);
 
+  // マップ canvas にヘッダ・フッタを合成して Blob を返す共通ビルダ。
+  // exportPng（DL）と ShareXButton（シェア）の両方から利用する。
+  const buildShareBlob = useCallback((): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const canvas = document.querySelector(
+        ".canvas-wrap canvas"
+      ) as HTMLCanvasElement | null;
+      if (!canvas) { reject(new Error("no canvas")); return; }
+      try {
+        const dpr = window.devicePixelRatio || 1;
+        const mapW = canvas.width / dpr;
+        const mapH = canvas.height / dpr;
+        const padX = 16;
+        const headerH = 28;
+        const footerH = 40;
+        const totalW = Math.max(mapW + padX * 2, 360);
+        const totalH = mapH + headerH + footerH;
+
+        const out = document.createElement("canvas");
+        out.width = totalW * dpr;
+        out.height = totalH * dpr;
+        const octx = out.getContext("2d");
+        if (!octx) { reject(new Error("no ctx")); return; }
+        octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        octx.fillStyle = "#fafafa";
+        octx.fillRect(0, 0, totalW, totalH);
+
+        octx.fillStyle = "#1a1a1a";
+        octx.font = "600 13px sans-serif";
+        octx.textBaseline = "middle";
+        octx.textAlign = "left";
+        octx.fillText("LIFE GRID", padX, headerH / 2);
+        octx.font = "10px sans-serif";
+        octx.fillStyle = "#666";
+        octx.textAlign = "right";
+        octx.fillText("生命進化シミュレーター", totalW - padX, headerH / 2);
+
+        octx.drawImage(canvas, padX, headerH, mapW, mapH);
+        octx.strokeStyle = "#cccccc";
+        octx.lineWidth = 1;
+        octx.strokeRect(padX - 0.5, headerH - 0.5, mapW + 1, mapH + 1);
+
+        octx.fillStyle = "#444";
+        octx.font = "10px sans-serif";
+        octx.textBaseline = "top";
+        octx.textAlign = "left";
+        const stampY = headerH + mapH + 8;
+        octx.fillText(
+          `Seed ${seed ?? "-"}  /  Turn ${stats.turn.toLocaleString()}  /  ${width}×${height}`,
+          padX, stampY
+        );
+        octx.textAlign = "right";
+        octx.fillStyle = "#888";
+        octx.fillText("by キノメノ", totalW - padX, stampY);
+        octx.fillStyle = "#aaa";
+        octx.fillText("https://note.com/kinomeno", totalW - padX, stampY + 14);
+
+        out.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error("toBlob failed"));
+        }, "image/png");
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }, [seed, stats.turn, width, height]);
+
   // 現在表示中のマップ canvas を PNG として保存（ブランディング付き）
   const exportPng = useCallback(() => {
-    const canvas = document.querySelector(
-      ".canvas-wrap canvas"
-    ) as HTMLCanvasElement | null;
-    if (!canvas) return;
-    try {
-      // 拡張キャンバスを作成（上ヘッダ＋下フッタ付き）
-      const dpr = window.devicePixelRatio || 1;
-      const mapW = canvas.width / dpr;
-      const mapH = canvas.height / dpr;
-      const padX = 16;
-      const headerH = 28;
-      const footerH = 40;
-      const totalW = Math.max(mapW + padX * 2, 360);
-      const totalH = mapH + headerH + footerH;
-
-      const out = document.createElement("canvas");
-      out.width = totalW * dpr;
-      out.height = totalH * dpr;
-      const octx = out.getContext("2d");
-      if (!octx) return;
-      octx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-      // 背景
-      octx.fillStyle = "#fafafa";
-      octx.fillRect(0, 0, totalW, totalH);
-
-      // ヘッダ：タイトル
-      octx.fillStyle = "#1a1a1a";
-      octx.font = "600 13px sans-serif";
-      octx.textBaseline = "middle";
-      octx.textAlign = "left";
-      octx.fillText("LIFE GRID", padX, headerH / 2);
-      octx.font = "10px sans-serif";
-      octx.fillStyle = "#666";
-      octx.textAlign = "right";
-      octx.fillText("生命進化シミュレーター", totalW - padX, headerH / 2);
-
-      // マップ画像
-      octx.drawImage(canvas, padX, headerH, mapW, mapH);
-      // マップの周囲枠
-      octx.strokeStyle = "#cccccc";
-      octx.lineWidth = 1;
-      octx.strokeRect(padX - 0.5, headerH - 0.5, mapW + 1, mapH + 1);
-
-      // フッタ：シード・ターン・サイズ・著者
-      octx.fillStyle = "#444";
-      octx.font = "10px sans-serif";
-      octx.textBaseline = "top";
-      octx.textAlign = "left";
-      const stampY = headerH + mapH + 8;
-      octx.fillText(
-        `Seed ${seed ?? "-"}  /  Turn ${stats.turn.toLocaleString()}  /  ${width}×${height}`,
-        padX,
-        stampY
-      );
-      octx.textAlign = "right";
-      octx.fillStyle = "#888";
-      octx.fillText("by キノメノ", totalW - padX, stampY);
-      octx.fillStyle = "#aaa";
-      octx.fillText("https://note.com/kinomeno", totalW - padX, stampY + 14);
-
-      const url = out.toDataURL("image/png");
+    buildShareBlob().then((blob) => {
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       const stamp =
         seed !== null
@@ -756,10 +764,9 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    } catch {
-      // origin-tainted canvas で失敗する可能性。ローカル描画では通常成功する。
-    }
-  }, [seed, stats.turn, width, height]);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    }).catch(() => {/* origin-tainted canvas など */});
+  }, [buildShareBlob, seed, stats.turn]);
 
   const stepOnce = useCallback(() => {
     setSpeed(0);
@@ -2871,9 +2878,11 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
                 world?.lineageNodes.find((n) => n.id === selectedLife.lineageId) ??
                   world?.speciesLineage.get(selectedLife.speciesId),
                 locale,
-              )}`
-            : `LIFE GRID で世界を観察中 🌍 (T${stats.turn.toLocaleString()})`
+              )} #LIFEGRID`
+            : `LIFE GRID で世界を観察中 🌍 (T${stats.turn.toLocaleString()}) #LIFEGRID`
         }
+        makeImageBlob={buildShareBlob}
+        onToast={(msg) => { setSaveMsg(msg); window.setTimeout(() => setSaveMsg(null), 4000); }}
         className="x-share-fixed"
       />
     </div>
@@ -2975,7 +2984,12 @@ const SimulationView = forwardRef<SimulationViewHandle, Props>(
               </span>
             </div>
             <div className="victory-actions">
-              <ShareXButton text={shareText} className="victory-share" />
+              <ShareXButton
+                text={shareText}
+                makeImageBlob={buildShareBlob}
+                onToast={(msg) => { setSaveMsg(msg); window.setTimeout(() => setSaveMsg(null), 4000); }}
+                className="victory-share"
+              />
               <button
                 type="button"
                 className="btn btn-primary victory-btn"
