@@ -114,6 +114,8 @@ export default function AppRoot({
             onStart={(c) => {
               setPendingWorld(null);
               setConfig(c);
+              // 成果イベント：シミュレーション開始ボタン押下＝このアプリのゴール（匿名）
+              (window as Window & { knTrack?: (e: string) => void }).knTrack?.("goal");
             }}
           />
         ) : (

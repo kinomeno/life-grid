@@ -64,6 +64,13 @@ export default function RootLayout({
             無料プラン（Hobby）で月 2,500 イベント分まで利用可能。 */}
         <Analytics />
         <SpeedInsights />
+        {/* キノメノ共通アクセス計測（匿名・入力は送らない）。詳細: claude用\アクセス計測_導入ガイド.txt */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){if(typeof window==='undefined'||typeof document==='undefined'||typeof Image==='undefined')return;try{if(!/^https?:$/.test(location.protocol))return;}catch(e){return;}try{if(/[?&]kn_notrack=1(?:&|$)/.test(location.search)){window.knTrack=function(){};return;}}catch(e){}var APP='lifegrid',EP='https://song2game-publish.kinomeno.workers.dev/track',sentOpen=false;function send(ev){ev=String(ev||'').toLowerCase();if(!/^[a-z0-9_]{1,32}$/.test(ev))return;try{var ref='';try{ref=(document.referrer||'').slice(0,300);}catch(e){}var u=EP+'?app='+encodeURIComponent(APP)+'&event='+encodeURIComponent(ev)+(ref?'&ref='+encodeURIComponent(ref):'')+'&_='+(new Date()).getTime();var img=new Image();img.referrerPolicy='no-referrer';img.src=u;}catch(e){}}window.knTrack=function(ev){if(String(ev||'').toLowerCase()==='open'){if(sentOpen)return;sentOpen=true;}send(ev);};sentOpen=true;send('open');})();",
+          }}
+        />
       </body>
     </html>
   );
